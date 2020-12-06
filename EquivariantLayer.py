@@ -164,7 +164,3 @@ class EquivariantLayer(nn.Module):
         X = self.undiag(X)
         X = self.reindex(X)
         return X
-
-
-
-

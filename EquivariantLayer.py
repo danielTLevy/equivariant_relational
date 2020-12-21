@@ -44,8 +44,8 @@ class EquivariantLayerSingleParam(nn.Module):
             # Next, update list_of_diagonals to reflect this permutation
             
             update_list_of_diagonals = list_of_diagonals.copy()
-            for j, input_dims in enumerate(list_of_diagonals):
-                update_list_of_diagonals[j] = [permutation.index(input_dim) for input_dim in input_dims]
+            for j, input_dims in enumerate(list_of_diagonals[i:]):
+                update_list_of_diagonals[i+j] = [permutation.index(input_dim) for input_dim in input_dims]
             list_of_diagonals = update_list_of_diagonals
             # Finally, take a diagonal of the last len(diagonal_dims) dimensions
             n_diagonal_dims = len(diagonal_dims)
@@ -57,8 +57,6 @@ class EquivariantLayerSingleParam(nn.Module):
 
         # Update dimensions in equality_mapping
         updated_equalities = self.equality_mapping.copy()
-        print(input_diagonals)
-        print(list_of_diagonals)
         for i, diag_dims in enumerate(input_diagonals):
             for j, (input_dims, output_dims) in enumerate(self.equality_mapping):
                 if set(input_dims) == set(diag_dims):
@@ -190,8 +188,8 @@ class EquivariantLayerBlock(nn.Module):
             # Next, update list_of_diagonals to reflect this permutation
             
             update_list_of_diagonals = list_of_diagonals.copy()
-            for j, input_dims in enumerate(list_of_diagonals):
-                update_list_of_diagonals[j] = [permutation.index(input_dim) for input_dim in input_dims]
+            for j, input_dims in enumerate(list_of_diagonals[i:]):
+                update_list_of_diagonals[i+j] = [permutation.index(input_dim) for input_dim in input_dims]
             list_of_diagonals = update_list_of_diagonals
             # Finally, take a diagonal of the last len(diagonal_dims) dimensions
             n_diagonal_dims = len(diagonal_dims)

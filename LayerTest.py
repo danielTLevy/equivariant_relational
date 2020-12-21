@@ -9,16 +9,15 @@ Created on Sun Nov  8 22:43:29 2020
 #%%
 import numpy as np
 import torch 
-from EquivariantLayer import EquivariantLayer
-    
+from EquivariantLayer import EquivariantLayerSingleParam
 #%%
-def test_layer_output(X, equality_mapping, output_shape, X_expected):
-    layer = EquivariantLayer(equality_mapping, output_shape)
+def test_layer_single_param(X, mapping, output_shape, X_expected):
+    layer = EquivariantLayerSingleParam(mapping, output_shape)
     X_out = layer.forward(X)
+    print(X_out)
     return torch.equal(X_out, X_expected)
-
+#%%
 if __name__ == '__main__': 
-    #%%
     #Example 
     ##Ri = {n1, n2, n3}
     #Rj = {m1, m2}
@@ -31,9 +30,31 @@ if __name__ == '__main__':
             [ 3, 30],
             [ 3, 30],
             [ 3, 30]])
-    assert test_layer_output(X, mapping, output_shape, X_expected)
+    assert test_layer_single_param(X, mapping, output_shape, X_expected)
     # Take diagonal of dimensions 0 and 1. Pool result along dimension 2. Broadcast along dimension 0 of output.
 
+    #%%
+    # Example 1.5
+    X = torch.tensor(np.arange(12)).view(2,2,3)
+    # Problem: dimensions 0 and 1 
+    mapping = [({2}, {0}), ({0}, set()), ({1}, {1})]
+    output_shape = (3, 2)
+    layer = EquivariantLayerSingleParam(mapping, output_shape)
+    Y1 = layer.diag(X)
+    Y2 = layer.pool(Y1)
+    Y3 = layer.broadcast(Y2)
+    Y4 = layer.undiag(Y3)
+    Y5 = layer.reindex(Y4)
+    #%%
+    X = torch.tensor(np.arange(12)).view(2,2,3)
+    # Problem: dimensions 0 and 1 
+    mapping = [({2}, {0}), ({0}, set()), ({1}, {1})]
+    output_shape = (3, 2)
+    layer = EquivariantLayerSingleParam(mapping, output_shape)
+    X_out = layer.forward(X)
+    
+    
+    
     # %%
     # Example 2
     #Ri = {n1, n2}
@@ -50,20 +71,12 @@ if __name__ == '__main__':
     
             [[30,  0],
              [ 0, 30]]])
-    assert test_layer_output(X, mapping, output_shape, X_expected)
+    assert test_layer_single_param(X, mapping, output_shape, X_expected)
 
     # Take diagonal of dimensions 0 and 1, and pool over the resulting dimension. 
     # Broadcast onto three dimensions. Take the diagonal of resulting dimensions 1 and 2
 
-    #%%
 
-    X0 = X = torch.tensor(np.arange(6)).view(2, 3)
-    output_shape = (3, 2, 1, 3, 4, 1, 1) 
-    ia = [(set(),{4}), ({1},{0,3}), (set(),{2,5,6}), ({0},{1})]
-    examplea = EquivariantLayer(ia, output_shape)
-    X = examplea.broadcast(X)
-    X = examplea.undiag(X)
-    X = examplea.reindex(X)
     # %%
     # Examples 3
     #Ri = {n1, n2, n3}
@@ -91,7 +104,7 @@ if __name__ == '__main__':
              [ 0,  0,  0],
              [ 0,  0,  0],
              [ 3, 17, 31]]])
-    assert test_layer_output(X, mapping, output_shape, X_expected)
+    assert test_layer_single_param(X, mapping, output_shape, X_expected)
     
     # From input tensor, take diagonal along dimensions 0 and 2 (forming new dimension 0), and pool along dimension 1
     # Broadcast resultant rank 1 tensor onto 3 dimensions, and then take only the diagonal of first two dimensions (leaving last dimension)
@@ -123,4 +136,4 @@ if __name__ == '__main__':
              [350., 350., 350., 350., 350.],
              [606., 606., 606., 606., 606.]]])
     output_shape = (d, b, c)
-    assert test_layer_output(X, mapping, output_shape, X_expected)
+    assert test_layer_single_param(X, mapping, output_shape, X_expected)

@@ -7,6 +7,8 @@ Created on Sun Nov  8 22:43:29 2020
 """
 
 #%%
+import sys
+sys.path.append('../src')
 import numpy as np
 import torch 
 from EquivariantLayer import EquivariantLayerSingleParam
@@ -14,7 +16,6 @@ from EquivariantLayer import EquivariantLayerSingleParam
 def test_layer_single_param(X, mapping, output_shape, X_expected):
     layer = EquivariantLayerSingleParam(mapping, output_shape)
     X_out = layer.forward(X)
-    print(X_out)
     return torch.equal(X_out, X_expected)
 #%%
 if __name__ == '__main__': 
@@ -129,11 +130,13 @@ if __name__ == '__main__':
     c = 5
     d = 2
     X = torch.Tensor(np.arange(b*a*d*a*d*d)).view(b, a, d, a, d, d)
-    X_expected = torch.tensor([[[ 16.,  16.,  16.,  16.,  16.],
-             [272., 272., 272., 272., 272.],
-             [528., 528., 528., 528., 528.]],
-            [[ 94.,  94.,  94.,  94.,  94.],
-             [350., 350., 350., 350., 350.],
-             [606., 606., 606., 606., 606.]]])
+    X_expected = torch.tensor([[[ 216.,  216.,  216.,  216.,  216.],
+         [ 728.,  728.,  728.,  728.,  728.],
+         [1240., 1240., 1240., 1240., 1240.]],
+
+        [[ 292.,  292.,  292.,  292.,  292.],
+         [ 804.,  804.,  804.,  804.,  804.],
+         [1316., 1316., 1316., 1316., 1316.]]])
+    
     output_shape = (d, b, c)
     assert test_layer_single_param(X, mapping, output_shape, X_expected)

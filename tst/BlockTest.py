@@ -6,7 +6,10 @@ Created on Sun Dec  6 22:18:39 2020
 @author: Daniel
 """
 
+
 #%%
+import sys
+sys.path.append('../src')
 import numpy as np
 import torch
 from DataSchema import DataSchema, Entity, Relation

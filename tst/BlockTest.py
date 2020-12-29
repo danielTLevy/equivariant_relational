@@ -11,6 +11,7 @@ import numpy as np
 import torch
 from DataSchema import DataSchema, Entity, Relation
 from EquivariantLayer import EquivariantLayerBlock
+torch.manual_seed(0)
 
 
 def test_layer_single_block(X, entities, relation_i, relation_j):
@@ -18,10 +19,10 @@ def test_layer_single_block(X, entities, relation_i, relation_j):
     schema = DataSchema(entities, relations)
     layer = EquivariantLayerBlock(1, 1, schema, relation_i, relation_j)
     X_out = layer.forward(X)
-    print(X_out)
+    print("X_out: ", X_out)
     expected_shape = [entity.n_instances for entity in relation_j.entities]
-    print(list(X_out.shape))
-    print(expected_shape)
+    print("Out shape: ", list(X_out.shape))
+    print("Expected shape: ", expected_shape)
     assert(list(X_out.shape) == expected_shape)
 
 

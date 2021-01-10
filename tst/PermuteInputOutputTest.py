@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -14,23 +16,52 @@ import numpy as np
 import torch
 from DataSchema import DataSchema, Entity, Relation
 from EquivariantLayer import EquivariantLayerBlock
+torch.manual_seed(0)
 
+def permute_entities(X_in, X_out, entities, relation_i, relation_j):
+    torch.manual_seed(0)
+    entity_permutations = {}
+    for entity in entities:
+        permutation = np.random.permutation(entity.n_instances)
+        while (permutation == np.arange(entity.n_instances )).all():
+            permutation = np.random.permutation(entity.n_instances)
+        entity_permutations[entity.entity_number] = permutation
+    
+    for dim, entity in enumerate(relation_i.entities):
+        permutations = [slice(None)]*dim
+        permutations = permutations + [list(entity_permutations[entity.entity_number])]
+        permutations = permutations + [...]
+        X_in = X_in[permutations]
+    
+    for dim, entity in enumerate(relation_j.entities):
+        permutations = [slice(None)]*dim
+        permutations = permutations + [list(entity_permutations[entity.entity_number])]
+        permutations = permutations + [...]
+        X_out = X_out[permutations]
+    
+    return X_in, X_out
 
-def test_layer_single_block(X, entities, relation_i, relation_j):
+def test_block_without_permutation(X, entities, relation_i, relation_j):
     torch.manual_seed(0)
     relations = [relation_i, relation_j]
     schema = DataSchema(entities, relations)
     layer = EquivariantLayerBlock(1, 1, schema, relation_i, relation_j)
-    X_out = layer.forward(X)
-    print("X_out: ", X_out)
-    expected_shape = relation_j.get_shape()
-    print("Out shape: ", list(X_out.shape))
-    print("Expected shape: ", expected_shape)
-    assert(list(X_out.shape) == expected_shape)
+    return layer.forward(X)
+    
+def test_block_with_permutation(X, entities, relation_i, relation_j):
+    torch.manual_seed(0)
+    X_exp = test_block_without_permutation(X, entities, relation_i, relation_j)
+    X_in_perm, X_exp_perm = permute_entities(X, X_exp, entities, relation_i, relation_j)
+    relations = [relation_i, relation_j]
+    schema = DataSchema(entities, relations)
+    layer = EquivariantLayerBlock(1, 1, schema, relation_i, relation_j)
+    X_out_perm = layer.forward(X_in_perm)
+    return torch.equal(X_out_perm, X_exp_perm)
 
 
 #%%
 if __name__ == '__main__': 
+    
     #Example 
     ##Ri = {n1, n2, n3}
     #Rj = {m1, m2}
@@ -40,7 +71,7 @@ if __name__ == '__main__':
     relation_i = Relation([entities[1], entities[1], entities[0]])
     relation_j = Relation([entities[0], entities[1]])
 
-    test_layer_single_block(X, entities, relation_i, relation_j)
+    assert test_block_with_permutation(X, entities, relation_i, relation_j)
 
     # %%
     # Example 2
@@ -51,8 +82,8 @@ if __name__ == '__main__':
     relation_i = Relation([entities[2], entities[2]])
     relation_j = Relation([entities[0], entities[1], entities[1]])
     
-    test_layer_single_block(X, entities, relation_i, relation_j)
-    
+    test_block_with_permutation(X, entities, relation_i, relation_j)
+    assert test_block_with_permutation
     # Take diagonal of dimensions 0 and 1, and pool over the resulting dimension. 
     # Broadcast onto three dimensions. Take the diagonal of resulting dimensions 1 and 2
 
@@ -66,7 +97,7 @@ if __name__ == '__main__':
     relation_i = Relation([entities[0], entities[1], entities[0]])
     relation_j = Relation([entities[2], entities[2], entities[0]])
 
-    test_layer_single_block(X, entities, relation_i, relation_j)
+    assert test_block_with_permutation(X, entities, relation_i, relation_j)
     
     # From input tensor, take diagonal along dimensions 0 and 2 (forming new dimension 0), and pool along dimension 1
     # Broadcast resultant rank 1 tensor onto 3 dimensions, and then take only the diagonal of first two dimensions (leaving last dimension)
@@ -86,4 +117,4 @@ if __name__ == '__main__':
     relation_i = Relation([entities[1], entities[0], entities[3],
                            entities[0], entities[3], entities[3]])
     relation_j = Relation([entities[3], entities[1], entities[2]])
-    test_layer_single_block(X, entities, relation_i, relation_j)
+    assert test_block_with_permutation(X, entities, relation_i, relation_j)

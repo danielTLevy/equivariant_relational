@@ -24,6 +24,7 @@ class Entity():
     
 class Relation():
     def __init__(self, relation_id, entities):
+        self.relation_id = relation_id
         self.entities = entities
 
     def get_shape(self):

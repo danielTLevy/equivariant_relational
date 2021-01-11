@@ -19,7 +19,6 @@ from EquivariantLayer import EquivariantLayerBlock
 torch.manual_seed(0)
 
 def permute_entities(X_in, X_out, entities, relation_i, relation_j):
-    torch.manual_seed(0)
     entity_permutations = {}
     for entity in entities:
         permutation = np.random.permutation(entity.n_instances)
@@ -49,11 +48,12 @@ def test_block_without_permutation(X, entities, relation_i, relation_j):
     return layer.forward(X)
     
 def test_block_with_permutation(X, entities, relation_i, relation_j):
-    torch.manual_seed(0)
     X_exp = test_block_without_permutation(X, entities, relation_i, relation_j)
     X_in_perm, X_exp_perm = permute_entities(X, X_exp, entities, relation_i, relation_j)
     relations = [relation_i, relation_j]
     schema = DataSchema(entities, relations)
+
+    torch.manual_seed(0)
     layer = EquivariantLayerBlock(1, 1, schema, relation_i, relation_j)
     X_out_perm = layer.forward(X_in_perm)
     return torch.equal(X_out_perm, X_exp_perm)

@@ -46,9 +46,9 @@ def test_param_without_permutation(X, mapping, output_shape):
     return layer.forward(X)
     
 def test_param_with_permutation(X, mapping, output_shape, entities, relation_i, relation_j):
-    torch.manual_seed(0)
     X_exp = test_param_without_permutation(X, mapping, output_shape)
     X_in_perm, X_exp_perm = permute_entities(X, X_exp, entities, relation_i, relation_j)
+    torch.manual_seed(0)
     layer = EquivariantLayerSingleParam(mapping, output_shape)
     X_out_perm = layer.forward(X_in_perm)
 

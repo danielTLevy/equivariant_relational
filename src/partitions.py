@@ -81,8 +81,8 @@ if __name__ == '__main__':
     
     # Entity index : number instances mapping
     entities = [Entity(0, 5), Entity(1, 2), Entity(2, 3)]
-    relation_i = Relation([entities[1], entities[0], entities[2], entities[0]])
-    relation_j = Relation([entities[0], entities[1]])
+    relation_i = Relation(0, [entities[1], entities[0], entities[2], entities[0]])
+    relation_j = Relation(1, [entities[0], entities[1]])
     relations = [relation_i, relation_j]
     data_schema = DataSchema(entities, relations)
     

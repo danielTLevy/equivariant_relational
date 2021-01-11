@@ -106,7 +106,7 @@ if __name__ == '__main__':
              [ 0,  0,  0],
              [ 3, 17, 31]]])
     assert test_layer_single_param(X, mapping, output_shape, X_expected)
-    
+
     # From input tensor, take diagonal along dimensions 0 and 2 (forming new dimension 0), and pool along dimension 1
     # Broadcast resultant rank 1 tensor onto 3 dimensions, and then take only the diagonal of first two dimensions (leaving last dimension)
 

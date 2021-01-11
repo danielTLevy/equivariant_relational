@@ -12,22 +12,22 @@ class DataSchema():
         self.relations = relations
         
 class Entity():
-    def __init__(self, entity_number, n_instances):
-        self.entity_number = entity_number
+    def __init__(self, entity_id, n_instances):
+        self.entity_id = entity_id
         self.n_instances = n_instances
 
     def __gt__(self, other):
-        return self.entity_number > other.entity_number
+        return self.entity_id > other.entity_id
     
     def __repr__(self):
-        return "Entity(entity_number={}, n_instances={})".format(self.entity_number, self.n_instances)
+        return "Entity(entity_id={}, n_instances={})".format(self.entity_id, self.n_instances)
     
 class Relation():
-    def __init__(self, entities):
+    def __init__(self, relation_id, entities):
         self.entities = entities
 
     def get_shape(self):
         return [entity.n_instances for entity in self.entities]
 
     def __repr__(self):
-        return "Relation(entities={})".format(self.entities)
+        return "Relation(relation_id={}, entities={})".format(self.relation_id, self.entities)

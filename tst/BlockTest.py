@@ -37,8 +37,8 @@ if __name__ == '__main__':
     X = torch.tensor(np.arange(12, dtype=np.float32)).view(2,2,3)
     # Entity index : number instances mapping
     entities = [Entity(0, 3), Entity(1, 2), Entity(2, 5)]
-    relation_i = Relation([entities[1], entities[1], entities[0]])
-    relation_j = Relation([entities[0], entities[1]])
+    relation_i = Relation(0, [entities[1], entities[1], entities[0]])
+    relation_j = Relation(1, [entities[0], entities[1]])
 
     test_layer_single_block(X, entities, relation_i, relation_j)
 
@@ -48,8 +48,8 @@ if __name__ == '__main__':
     #Rj = {m1, m2, m3}
     X = torch.tensor(np.arange(16)).view(4,4)
     entities = [Entity(0, 3), Entity(1, 2), Entity(2, 4)]
-    relation_i = Relation([entities[2], entities[2]])
-    relation_j = Relation([entities[0], entities[1], entities[1]])
+    relation_i = Relation(0, [entities[2], entities[2]])
+    relation_j = Relation(1, [entities[0], entities[1], entities[1]])
     
     test_layer_single_block(X, entities, relation_i, relation_j)
     
@@ -63,8 +63,8 @@ if __name__ == '__main__':
     #Rj = {m1, m2, m3}
     X = torch.tensor(np.arange(18)).view(3, 2, 3)
     entities = [Entity(0, 3), Entity(1, 2), Entity(2, 4)]
-    relation_i = Relation([entities[0], entities[1], entities[0]])
-    relation_j = Relation([entities[2], entities[2], entities[0]])
+    relation_i = Relation(0, [entities[0], entities[1], entities[0]])
+    relation_j = Relation(1, [entities[2], entities[2], entities[0]])
 
     test_layer_single_block(X, entities, relation_i, relation_j)
     
@@ -83,7 +83,7 @@ if __name__ == '__main__':
     d = 2
     X = torch.Tensor(np.arange(b*a*d*a*d*d)).view(b, a, d, a, d, d)
     entities = [Entity(0, 4), Entity(1, 3), Entity(2, 5), Entity(3, 2)]
-    relation_i = Relation([entities[1], entities[0], entities[3],
+    relation_i = Relation(0, [entities[1], entities[0], entities[3],
                            entities[0], entities[3], entities[3]])
-    relation_j = Relation([entities[3], entities[1], entities[2]])
+    relation_j = Relation(1, [entities[3], entities[1], entities[2]])
     test_layer_single_block(X, entities, relation_i, relation_j)

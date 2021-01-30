@@ -14,8 +14,8 @@ import sys
 sys.path.append('../src')
 import numpy as np
 import torch
-from DataSchema import DataSchema, Entity, Relation
-from EquivariantLayer import EquivariantLayerSingleParam
+from DataSchema import Entity, Relation
+from EquivariantLayerSingleParam import EquivariantLayerSingleParam
 torch.manual_seed(0)
 
 def permute_entities(X_in, X_out, entities, relation_i, relation_j):
@@ -27,15 +27,15 @@ def permute_entities(X_in, X_out, entities, relation_i, relation_j):
         entity_permutations[entity.entity_id] = permutation
     
     for dim, entity in enumerate(relation_i.entities):
-        permutations = [slice(None)]*dim
-        permutations = permutations + [list(entity_permutations[entity.entity_id])]
-        permutations = permutations + [...]
+        permutations = [slice(None)]*(dim + 1)
+        permutations += [list(entity_permutations[entity.entity_id])]
+        permutations += [...]
         X_in = X_in[permutations]
     
     for dim, entity in enumerate(relation_j.entities):
-        permutations = [slice(None)]*dim
-        permutations = permutations + [list(entity_permutations[entity.entity_id])]
-        permutations = permutations + [...]
+        permutations = [slice(None)]*(dim + 1)
+        permutations += [list(entity_permutations[entity.entity_id])]
+        permutations += [...]
         X_out = X_out[permutations]
     
     return X_in, X_out
@@ -61,13 +61,13 @@ if __name__ == '__main__':
     ##Ri = {n1, n2, n3}
     #Rj = {m1, m2}
     #equalities = {{n1, n2, m2}, {n3}, {m1}}
-    X = torch.tensor(np.arange(12)).view(2,2,3)
-    mapping = [({0,1},{1}), ({2},set()), (set(),{0})]
+    X = torch.tensor(np.arange(12)).view(1,2,2,3)
+    mapping = [({1,2},{2}), ({3},set()), (set(),{1})]
     entities = [Entity(0, 3), Entity(1, 2), Entity(2, 5)]
     relation_i = Relation(0, [entities[1], entities[1], entities[0]])
     relation_j = Relation(1, [entities[2], entities[1]])
 
-    output_shape = (5, 2)
+    output_shape = (1, 5, 2)
     assert test_param_with_permutation(X, mapping, output_shape, entities, relation_i, relation_j)
     # Take diagonal of dimensions 0 and 1. Pool result along dimension 2. Broadcast along dimension 0 of output.
 
@@ -76,9 +76,9 @@ if __name__ == '__main__':
     #Ri = {n1, n2}
     #Rj = {m1, m2, m3}
     #equalities = {{n1, n2}, {m2, m3}, {m1}}
-    X = torch.tensor(np.arange(16)).view(4,4)
-    output_shape = (3, 2, 2)
-    mapping = [({0,1},set()), (set(),{1,2}), (set(),{0})]
+    X = torch.tensor(np.arange(16)).view(1, 4,4)
+    output_shape = (1, 3, 2, 2)
+    mapping = [({1,2},set()), (set(),{2,3}), (set(),{1})]
     entities = [Entity(0, 3), Entity(1, 2), Entity(2, 4)]
     relation_i = Relation(0, [entities[2], entities[2]])
     relation_j = Relation(1, [entities[0], entities[1], entities[1]])
@@ -93,9 +93,9 @@ if __name__ == '__main__':
     #Ri = {n1, n2, n3}
     #Rj = {m1, m2, m3}
     #equalities = {{n1, n3, m3}, {n2}, {m1, m2}}
-    X = torch.tensor(np.arange(18)).view(3, 2, 3)
-    mapping = [({0,2},{2}), ({1},set()), (set(),{0,1})]
-    output_shape = (4, 4, 3)
+    X = torch.tensor(np.arange(18)).view(1, 3, 2, 3)
+    mapping = [({1,3},{3}), ({2},set()), (set(),{1,2})]
+    output_shape = (1, 4, 4, 3)
     entities = [Entity(0, 3), Entity(1, 2), Entity(2, 4)]
     relation_i = Relation(0, [entities[0], entities[1], entities[0]])
     relation_j = Relation(1, [entities[2], entities[2], entities[0]])
@@ -119,16 +119,28 @@ if __name__ == '__main__':
 
 
     #            a               b          c               d
-    mapping = [({1, 3}, set()), ({0}, {1}), (set(), {2}), ({2, 4, 5}, {0})]
+    mapping = [({2, 4}, set()), ({1}, {2}), (set(), {3}), ({3, 5, 6}, {1})]
     a = 4
     b = 3
     c = 5
     d = 2
-    X = torch.Tensor(np.arange(b*a*d*a*d*d)).view(b, a, d, a, d, d)
+    X = torch.Tensor(np.arange(b*a*d*a*d*d)).view(1, b, a, d, a, d, d)
 
     entities = [Entity(0, 4), Entity(1, 3), Entity(2, 5), Entity(3, 2)]
     relation_i = Relation(0, [entities[1], entities[0], entities[3],
                            entities[0], entities[3], entities[3]])
     relation_j = Relation(1, [entities[3], entities[1], entities[2]])
-    output_shape = (d, b, c)
+    output_shape = (1, d, b, c)
+    assert test_param_with_permutation(X, mapping, output_shape, entities, relation_i, relation_j)
+    
+    
+    #%%
+    # Example 5:
+    # Same as example 2 but with multiple channels
+    X = torch.tensor(np.arange(48)).view(3, 4,4)
+    output_shape = (3, 3, 2, 2)
+    mapping = [({1,2},set()), (set(),{2,3}), (set(),{1})]
+    entities = [Entity(0, 3), Entity(1, 2), Entity(2, 4)]
+    relation_i = Relation(0, [entities[2], entities[2]])
+    relation_j = Relation(1, [entities[0], entities[1], entities[1]])
     assert test_param_with_permutation(X, mapping, output_shape, entities, relation_i, relation_j)

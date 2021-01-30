@@ -37,7 +37,7 @@ def get_all_entity_partitions(data_schema, combined_entities):
     # Map of entity: index
     partitions = {}
     for entity in all_entities:
-        entity_indices = np.where(combined_entities == entity)[0]
+        entity_indices = 1 + np.where(combined_entities == entity)[0]
         partitions[entity] = list(get_partitions(list(entity_indices)))
     
     partition_product = itertools.product(*partitions.values())
@@ -50,20 +50,28 @@ def get_all_entity_partitions(data_schema, combined_entities):
     return entity_partitions
 
 def get_all_input_output_partitions(data_schema, relation_in, relation_out):
+    '''
+    Returns: a list of all "input output partitions", which are tuple pairs
+    of the set of indices in the input and the set of indices in the output
+    that are equal to each other.
+    '''
     entities_in = relation_in.entities
     entities_out = relation_out.entities
     combined_entities = np.array(entities_in + entities_out)
     entity_partitions = get_all_entity_partitions(data_schema, combined_entities)
     relation_in_length = len(relation_in.entities)
+
     output = []
     for entity_partition in entity_partitions:
         mapping = []  
         for partitions in entity_partition.values():
             for partition in partitions:
+                # get indices with respect to input and output instead of
+                # with respect to their concatenation
                 inputs = []
                 outputs = []
                 for entity_index in partition:
-                    if entity_index < relation_in_length:
+                    if entity_index < 1 + relation_in_length:
                         inputs.append(entity_index)
                     else:
                         outputs.append(entity_index - relation_in_length)

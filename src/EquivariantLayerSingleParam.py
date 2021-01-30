@@ -1,33 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Sun Nov  8 22:43:29 2020
+Created on Sun Jan 24 23:45:52 2021
 
 @author: Daniel
 """
 
 import numpy as np
-import math
-import torch
 import torch.nn as nn
-import itertools
-from partitions import get_all_input_output_partitions
 
 
-class EquivariantLayerBlock(nn.Module):
-    # Layer mapping between two relations
-    def __init__(self, input_dim, output_dim, data_schema, relation_in, relation_out):
-        super(EquivariantLayerBlock, self).__init__()
-        self.in_dim = input_dim
-        self.out_dim = output_dim
-        self.input_output_partitions = get_all_input_output_partitions(data_schema, relation_in, relation_out)
-        self.params = len(self.input_output_partitions)
-        stdv = 0.1 / math.sqrt(self.in_dim)
-        self.weights = nn.Parameter(torch.Tensor(self.params, self.in_dim, self.out_dim).uniform_(-stdv, stdv))
-        self.bias = nn.Parameter(torch.ones(1))
-        self.output_shape = [self.out_dim] + [entity.n_instances for entity in relation_out.entities]
+class EquivariantLayerSingleParam(nn.Module):
+    # Layer mapping a single parameter between two relations
+    def __init__(self, equality_mapping, output_shape):
+        super(EquivariantLayerSingleParam, self).__init__()
+        self.equality_mapping = equality_mapping
+        self.output_shape = output_shape
+   
 
-    
     def diag(self, X):
         '''
         #Takes diagonal along any input dimensions that are equal,
@@ -165,47 +155,32 @@ class EquivariantLayerBlock(nn.Module):
         return X
 
     def forward(self, X):
-        Y = torch.zeros(self.output_shape)
-        for i in range(self.params):
-            self.equality_mapping = self.input_output_partitions[i]
+        #print("Initial")
+        #print(self.equality_mapping)
+        #print(X.shape)
+    
+        X = self.diag(X)
+        #print("Diag")
+        #print(self.equality_mapping)
+        #print(X.shape)
 
-            Y_i = self.diag(X)
-            Y_i = self.pool(Y_i)
-            Y_i = self.broadcast(Y_i)
-            Y_i = self.undiag(Y_i)
-            Y_i = self.reindex(Y_i)
-            
-            weight_i = self.weights[i]
+        X = self.pool(X)
+        #print("Pool")
+        #print(self.equality_mapping)
+        #print(X.shape)
 
-            Y = Y + (torch.tensordot(Y_i.T,  weight_i, 1).T)
-            
-        Y = Y + self.bias
-        return Y
+        X = self.broadcast(X)
+        #print("Broadcast")
+        #print(self.equality_mapping)
+        #print(X.shape)
 
+        X = self.undiag(X)
+        #print("Undiag")
+        #print(self.equality_mapping)
+        #print(X.shape)
 
-class EquivariantLayer(nn.Module):
-    def __init__(self, data_schema, input_dim=1, output_dim=1):
-        super(EquivariantLayer, self).__init__()
-        self.data_schema = data_schema
-        self.relation_pairs = list(itertools.product(self.data_schema.relations,
-                                                self.data_schema.relations))
-        block_modules = []
-        self.input_dim = input_dim
-        self.output_dim = output_dim
-        for relation_i, relation_j in self.relation_pairs:
-            block_module = EquivariantLayerBlock(self.input_dim, self.output_dim,
-                                                 data_schema, relation_i, relation_j)
-            block_modules.append(block_module)
-        self.block_modules = nn.ModuleList(block_modules)
-
-    def forward(self, data):
-        data_out = {}
-        for i, (relation_i, relation_j) in enumerate(self.relation_pairs):
-            X = data[relation_i.relation_id]
-            layer = self.block_modules[i]
-            out = layer.forward(X)
-            if relation_j.relation_id not in data_out:
-                data_out[relation_j.relation_id] = out
-            else:
-                data_out[relation_j.relation_id] = data_out[relation_j.relation_id] + out
-        return data_out
+        X = self.reindex(X)
+        #print("Reindex")
+        #print(self.equality_mapping)
+        #print(X.shape)
+        return X

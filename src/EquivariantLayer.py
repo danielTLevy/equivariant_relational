@@ -201,11 +201,12 @@ class EquivariantLayer(nn.Module):
     def forward(self, data):
         data_out = {}
         for i, (relation_i, relation_j) in enumerate(self.relation_pairs):
-            X = data[relation_i.relation_id]
+            X = data[relation_i.id]
             layer = self.block_modules[i]
             out = layer.forward(X)
-            if relation_j.relation_id not in data_out:
-                data_out[relation_j.relation_id] = out
+            if relation_j.id not in data_out:
+                data_out[relation_j.id] = out
             else:
-                data_out[relation_j.relation_id] = data_out[relation_j.relation_id] + out
+                data_out[relation_j.id] = data_out[relation_j.id] + out
         return data_out
+

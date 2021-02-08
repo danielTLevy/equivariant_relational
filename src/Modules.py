@@ -9,17 +9,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class LayerNorm(nn.Modeul):
-    def __init__(self, schema):
-        super(LayerNorm, self).__init__()
-        self.schema = schema
-        self.layer_norm = nn.LayerNorm()
-    
-    def forward(self, X):
-        for relation in self.schema.relations:
-            X[relation.id] = (X[relation.id]) 
-        return X
-    
+
 class ReLU(nn.Module):
     def __init__(self, schema):
         super(ReLU, self).__init__()

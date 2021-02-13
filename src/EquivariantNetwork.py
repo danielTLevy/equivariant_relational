@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from DataSchema import DataSchema, Entity, Relation
 from EquivariantLayer import EquivariantLayer
-from Modules import ReLU, EntityPooling, EntityBroadcasting
+from Modules import RelationNorm, ReLU, EntityPooling, EntityBroadcasting
 
 import torch
 import torch.nn as nn
@@ -32,28 +32,36 @@ class EquivariantNetwork(nn.Module):
 class EquivariantAutoEncoder(nn.Module):
     def __init__(self, data_schema):
         super(EquivariantAutoEncoder, self).__init__()
-        self.hidden_dim = 5
-        
         self.data_schema = data_schema
-        self.ReLU = ReLU(data_schema)
-        self.eerl1 = EquivariantLayer(data_schema, 1, 16)
-        self.eerl2 = EquivariantLayer(data_schema, 16, self.hidden_dim)
-        self.pooling = EntityPooling(data_schema, self.hidden_dim)
-        self.broadcasting = EntityBroadcasting(data_schema, self.hidden_dim)
-        self.eerl3 = EquivariantLayer(data_schema, self.hidden_dim, 16)
-        self.eerl4 = EquivariantLayer(data_schema, 16, 1)
+        self.hidden_dim = 10
+
+        self.encoder = nn.Sequential(
+                EquivariantLayer(data_schema, 1, 16),
+                ReLU(data_schema),
+                RelationNorm(data_schema, 16, affine=True),
+
+                EquivariantLayer(data_schema, 16, self.hidden_dim),
+                RelationNorm(data_schema, self.hidden_dim, affine=True),
+
+                EntityPooling(data_schema, self.hidden_dim)
+                )
+        self.decoder = nn.Sequential(
+                EntityBroadcasting(data_schema, self.hidden_dim),
+                EquivariantLayer(data_schema, self.hidden_dim, 16),
+                ReLU(data_schema),
+                RelationNorm(data_schema, 16, affine=True),
+
+                EquivariantLayer(data_schema, 16, 1),
+                RelationNorm(data_schema, 1, affine=False)
+                )
+
 
     def get_encoding_size(self):
         return {entity.id: (entity.n_instances, self.hidden_dim) 
-                for entity in self.schema.entities}
+                for entity in self.data_schema.entities}
         
     def forward(self, data):
-        out = self.ReLU(self.eerl1(data))
-        out = self.ReLU(self.eerl2(data))
-        enc = self.pooling(out)
-        
-        out = self.broadcasting(enc)
-        out = self.ReLU(self.eerl3(out))
-        out = self.eerl4(out)
+        enc  = self.encoder(data)
+        out = self.decoder(enc)
         return out
 

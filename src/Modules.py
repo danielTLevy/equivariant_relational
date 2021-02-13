@@ -9,6 +9,23 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+class RelationNorm(nn.Module):
+    '''
+    Normalize each channel of each relation separately
+    '''
+    def __init__(self, schema, num_channels, affine):
+        super(RelationNorm, self).__init__()
+        self.schema = schema
+        self.rel_norms = {}
+        for relation in schema.relations:
+            rel_norm = nn.GroupNorm(num_channels,num_channels, affine=affine)
+            self.rel_norms[relation.id] = rel_norm
+
+    def forward(self, X):
+        for relation in self.schema.relations:
+            rel_norm = self.rel_norms[relation.id]
+            X[relation.id] = rel_norm(X[relation.id].unsqueeze(0)).squeeze(0)
+        return X
 
 class ReLU(nn.Module):
     def __init__(self, schema):
@@ -75,13 +92,13 @@ class EntityPooling(nn.Module):
             return torch.sum(X, pooling_dims)
         else:
             return X
-    
+
     def pool_tensor_diag(self, X):
         while X.ndim > 2:
             assert X.shape[-1] == X.shape[-2]
             X = X.diagonal(0, -1, -2)
         return X
-    
+
     def forward(self, data):
         out = {}
         for entity in self.schema.entities:
@@ -95,5 +112,4 @@ class EntityPooling(nn.Module):
                     entity_out = self.pool_tensor(data_rel, pooling_dims)
                     entity_out = self.pool_tensor_diag(entity_out)
             out[entity.id] = entity_out
-                    
         return out

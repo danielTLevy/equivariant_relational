@@ -24,17 +24,17 @@ def permute_entities(X_in, X_out, entities, relation_i, relation_j):
         permutation = np.random.permutation(entity.n_instances)
         while (permutation == np.arange(entity.n_instances )).all():
             permutation = np.random.permutation(entity.n_instances)
-        entity_permutations[entity.entity_id] = permutation
+        entity_permutations[entity.id] = permutation
     
     for dim, entity in enumerate(relation_i.entities):
         permutations = [slice(None)]*(dim + 1)
-        permutations += [list(entity_permutations[entity.entity_id])]
+        permutations += [list(entity_permutations[entity.id])]
         permutations += [...]
         X_in = X_in[permutations]
     
     for dim, entity in enumerate(relation_j.entities):
         permutations = [slice(None)]*(dim + 1)
-        permutations += [list(entity_permutations[entity.entity_id])]
+        permutations += [list(entity_permutations[entity.id])]
         permutations += [...]
         X_out = X_out[permutations]
     

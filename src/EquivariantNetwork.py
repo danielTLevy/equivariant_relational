@@ -30,10 +30,10 @@ class EquivariantNetwork(nn.Module):
 
 
 class EquivariantAutoEncoder(nn.Module):
-    def __init__(self, data_schema):
+    def __init__(self, data_schema, hidden_dim = 10):
         super(EquivariantAutoEncoder, self).__init__()
         self.data_schema = data_schema
-        self.hidden_dim = 10
+        self.hidden_dim = hidden_dim
 
         self.encoder = nn.Sequential(
                 EquivariantLayer(data_schema, 1, 16),

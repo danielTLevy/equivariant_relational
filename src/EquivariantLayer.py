@@ -11,7 +11,7 @@ import math
 import torch
 import torch.nn as nn
 import itertools
-from partitions import get_all_input_output_partitions
+from utils import get_all_input_output_partitions
 
 
 class EquivariantLayerBlock(nn.Module):
@@ -21,9 +21,9 @@ class EquivariantLayerBlock(nn.Module):
         self.in_dim = input_dim
         self.out_dim = output_dim
         self.input_output_partitions = get_all_input_output_partitions(data_schema, relation_in, relation_out)
-        self.params = len(self.input_output_partitions)
+        self.n_params = len(self.input_output_partitions)
         stdv = 0.1 / math.sqrt(self.in_dim)
-        self.weights = nn.Parameter(torch.Tensor(self.params, self.in_dim, self.out_dim).uniform_(-stdv, stdv))
+        self.weights = nn.Parameter(torch.Tensor(self.n_params, self.in_dim, self.out_dim).uniform_(-stdv, stdv))
         self.bias = nn.Parameter(torch.ones(1))
         self.output_shape = [self.out_dim] + [entity.n_instances for entity in relation_out.entities]
 
@@ -85,6 +85,7 @@ class EquivariantLayerBlock(nn.Module):
                 pooling_dims += list(i)
         pooling_dims = sorted(pooling_dims)
         if pooling_dims != []:
+            # TODO: can make this a max
             X = X.sum(pooling_dims)
     
             # Get updated indices
@@ -101,7 +102,7 @@ class EquivariantLayerBlock(nn.Module):
                     i_new.add(update_mapping[el])
                 new_equality_mapping.append((i_new, o))
             self.equality_mapping = new_equality_mapping
-        
+
         return X
 
     def broadcast(self, X):
@@ -114,12 +115,7 @@ class EquivariantLayerBlock(nn.Module):
                 continue
             
             new_dim_size = self.output_shape[list(o)[0]]
-            # Add new dimension of size new_dim_size, and keep rest of dimensions the same
-            X = X.expand(new_dim_size, *X.shape)
-            # Permute this new dimension to be the last dimension
-            permutation = list(range(X.ndimension()))
-            permutation.append(permutation.pop(0))
-            X = X.permute(permutation)
+            X = X.unsqueeze(-1).expand(*X.shape, new_dim_size)
             self.equality_mapping[index] = ({X.ndimension() - 1}, o)
 
         return X
@@ -166,7 +162,7 @@ class EquivariantLayerBlock(nn.Module):
 
     def forward(self, X):
         Y = torch.zeros(self.output_shape)
-        for i in range(self.params):
+        for i in range(self.n_params):
             self.equality_mapping = self.input_output_partitions[i]
 
             Y_i = self.diag(X)

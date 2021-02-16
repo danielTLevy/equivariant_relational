@@ -102,7 +102,6 @@ class EntityPooling(nn.Module):
     def forward(self, data):
         out = {}
         for entity in self.schema.entities:
-            entity_out = torch.zeros(entity.n_instances)
             for relation in self.schema.relations:
                 if entity not in relation.entities:
                     continue

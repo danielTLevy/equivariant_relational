@@ -104,12 +104,7 @@ class EquivariantLayerSingleParam(nn.Module):
                 continue
             
             new_dim_size = self.output_shape[list(o)[0]]
-            # Add new dimension of size new_dim_size, and keep rest of dimensions the same
-            X = X.expand(new_dim_size, *X.shape)
-            # Permute this new dimension to be the last dimension
-            permutation = list(range(X.ndimension()))
-            permutation.append(permutation.pop(0))
-            X = X.permute(permutation)
+            X = X.unsqueeze(-1).expand(*X.shape, new_dim_size)
             self.equality_mapping[index] = ({X.ndimension() - 1}, o)
 
         return X

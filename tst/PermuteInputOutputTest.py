@@ -28,13 +28,13 @@ def permute_entities(X_in, X_out, entities, relation_i, relation_j):
     
         
     for dim, entity in enumerate(relation_i.entities):
-        permutations = [slice(None)]*(dim + 1)
+        permutations = [slice(None)]*(dim + 2)
         permutations +=  [list(entity_permutations[entity.id])]
         permutations +=  [...]
         X_in = X_in[permutations]
     
     for dim, entity in enumerate(relation_j.entities):
-        permutations = [slice(None)]*(dim + 1)
+        permutations = [slice(None)]*(dim + 2)
         permutations +=  [list(entity_permutations[entity.id])]
         permutations +=  [...]
         X_out = X_out[permutations]
@@ -66,7 +66,7 @@ if __name__ == '__main__':
     #Example 
     ##Ri = {n1, n2, n3}
     #Rj = {m1, m2}
-    X = torch.tensor(np.arange(12, dtype=np.float32)).view(1, 2,2,3)
+    X = torch.tensor(np.arange(12, dtype=np.float32)).view(1, 1, 2, 2, 3)
     # Entity index : number instances mapping
     entities = [Entity(0, 3), Entity(1, 2), Entity(2, 5)]
     relation_i = Relation(0, [entities[1], entities[1], entities[0]])
@@ -78,7 +78,7 @@ if __name__ == '__main__':
     # Example 2
     #Ri = {n1, n2}
     #Rj = {m1, m2, m3}
-    X = torch.tensor(np.arange(48, dtype=np.float32)).view(3,  4,4)
+    X = torch.tensor(np.arange(48, dtype=np.float32)).view(1, 3,  4,4)
     entities = [Entity(0, 3), Entity(1, 2), Entity(2, 4)]
     relation_i = Relation(0, [entities[2], entities[2]])
     relation_j = Relation(1, [entities[0], entities[1], entities[1]])
@@ -92,7 +92,7 @@ if __name__ == '__main__':
     # Examples 3
     #Ri = {n1, n2, n3}
     #Rj = {m1, m2, m3}
-    X = torch.tensor(np.arange(18, dtype=np.float32)).view(1, 3, 2, 3)
+    X = torch.tensor(np.arange(18, dtype=np.float32)).view(1, 1, 3, 2, 3)
     entities = [Entity(0, 3), Entity(1, 2), Entity(2, 4)]
     relation_i = Relation(0, [entities[0], entities[1], entities[0]])
     relation_j = Relation(1, [entities[2], entities[2], entities[0]])
@@ -112,7 +112,7 @@ if __name__ == '__main__':
     b = 3
     c = 5
     d = 2
-    X = torch.Tensor(np.arange(b*a*d*a*d*d)).view(1, b, a, d, a, d, d)
+    X = torch.Tensor(np.arange(b*a*d*a*d*d)).view(1, 1, b, a, d, a, d, d)
     entities = [Entity(0, 4), Entity(1, 3), Entity(2, 5), Entity(3, 2)]
     relation_i = Relation(0, [entities[1], entities[0], entities[3],
                            entities[0], entities[3], entities[3]])

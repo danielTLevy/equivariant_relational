@@ -11,21 +11,24 @@ import math
 import torch
 import torch.nn as nn
 import itertools
-from utils import get_all_input_output_partitions
+from utils import get_all_input_output_partitions, PREFIX_DIMS
 
 
 class EquivariantLayerBlock(nn.Module):
     # Layer mapping between two relations
-    def __init__(self, input_dim, output_dim, data_schema, relation_in, relation_out):
+    def __init__(self, input_dim, output_dim, data_schema, relation_in, relation_out, batch_size=1):
         super(EquivariantLayerBlock, self).__init__()
         self.in_dim = input_dim
         self.out_dim = output_dim
+        self.batch_size = batch_size
         self.input_output_partitions = get_all_input_output_partitions(data_schema, relation_in, relation_out)
         self.n_params = len(self.input_output_partitions)
         stdv = 0.1 / math.sqrt(self.in_dim)
         self.weights = nn.Parameter(torch.Tensor(self.n_params, self.in_dim, self.out_dim).uniform_(-stdv, stdv))
         self.bias = nn.Parameter(torch.ones(1))
-        self.output_shape = [self.out_dim] + [entity.n_instances for entity in relation_out.entities]
+        self.output_shape = ([self.batch_size]
+                                + [self.out_dim]
+                                + [entity.n_instances for entity in relation_out.entities])
 
     
     def diag(self, X):
@@ -67,7 +70,7 @@ class EquivariantLayerBlock(nn.Module):
         for i, diag_dims in enumerate(input_diagonals):
             for j, (input_dims, output_dims) in enumerate(self.equality_mapping):
                 if set(input_dims) == set(diag_dims):
-                    updated_equalities[j] = ({1+i}, self.equality_mapping[j][1])
+                    updated_equalities[j] = ({PREFIX_DIMS+i}, self.equality_mapping[j][1])
         self.equality_mapping = updated_equalities
         return X
 
@@ -156,12 +159,15 @@ class EquivariantLayerBlock(nn.Module):
         output_dims= []
         for i, o in self.equality_mapping:
             output_dims += list(o)
-        permutation = [0] + [1 + output_dims.index(1+dim) for dim in np.arange(len(output_dims))]
+        permutation = [0, 1] + [PREFIX_DIMS + output_dims.index(PREFIX_DIMS+dim)
+                                    for dim in np.arange(len(output_dims))]
         X = X.permute(*permutation)
         return X
 
     def forward(self, X):
         Y = torch.zeros(self.output_shape)
+        permutation = [1, 0] + list(range(2, Y.ndim))
+
         for i in range(self.n_params):
             self.equality_mapping = self.input_output_partitions[i]
 
@@ -173,14 +179,14 @@ class EquivariantLayerBlock(nn.Module):
             
             weight_i = self.weights[i]
 
-            Y = Y + (torch.tensordot(Y_i.T,  weight_i, 1).T)
+            Y  = Y + torch.tensordot(weight_i, Y_i, dims=([0],[1])).permute(permutation)
             
         Y = Y + self.bias
         return Y
 
 
 class EquivariantLayer(nn.Module):
-    def __init__(self, data_schema, input_dim=1, output_dim=1):
+    def __init__(self, data_schema, input_dim=1, output_dim=1, batch_size=1):
         super(EquivariantLayer, self).__init__()
         self.data_schema = data_schema
         self.relation_pairs = list(itertools.product(self.data_schema.relations,
@@ -188,9 +194,10 @@ class EquivariantLayer(nn.Module):
         block_modules = []
         self.input_dim = input_dim
         self.output_dim = output_dim
+        self.batch_size = batch_size
         for relation_i, relation_j in self.relation_pairs:
             block_module = EquivariantLayerBlock(self.input_dim, self.output_dim,
-                                                 data_schema, relation_i, relation_j)
+                                                 data_schema, relation_i, relation_j, batch_size)
             block_modules.append(block_module)
         self.block_modules = nn.ModuleList(block_modules)
 

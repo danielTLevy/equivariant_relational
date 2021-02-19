@@ -8,7 +8,7 @@ Created on Sun Jan 24 23:45:52 2021
 
 import numpy as np
 import torch.nn as nn
-
+from utils import PREFIX_DIMS
 
 class EquivariantLayerSingleParam(nn.Module):
     # Layer mapping a single parameter between two relations
@@ -57,7 +57,7 @@ class EquivariantLayerSingleParam(nn.Module):
         for i, diag_dims in enumerate(input_diagonals):
             for j, (input_dims, output_dims) in enumerate(self.equality_mapping):
                 if set(input_dims) == set(diag_dims):
-                    updated_equalities[j] = ({1+i}, self.equality_mapping[j][1])
+                    updated_equalities[j] = ({PREFIX_DIMS+i}, self.equality_mapping[j][1])
         self.equality_mapping = updated_equalities
         return X
 
@@ -145,37 +145,15 @@ class EquivariantLayerSingleParam(nn.Module):
         output_dims= []
         for i, o in self.equality_mapping:
             output_dims += list(o)
-        permutation = [0] + [1 + output_dims.index(1+dim) for dim in np.arange(len(output_dims))]
+        permutation = [0, 1] + [PREFIX_DIMS + output_dims.index(PREFIX_DIMS+dim)
+                                    for dim in np.arange(len(output_dims))]
         X = X.permute(*permutation)
         return X
 
     def forward(self, X):
-        #print("Initial")
-        #print(self.equality_mapping)
-        #print(X.shape)
-    
         X = self.diag(X)
-        #print("Diag")
-        #print(self.equality_mapping)
-        #print(X.shape)
-
         X = self.pool(X)
-        #print("Pool")
-        #print(self.equality_mapping)
-        #print(X.shape)
-
         X = self.broadcast(X)
-        #print("Broadcast")
-        #print(self.equality_mapping)
-        #print(X.shape)
-
         X = self.undiag(X)
-        #print("Undiag")
-        #print(self.equality_mapping)
-        #print(X.shape)
-
         X = self.reindex(X)
-        #print("Reindex")
-        #print(self.equality_mapping)
-        #print(X.shape)
         return X

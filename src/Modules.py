@@ -29,6 +29,12 @@ class RelationNorm(nn.Module):
             X[relation.id] = rel_norm(X[relation.id])
         return X
 
+    def to(self, *args, **kwargs):
+        self = super().to(*args, **kwargs)
+        for relation in self.schema.relations:
+            self.rel_norms[relation.id] = self.rel_norms[relation.id].to(*args, **kwargs)
+        return self
+
 class ReLU(nn.Module):
     def __init__(self, schema):
         super(ReLU, self).__init__()
@@ -48,12 +54,14 @@ class EntityBroadcasting(nn.Module):
         super(EntityBroadcasting, self).__init__()
         self.schema = schema
         self.dims = dims
+        # empty param just for holding device info
+        self.device_param = nn.Parameter(torch.Tensor(0))
 
     def make_relation(self, encodings, relation):
         # TODO: THIS IS BAD
         batch_size = encodings[0].shape[0]
         relation_shape = [batch_size, self.dims] + relation.get_shape()
-        relation_out = torch.zeros(relation_shape)
+        relation_out = torch.zeros(relation_shape, device=self.device_param.device)
         num_new_dims = len(relation.entities) -1
         for entity_idx, entity in enumerate(relation.entities):
             entity_enc = encodings[entity.id]

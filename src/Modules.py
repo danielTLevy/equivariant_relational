@@ -8,6 +8,8 @@ Created on Sun Feb  7 23:25:39 2021
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from utils import PREFIX_DIMS
+
 
 class RelationNorm(nn.Module):
     '''
@@ -24,7 +26,7 @@ class RelationNorm(nn.Module):
     def forward(self, X):
         for relation in self.schema.relations:
             rel_norm = self.rel_norms[relation.id]
-            X[relation.id] = rel_norm(X[relation.id].unsqueeze(0)).squeeze(0)
+            X[relation.id] = rel_norm(X[relation.id])
         return X
 
 class ReLU(nn.Module):
@@ -48,7 +50,9 @@ class EntityBroadcasting(nn.Module):
         self.dims = dims
 
     def make_relation(self, encodings, relation):
-        relation_shape = [self.dims] + relation.get_shape()
+        # TODO: THIS IS BAD
+        batch_size = encodings[0].shape[0]
+        relation_shape = [batch_size, self.dims] + relation.get_shape()
         relation_out = torch.zeros(relation_shape)
         num_new_dims = len(relation.entities) -1
         for entity_idx, entity in enumerate(relation.entities):
@@ -57,7 +61,7 @@ class EntityBroadcasting(nn.Module):
             for _ in range(num_new_dims):
                 entity_enc = entity_enc.unsqueeze(-1)
             # Transpose the entity to the appropriate dimension
-            entity_enc.transpose_(1, entity_idx+1)
+            entity_enc.transpose_(PREFIX_DIMS, entity_idx+PREFIX_DIMS)
             # Broadcast-add to output
             relation_out += entity_enc
         return relation_out
@@ -67,7 +71,7 @@ class EntityBroadcasting(nn.Module):
         for relation in self.schema.relations:
             data_out[relation.id] = self.make_relation(encodings, relation)
         return data_out
-    
+
 class EntityPooling(nn.Module):
     '''
     Produce encodings for every instance of every entity
@@ -84,7 +88,7 @@ class EntityPooling(nn.Module):
         pooling_dims = []
         for entity_dim, rel_entity in enumerate(relation.entities):
             if entity != rel_entity:
-                pooling_dims += [1 + entity_dim]
+                pooling_dims += [PREFIX_DIMS + entity_dim]
         return pooling_dims
     
     def pool_tensor(self, X, pooling_dims):
@@ -94,7 +98,7 @@ class EntityPooling(nn.Module):
             return X
 
     def pool_tensor_diag(self, X):
-        while X.ndim > 2:
+        while X.ndim > PREFIX_DIMS+1:
             assert X.shape[-1] == X.shape[-2]
             X = X.diagonal(0, -1, -2)
         return X

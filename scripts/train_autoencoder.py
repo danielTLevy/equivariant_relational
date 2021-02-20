@@ -6,13 +6,14 @@ import torch.optim as optim
 from tqdm import tqdm
 from src.EquivariantNetwork import EquivariantAutoEncoder
 from src.GenerateData import SchoolGenerator
-    
-N_STUDENT = 1000
-N_COURSE = 40
-N_PROFESSOR = 20
+
+N_STUDENT = 100
+N_COURSE = 20
+N_PROFESSOR = 5
 EMBEDDING_DIMS = 5
+BATCH_SIZE = 8
 data_generator = SchoolGenerator(N_STUDENT, N_COURSE, N_PROFESSOR)
-data = data_generator.generate_data(EMBEDDING_DIMS)
+data = data_generator.generate_data(EMBEDDING_DIMS, BATCH_SIZE)
 schema = data_generator.schema
 relations = schema.relations
 
@@ -35,7 +36,7 @@ def unnorm_data(data, std_means):
     return data_out
 
 data_normed, std_means = norm_data(data)
-
+data_normed_unbatched = {rel.id: data_normed[rel.id][0].unsqueeze(0) for rel in relations}
 #%%
 # Train the neural network
 net = EquivariantAutoEncoder(schema)

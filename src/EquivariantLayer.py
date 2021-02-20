@@ -16,19 +16,16 @@ from utils import get_all_input_output_partitions, PREFIX_DIMS
 
 class EquivariantLayerBlock(nn.Module):
     # Layer mapping between two relations
-    def __init__(self, input_dim, output_dim, data_schema, relation_in, relation_out, batch_size=1):
+    def __init__(self, input_dim, output_dim, data_schema, relation_in, relation_out):
         super(EquivariantLayerBlock, self).__init__()
         self.in_dim = input_dim
         self.out_dim = output_dim
-        self.batch_size = batch_size
         self.input_output_partitions = get_all_input_output_partitions(data_schema, relation_in, relation_out)
         self.n_params = len(self.input_output_partitions)
         stdv = 0.1 / math.sqrt(self.in_dim)
         self.weights = nn.Parameter(torch.Tensor(self.n_params, self.in_dim, self.out_dim).uniform_(-stdv, stdv))
         self.bias = nn.Parameter(torch.ones(1))
-        self.output_shape = ([self.batch_size]
-                                + [self.out_dim]
-                                + [entity.n_instances for entity in relation_out.entities])
+        self.output_shape = [0, self.out_dim] + [entity.n_instances for entity in relation_out.entities]
 
     
     def diag(self, X):
@@ -165,9 +162,7 @@ class EquivariantLayerBlock(nn.Module):
         return X
 
     def forward(self, X):
-        Y = torch.zeros(self.output_shape)
-        permutation = [1, 0] + list(range(2, Y.ndim))
-
+        Y = None
         for i in range(self.n_params):
             self.equality_mapping = self.input_output_partitions[i]
 
@@ -179,14 +174,18 @@ class EquivariantLayerBlock(nn.Module):
             
             weight_i = self.weights[i]
 
-            Y  = Y + torch.tensordot(weight_i, Y_i, dims=([0],[1])).permute(permutation)
+            Y_out = torch.tensordot(weight_i, Y_i, dims=([0],[1])).transpose(1, 0)
+            if Y == None:
+                Y = Y_out
+            else:
+                Y  += Y_out
             
         Y = Y + self.bias
         return Y
 
 
 class EquivariantLayer(nn.Module):
-    def __init__(self, data_schema, input_dim=1, output_dim=1, batch_size=1):
+    def __init__(self, data_schema, input_dim=1, output_dim=1):
         super(EquivariantLayer, self).__init__()
         self.data_schema = data_schema
         self.relation_pairs = list(itertools.product(self.data_schema.relations,
@@ -194,10 +193,9 @@ class EquivariantLayer(nn.Module):
         block_modules = []
         self.input_dim = input_dim
         self.output_dim = output_dim
-        self.batch_size = batch_size
         for relation_i, relation_j in self.relation_pairs:
             block_module = EquivariantLayerBlock(self.input_dim, self.output_dim,
-                                                 data_schema, relation_i, relation_j, batch_size)
+                                                 data_schema, relation_i, relation_j)
             block_modules.append(block_module)
         self.block_modules = nn.ModuleList(block_modules)
 

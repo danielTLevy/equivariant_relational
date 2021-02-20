@@ -20,7 +20,7 @@ def test_layer_single_block(X, entities, relation_i, relation_j, in_dim, out_dim
     torch.manual_seed(0)
     relations = [relation_i, relation_j]
     schema = DataSchema(entities, relations)
-    layer = EquivariantLayerBlock(in_dim, out_dim, schema, relation_i, relation_j, batch_size)
+    layer = EquivariantLayerBlock(in_dim, out_dim, schema, relation_i, relation_j)
     X_out = layer.forward(X)
     #print("X_out: ", X_out)
     expected_shape = [batch_size] + [out_dim] + relation_j.get_shape()

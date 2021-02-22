@@ -10,9 +10,10 @@ import numpy as np
 import math
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import itertools
 from utils import get_all_input_output_partitions, PREFIX_DIMS
-
+from DataSchema import Data
 
 class EquivariantLayerBlock(nn.Module):
     # Layer mapping between two relations
@@ -173,14 +174,13 @@ class EquivariantLayerBlock(nn.Module):
             Y_i = self.reindex(Y_i)
             
             weight_i = self.weights[i]
-
-            Y_out = torch.tensordot(weight_i, Y_i, dims=([0],[1])).transpose(1, 0)
+            Y_i = F.linear(Y_i.transpose(1,-1), weight_i.T).transpose(1,-1)
             if Y == None:
-                Y = Y_out
+                Y = Y_i
             else:
-                Y  += Y_out
+                Y  += Y_i
             
-        Y = Y + self.bias
+        Y += self.bias
         return Y
 
 
@@ -200,7 +200,7 @@ class EquivariantLayer(nn.Module):
         self.block_modules = nn.ModuleList(block_modules)
 
     def forward(self, data):
-        data_out = {}
+        data_out = Data(self.data_schema)
         for i, (relation_i, relation_j) in enumerate(self.relation_pairs):
             X = data[relation_i.id]
             layer = self.block_modules[i]

@@ -8,6 +8,7 @@ Created on Sun Feb  7 23:25:39 2021
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from DataSchema import Data, DataSchema, Relation
 from utils import PREFIX_DIMS
 
 
@@ -58,8 +59,7 @@ class EntityBroadcasting(nn.Module):
         self.device_param = nn.Parameter(torch.Tensor(0))
 
     def make_relation(self, encodings, relation):
-        # TODO: THIS IS BAD
-        batch_size = encodings[0].shape[0]
+        batch_size = encodings.batch_size
         relation_shape = [batch_size, self.dims] + relation.get_shape()
         relation_out = torch.zeros(relation_shape, device=self.device_param.device)
         num_new_dims = len(relation.entities) -1
@@ -75,7 +75,7 @@ class EntityBroadcasting(nn.Module):
         return relation_out
 
     def forward(self, encodings):
-        data_out = {}
+        data_out = Data(self.schema)
         for relation in self.schema.relations:
             data_out[relation.id] = self.make_relation(encodings, relation)
         return data_out
@@ -91,6 +91,10 @@ class EntityPooling(nn.Module):
         self.schema = schema
         self.dims = dims
         self.out_shape = [e.n_instances for e in self.schema.entities]
+        # Make a "schema" for the encodings
+        enc_relations = [Relation(i, [self.schema.entities[i]])
+                            for i in range(len(self.schema.entities))]
+        self.enc_schema = DataSchema(self.schema.entities, enc_relations)
     
     def get_pooling_dims(self, entity, relation):
         pooling_dims = []
@@ -112,7 +116,7 @@ class EntityPooling(nn.Module):
         return X
 
     def forward(self, data):
-        out = {}
+        out = Data(self.enc_schema, batch_size=data.batch_size)
         for entity in self.schema.entities:
             for relation in self.schema.relations:
                 if entity not in relation.entities:

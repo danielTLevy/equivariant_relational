@@ -4,7 +4,7 @@
 
 import numpy as np
 import torch
-from DataSchema import DataSchema, Entity, Relation
+from DataSchema import DataSchema, Entity, Relation, Data
 
 class SchoolGenerator():
     def __init__(self, n_student, n_course, n_professor):
@@ -79,7 +79,7 @@ class SchoolGenerator():
                 4: rel_student_fn, 5: rel_courses_fn, 6: rel_professor_fn}
     
         # TODO: change sparsity
-        data = {}
+        data = Data(self.schema)
         for relation in self.schema.relations:
             entities = relation.entities
             relation_data = torch.zeros(batch_size, 1, *relation.get_shape())

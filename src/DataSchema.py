@@ -47,8 +47,7 @@ class Data:
             self.rel_tensors = data
         self.batch_size = batch_size
         self.device = None
-        # TODO: define methods for sparsity
-        self.mask = None
+        self.std_means = None
 
     def __getitem__(self, relation_id):
         return self.rel_tensors[relation_id]
@@ -75,6 +74,40 @@ class Data:
 
     def __repr__(self):
         return self.rel_tensors.__repr__()
+
+    def normalize_data(self):
+        '''
+        Normalize each relation by the std and mean
+        '''
+        self.std_means = {}
+        for relation in self.schema.relations:
+            std, mean = torch.std_mean(self.rel_tensors[relation.id])
+            self.rel_tensors[relation.id] = (self.rel_tensors[relation.id] - mean) / std
+            self.std_means[relation.id] = (std, mean)
+        return self
+
+    def unnormalize_data(self, std_means=None):
+        '''
+        Apply std and mean to each relation, either from arg or from previous
+        application of normalize_data. Updates std_means
+        '''
+        if std_means == None:
+            assert self.std_means != None
+            std_means = self.std_means
+
+        for relation in self.schema.relations:
+            std, mean = std_means[relation.id]
+            self.rel_tensors[relation.id] = std*self.rel_tensors[relation.id] + mean
+            std_means[relation.id] = torch.std_mean(self.rel_tensors[relation.id])
+        self.std_means = std_means
+        return self
+
+    def mask_data(self, observed):
+        # Return new Data object with all entries not indexed by observed
+        # masked as zeros
+        masked_data = {rel_id: observed[rel_id] * data
+                       for rel_id, data in self.rel_tensors.items()}
+        return Data(self.schema, masked_data, batch_size=self.batch_size)
 
     def to_tensor(self):
         # Get maximum multiplicity for each relation

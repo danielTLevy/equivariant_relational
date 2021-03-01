@@ -5,7 +5,63 @@
 import numpy as np
 import torch
 from DataSchema import DataSchema, Entity, Relation, Data
+from utils import update_observed
 
+class SyntheticData():
+    def __init__(self, entity_counts, sparsity=0.5, embedding_dims=5, tucker=False):
+        self.n_student = entity_counts[0]
+        self.n_course = entity_counts[1]
+        self.n_professor = entity_counts[2]
+        self.sparsity = sparsity
+        self.embedding_dims = embedding_dims
+        self.tucker = tucker
+
+        ent_students = Entity(0, self.n_student)
+        ent_courses = Entity(1, self.n_course)
+        ent_professors = Entity(2, self.n_professor)
+        entities = [ent_students, ent_courses, ent_professors]
+        relations = []
+        relations.append(Relation(0, [ent_students, ent_courses], 1))
+        relations.append(Relation(1, [ent_students, ent_professors], 1))
+        relations.append(Relation(2, [ent_professors, ent_courses], 1))
+
+        self.schema = DataSchema(entities, relations)
+        self.embedding_dims = embedding_dims
+
+        self.embeddings = self.make_embeddings(self.embedding_dims)
+        self.data = self.make_data(self.tucker)
+        self.observed = self.make_observed(self.sparsity)
+
+    def make_embeddings(self, embedding_dims):
+        np.random.seed(0)
+        embed_students = np.random.normal(size=(self.n_student, embedding_dims))
+        embed_courses = np.random.normal(size=(self.n_course, embedding_dims))
+        embed_professors = np.random.normal(size=(self.n_professor, embedding_dims))
+        return {0: embed_students, 1: embed_courses, 2: embed_professors}
+
+    def calculate_relation(self, tucker, embedding1, embedding2):
+        if tucker:
+            core = np.random.randn(embedding1.shape[-1], embedding2.shape[-1])
+            return embedding1 @ core @ embedding2.T
+        else:
+            return embedding1 @ embedding2.T
+
+    def make_data(self, tucker):
+        data = Data(self.schema)
+        for rel in self.schema.relations:
+            embeddings = [self.embeddings[ent.id] for ent in rel.entities]
+            rel_data = self.calculate_relation(tucker, *embeddings)
+            data[rel.id] = torch.tensor(rel_data, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
+        return data
+    
+    def make_observed(self, sparsity, min_observed=5):
+        observed = {}
+        for relation in self.schema.relations:
+            dims = [entity.n_instances for entity in relation.entities]
+            observed_rel = update_observed(np.ones(dims), 1.-sparsity, min_observed)
+            observed[relation.id] = torch.tensor(observed_rel, dtype=torch.bool)
+        return observed
+    
 class SchoolGenerator():
     def __init__(self, n_student, n_course, n_professor):
         self.n_student = n_student
@@ -18,7 +74,6 @@ class SchoolGenerator():
         entities = [ent_students, ent_courses, ent_professors]
 
         #TODO: Fix student self-relation to have two channels
-        
         relations = []
         #Takes
         relations.append(Relation(0, [ent_students, ent_courses], 1))

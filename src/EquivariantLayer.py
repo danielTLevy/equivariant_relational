@@ -87,7 +87,8 @@ class EquivariantLayerBlock(nn.Module):
         pooling_dims = sorted(pooling_dims)
         if pooling_dims != []:
             # TODO: can make this a max
-            X = X.sum(pooling_dims)
+            #X = X.amax(pooling_dims)
+            X = X.mean(pooling_dims)
     
             # Get updated indices
             index_array = np.delete(index_array, pooling_dims)

@@ -4,11 +4,11 @@
 
 import numpy as np
 import torch
-from DataSchema import DataSchema, Entity, Relation, Data
-from utils import update_observed
+from src.DataSchema import DataSchema, Entity, Relation, Data
+from src.utils import update_observed
 
 class SyntheticData():
-    def __init__(self, entity_counts, sparsity=0.5, embedding_dims=5, tucker=False):
+    def __init__(self, entity_counts, sparsity=0.5, embedding_dims=2, tucker=False):
         self.n_student = entity_counts[0]
         self.n_course = entity_counts[1]
         self.n_professor = entity_counts[2]
@@ -32,11 +32,11 @@ class SyntheticData():
         self.data = self.make_data(self.tucker)
         self.observed = self.make_observed(self.sparsity)
 
-    def make_embeddings(self, embedding_dims):
+    def make_embeddings(self, embedding_dims, min=-2, max=2):
         np.random.seed(0)
-        embed_students = np.random.normal(size=(self.n_student, embedding_dims))
-        embed_courses = np.random.normal(size=(self.n_course, embedding_dims))
-        embed_professors = np.random.normal(size=(self.n_professor, embedding_dims))
+        embed_students = np.random.uniform(min, max, size=(self.n_student, embedding_dims))
+        embed_courses = np.random.uniform(min, max, size=(self.n_course, embedding_dims))
+        embed_professors = np.random.uniform(min, max, size=(self.n_professor, embedding_dims))
         return {0: embed_students, 1: embed_courses, 2: embed_professors}
 
     def calculate_relation(self, tucker, embedding1, embedding2):
@@ -62,6 +62,14 @@ class SyntheticData():
             observed[relation.id] = torch.tensor(observed_rel, dtype=torch.bool)
         return observed
     
+    def to(self, *args, **kwargs):
+        if self.data != None:
+            self.data = self.data.to(*args, **kwargs)
+        if self.observed != None:
+            for k, v in self.observed.items():
+                self.observed[k] = v.to(*args, **kwargs)
+        return self
+
 class SchoolGenerator():
     def __init__(self, n_student, n_course, n_professor):
         self.n_student = n_student

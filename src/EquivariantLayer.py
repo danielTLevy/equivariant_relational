@@ -12,8 +12,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import itertools
-from utils import get_all_input_output_partitions, PREFIX_DIMS
-from DataSchema import Data
+from src.utils import get_all_input_output_partitions, PREFIX_DIMS
+from src.DataSchema import Data
 
 class EquivariantLayerBlock(nn.Module):
     # Layer mapping between two relations

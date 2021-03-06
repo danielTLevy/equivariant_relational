@@ -4,16 +4,21 @@ import numpy as np
 import torch
 import torch.optim as optim
 from tqdm import tqdm
-from src.EquivariantNetwork import EquivariantAutoEncoder
+from src.DataSchema import Data
+from src.EquivariantNetwork import EquivariantAutoEncoder, EquivariantNetwork
 from src.GenerateData import SchoolGenerator, SyntheticData
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 N_STUDENT = 200
 N_COURSE = 200
 N_PROFESSOR = 200
-EMBEDDING_DIMS = 5
+EMBEDDING_DIMS = 2
 BATCH_SIZE = 1
 
-data_generator = SyntheticData((N_STUDENT, N_COURSE, N_PROFESSOR), sparsity=0.5, embedding_dims=5)
+data_generator = SyntheticData((N_STUDENT, N_COURSE, N_PROFESSOR),
+                               sparsity=0.5,  embedding_dims=EMBEDDING_DIMS).to(device)
 data = data_generator.data
 observed = data_generator.observed
 missing = {key:  ~val for key, val in observed.items()}
@@ -28,11 +33,12 @@ data_hidden = data.mask_data(observed)
 #%%
 # Train the neural network
 net = EquivariantAutoEncoder(schema)
+#net = EquivariantNetwork(schema)
 
 #%%
 # Loss functions:
 def loss_fcn(data_pred, data_true, indices):
-    loss = torch.zeros(1)
+    loss = torch.zeros(1).to(device)
     for relation in relations:
         rel_id = relation.id
         data_pred_rel = indices[rel_id]*data_pred[rel_id]
@@ -49,8 +55,12 @@ def per_rel_loss(data_pred, data_true):
     return loss
 
 
-learning_rate = 1e-4
+learning_rate = 1e-3
 optimizer = optim.Adam(net.parameters(), lr=learning_rate)
+sched = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
+                                             factor=0.5,
+                                             patience=10,
+                                             verbose=True)
 
 #%%
 epochs=1000
@@ -60,13 +70,20 @@ for i in progress:
     optimizer.zero_grad()
     data_out = net.forward(data_hidden)
     train_loss = loss_fcn(data_out, data_hidden, observed)
-    val_loss = loss_fcn(data_out, data, missing)
     train_loss.backward()
     optimizer.step()
+    with torch.no_grad():
+        val_loss = loss_fcn(data_out, data, missing)
+        sched.step(val_loss)
     progress.set_description("Train: {:.4f}, Val: {:.4f}".format(
             train_loss.item(), val_loss.item()))
     
     
+#%%
+# Predict means (i.e. 0)
+fake_data_out = Data(schema, {key: torch.zeros_like(val)
+                        for key, val in data.rel_tensors.items()})
+print(loss_fcn(fake_data_out, data, observed))
 
 #%%
 encoding_size = net.get_encoding_size()

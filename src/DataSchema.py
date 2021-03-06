@@ -46,7 +46,6 @@ class Data:
         else:
             self.rel_tensors = data
         self.batch_size = batch_size
-        self.device = None
         self.std_means = None
 
     def __getitem__(self, relation_id):

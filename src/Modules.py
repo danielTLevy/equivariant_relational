@@ -8,8 +8,8 @@ Created on Sun Feb  7 23:25:39 2021
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from DataSchema import Data, DataSchema, Relation
-from utils import PREFIX_DIMS
+from src.DataSchema import Data, DataSchema, Relation
+from src.utils import PREFIX_DIMS
 
 
 class RelationNorm(nn.Module):
@@ -36,6 +36,29 @@ class RelationNorm(nn.Module):
             self.rel_norms[relation.id] = self.rel_norms[relation.id].to(*args, **kwargs)
         return self
 
+class Activation(nn.Module):
+    '''
+    Extend torch.nn.module modules to be applied to each relation
+    '''
+    def __init__(self, schema, activation):
+        super(Activation, self).__init__()
+        self.schema = schema
+        self.activation = activation
+
+    def forward(self, X):
+        for relation in self.schema.relations:
+            X[relation.id] = self.activation(X[relation.id])
+        return X
+
+def functional(function, schema, X, *args, **kwargs):
+    '''
+    Extend torch.nn.functional functions to be applied to each relation
+    '''
+    for relation in schema.relations:
+        X[relation.id] = function(X[relation.id], *args, **kwargs)
+    return X
+
+
 class ReLU(nn.Module):
     def __init__(self, schema):
         super(ReLU, self).__init__()
@@ -45,6 +68,7 @@ class ReLU(nn.Module):
         for relation in self.schema.relations:
             X[relation.id] = F.relu(X[relation.id]) 
         return X
+
 
 class EntityBroadcasting(nn.Module):
     '''

@@ -32,11 +32,11 @@ class SyntheticData():
         self.data = self.make_data(self.tucker)
         self.observed = self.make_observed(self.sparsity)
 
-    def make_embeddings(self, embedding_dims, min=-2, max=2):
+    def make_embeddings(self, embedding_dims, min_val=-2, max_val=2):
         np.random.seed(0)
-        embed_students = np.random.uniform(min, max, size=(self.n_student, embedding_dims))
-        embed_courses = np.random.uniform(min, max, size=(self.n_course, embedding_dims))
-        embed_professors = np.random.uniform(min, max, size=(self.n_professor, embedding_dims))
+        embed_students = np.random.uniform(min_val, max_val, size=(self.n_student, embedding_dims))
+        embed_courses = np.random.uniform(min_val, max_val, size=(self.n_course, embedding_dims))
+        embed_professors = np.random.uniform(min_val, max_val, size=(self.n_professor, embedding_dims))
         return {0: embed_students, 1: embed_courses, 2: embed_professors}
 
     def calculate_relation(self, tucker, embedding1, embedding2):
@@ -65,6 +65,53 @@ class SyntheticData():
     def to(self, *args, **kwargs):
         if self.data != None:
             self.data = self.data.to(*args, **kwargs)
+        if self.observed != None:
+            for k, v in self.observed.items():
+                self.observed[k] = v.to(*args, **kwargs)
+        return self
+
+class RandomSparseData():
+    def __init__(self, entity_counts, sparsity=0.5):
+        self.n_student = entity_counts[0]
+        self.n_course = entity_counts[1]
+        self.n_professor = entity_counts[2]
+        # Upper estimate of sparsity
+        self.sparsity = sparsity
+
+        ent_students = Entity(0, self.n_student)
+        ent_courses = Entity(1, self.n_course)
+        ent_professors = Entity(2, self.n_professor)
+        entities = [ent_students, ent_courses, ent_professors]
+        relations = []
+        relations.append(Relation(0, [ent_students, ent_courses], 1))
+        relations.append(Relation(1, [ent_students, ent_professors], 1))
+        relations.append(Relation(2, [ent_professors, ent_courses], 1))
+        relations.append(Relation(3, [ent_students, ent_professors, ent_courses], 1))
+        relations.append(Relation(4, [ent_courses, ent_courses], 1))
+        relations.append(Relation(5, [ent_students], 1))
+        relations.append(Relation(6, [ent_students, ent_students, ent_students, ent_courses], 1))
+
+
+        self.schema = DataSchema(entities, relations)
+
+        self.observed = self.make_observed(self.sparsity)
+
+    def make_observed(self, sparsity, min_val=-2, max_val=2):
+        data = Data(self.schema)
+        for rel in self.schema.relations:
+            n_entries = int(sparsity * rel.get_n_entries())
+
+            indices = np.zeros((len(rel.entities), n_entries))
+            for i, entity in enumerate(rel.entities):
+                indices[i] = np.random.randint(0, entity.n_instances, n_entries)
+
+            values = np.random.uniform(min_val, max_val, n_entries)
+            
+            data[rel.id] = torch.sparse_coo_tensor(indices, values, rel.get_shape()).coalesce()
+
+        return data
+    
+    def to(self, *args, **kwargs):
         if self.observed != None:
             for k, v in self.observed.items():
                 self.observed[k] = v.to(*args, **kwargs)

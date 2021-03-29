@@ -10,17 +10,31 @@ import torch
 import torch.optim as optim
 from tqdm import tqdm
 from EquivariantNetwork import EquivariantNetwork
-from GenerateData import SchoolGenerator
+from GenerateData import SyntheticData
     
 #%%
-N_STUDENT = 5000
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+N_STUDENT = 200
 N_COURSE = 200
-N_PROFESSOR = 100
-EMBEDDING_DIMS = 5
-data_generator = SchoolGenerator(N_STUDENT, N_COURSE, N_PROFESSOR)
-data_full = data_generator.generate_data(EMBEDDING_DIMS)
-schema = data_generator.schema
+N_PROFESSOR = 200
+EMBEDDING_DIMS = 2
+BATCH_SIZE = 1
+
+data_generator = SyntheticData((N_STUDENT, N_COURSE, N_PROFESSOR),
+                               sparsity=0.5,  embedding_dims=EMBEDDING_DIMS).to(device)
+data = data_generator.data
+observed = data_generator.observed
+missing = {key:  ~val for key, val in observed.items()}
+schema = data.schema
 relations = schema.relations
+
+#%%
+# Normalize the data and hide unobserved
+data = data.normalize_data()
+data_hidden = data.mask_data(observed)
+
+
 #%%
 # TODO: Get subset for training, subset for test, subset for validation, subset for full test
 #data_train = {i: torch.zeros(data_full[i].shape) for i in range(7)}

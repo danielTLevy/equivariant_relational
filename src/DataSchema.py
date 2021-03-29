@@ -6,6 +6,7 @@ Created on Sat Dec  5 20:18:51 2020
 @author: Daniel
 """
 import torch
+import numpy as np
 
 class DataSchema:
     def __init__(self, entities, relations):
@@ -31,6 +32,9 @@ class Relation:
 
     def get_shape(self):
         return [entity.n_instances for entity in self.entities]
+
+    def get_n_entries(self):
+        return np.prod(self.get_shape())
 
     def __repr__(self):
         return "Relation(id={}, entities={})".format(self.id, self.entities)
@@ -108,6 +112,13 @@ class Data:
                        for rel_id, data in self.rel_tensors.items()}
         return Data(self.schema, masked_data, batch_size=self.batch_size)
 
+    def to_sparse(self):
+        sparse = {}
+        for relation in self.schema.relations:
+            dense = self.rel_tensors[relation.id]
+            sparse[relation.id] = self.rel_tensors[relation.id].to_sparse()
+        return  Data(self.schema, sparse, batch_size=self.batch_size)
+        
     def to_tensor(self):
         # Get maximum multiplicity for each relation
         multiplicities = {}
@@ -163,3 +174,15 @@ class Data:
             rel_data = rel_data.permute(permutation).squeeze(0)
             tensor[relation.id] = rel_data.expand(output_size)
         return tensor
+
+class SparseData(Data):
+    def mask_data(self, observed):
+        pass
+
+    def to_sparse(self):
+        return self
+
+    def to_tensor(self):
+        pass
+
+    

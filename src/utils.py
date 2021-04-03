@@ -9,8 +9,12 @@ Created on Sat Jan 30 22:31:50 2021
 import numpy as np
 import itertools
 
+
 # Non-relation dimensions (batch and channel)
-PREFIX_DIMS = 2
+# TODO: This parameter controls whether to use the sparse or dense implementation
+# Dense: use PREFIX_DIMS = 2
+# Sparse: use PREFIX_DIMS = 0 because there are no batches and channels are handled separately
+PREFIX_DIMS = 0
 
 # https://stackoverflow.com/questions/19368375/set-partitions-in-python/30134039
 def get_partitions(collection):
@@ -120,3 +124,4 @@ def update_observed(observed_old, p_keep, min_observed):
         observed_new[ii, j] = 1
 
     return observed_new
+

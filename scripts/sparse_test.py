@@ -12,15 +12,17 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 #%%
-N_STUDENT = 200
-N_COURSE = 300
-N_PROFESSOR = 400
+N_STUDENT = 50
+N_COURSE = 75
+N_PROFESSOR = 25
 EMBEDDING_DIMS = 2
 BATCH_SIZE = 1
+SPARSITY = 0.01
+CHANNELS_IN = 2
+CHANNELS_OUT = 3
 
-#TODO: better way to create data with one batch and multiple channels
 data_generator = RandomSparseData((N_STUDENT, N_COURSE, N_PROFESSOR),
-                               sparsity=0.001)
+                               sparsity=SPARSITY, n_channels=CHANNELS_IN)
 sparse_data = data_generator.observed
 schema = sparse_data.schema
 relations = schema.relations
@@ -43,15 +45,15 @@ sparse_in = sparse_data[3]
 #shape_in = sparse_in.shape
 #values = sparse_in.values()
 
-sparse_in = SparseTensor.from_tensor(sparse_in)
+sparse_in = SparseTensor.from_sparse_tensor(sparse_in)
 
 sparse_out = sparse_data[6]
 #indices_out = sparse_out.indices()
 #shape_out = sparse_out.shape
-sparse_out = SparseTensor.from_tensor(sparse_out)
+sparse_out = SparseTensor.from_sparse_tensor(sparse_out)
 
 
 
 #%%
-layer =  SparseEquivariantLayerBlock(1, 1, schema, relations[3], relations[6])
+layer =  SparseEquivariantLayerBlock(CHANNELS_IN, CHANNELS_OUT, schema, relations[3], relations[6])
 layer(sparse_in, sparse_out)

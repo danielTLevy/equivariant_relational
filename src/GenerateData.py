@@ -6,6 +6,7 @@ import numpy as np
 import torch
 from src.DataSchema import DataSchema, Entity, Relation, Data
 from src.utils import update_observed
+import pdb
 
 class SyntheticData():
     def __init__(self, entity_counts, sparsity=0.5, embedding_dims=2, tucker=False):
@@ -71,7 +72,7 @@ class SyntheticData():
         return self
 
 class RandomSparseData():
-    def __init__(self, entity_counts, sparsity=0.5):
+    def __init__(self, entity_counts, sparsity=0.5, n_channels=1):
         self.n_student = entity_counts[0]
         self.n_course = entity_counts[1]
         self.n_professor = entity_counts[2]
@@ -94,9 +95,9 @@ class RandomSparseData():
 
         self.schema = DataSchema(entities, relations)
 
-        self.observed = self.make_observed(self.sparsity)
+        self.observed = self.make_observed(self.sparsity, n_channels)
 
-    def make_observed(self, sparsity, min_val=-2, max_val=2):
+    def make_observed(self, sparsity, n_channels=1, min_val=-2, max_val=2):
         data = Data(self.schema)
         for rel in self.schema.relations:
             n_entries = int(sparsity * rel.get_n_entries())
@@ -105,9 +106,9 @@ class RandomSparseData():
             for i, entity in enumerate(rel.entities):
                 indices[i] = np.random.randint(0, entity.n_instances, n_entries)
 
-            values = np.random.uniform(min_val, max_val, n_entries)
-            
-            data[rel.id] = torch.sparse_coo_tensor(indices, values, rel.get_shape()).coalesce()
+            values = np.single(np.random.uniform(min_val, max_val, (n_channels, n_entries)))
+            data[rel.id] = torch.sparse_coo_tensor(indices, values.T,
+                rel.get_shape() + [n_channels]).coalesce()
 
         return data
     

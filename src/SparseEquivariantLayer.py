@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-
 import numpy as np
 import math
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import itertools
 from src.utils import get_all_input_output_partitions, PREFIX_DIMS
-from src.DataSchema import Data, DataSchema, Entity, Relation
+from src.DataSchema import Data
 from src.SparseTensor import SparseTensor
 
 class SparseEquivariantLayerBlock(nn.Module):
@@ -58,7 +56,7 @@ class SparseEquivariantLayerBlock(nn.Module):
                 continue
             else:
                 for j in range(n_diagonal_dims - 1):
-                    X = X.diagonal(0, -1, -2)
+                    X = X.diagonal(0, -2, -1)
 
         # Update dimensions in equality_mapping
         updated_equalities = self.equality_mapping.copy()
@@ -107,7 +105,7 @@ class SparseEquivariantLayerBlock(nn.Module):
         '''
         Expand X to add a new dimension for every output dimension that does 
         not have a corresponding input dimension
-        TODO: deal with case where there are no matching dimensions, or non broadcasting dimensions
+        TODO: This is likely much less efficient than it can be
         '''
         n_dimension = X.ndimension()
         matching_in_dims = []
@@ -119,7 +117,7 @@ class SparseEquivariantLayerBlock(nn.Module):
             matching_in_dims += list(i)
             matching_out_dims += list(o)[:len(i)]
             broadcast_dims_i = list(o)[len(i):]
-            broadcast_out_dims += broadcast_dims_in
+            broadcast_out_dims += broadcast_dims_i
             broadcast_sizes += [X_out.shape[i] for i in broadcast_dims_i]
             n_new_dims.append(len(broadcast_dims_i))
 
@@ -207,23 +205,37 @@ class SparseEquivariantLayerBlock(nn.Module):
         X_in: Source sparse tensor
         X_out: Correpsonding sparse tensor for target relation
         '''
-        Y = None
+        print("n_params: ", self.n_params)
+        Y = SparseTensor.from_other_sparse_tensor(X_out, self.out_dim)
         for i in range(self.n_params):
+            Y  += self.bias[i]
+
             self.equality_mapping = self.input_output_partitions[i]
+            print(str(i) + "                    ", end='')
+
             Y_out = self.diag(X_in)
+            if Y_out.nnz() == 0:
+                print("Diag NNZ = 0", end='')
+                continue
             Y_out = self.pool(Y_out)
+            if Y_out.nnz() == 0:
+                print("Pool NNZ = 0")
+                continue
             Y_out = self.broadcast(Y_out, X_out)
+            if Y_out.nnz() == 0:
+                print("Broadcast NNZ = 0")
+                continue
             Y_out = self.diag_mask(Y_out)
+            if Y_out.nnz() == 0:
+                print("Diag_mask NNZ = 0")
+                continue
             Y_out = self.reindex(Y_out)
             
             weight_i = self.weights[i]
             Y_out =  weight_i.T @ Y_out
-            if Y == None:
-                Y = Y_out
-            else:
-                Y  += Y_out
 
-            Y  += self.bias[i]
+            Y  += Y_out
+            print()
         return Y
 
 
@@ -245,6 +257,7 @@ class SparseEquivariantLayer(nn.Module):
     def forward(self, data):
         data_out = Data(self.data_schema)
         for i, (relation_i, relation_j) in enumerate(self.relation_pairs):
+            print("Relation: (", relation_i.id, ", ", relation_j.id, ")")
             X_in = data[relation_i.id]
             Y_in = data[relation_j.id]
             layer = self.block_modules[i]
@@ -255,11 +268,3 @@ class SparseEquivariantLayer(nn.Module):
                 data_out[relation_j.id] = data_out[relation_j.id] + Y_out
         return data_out
 
-class TestSparseLayer(nn.Module):
-    def __init__(self):
-        super(TestSparseLayer, self).__init__()
-        stdv = 0.1 / math.sqrt(1)
-        self.weight = nn.Parameter(torch.Tensor(1, 1).uniform_(-stdv, stdv))
-
-    def forward(self, data):
-        data = F.linear(data.transpose(1,-1), self.weight.T).transpose(1,-1)

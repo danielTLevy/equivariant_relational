@@ -7,6 +7,7 @@ Created on Sat Dec  5 20:18:51 2020
 """
 import torch
 import numpy as np
+from src.SparseTensor import SparseTensor
 
 class DataSchema:
     def __init__(self, entities, relations):
@@ -116,7 +117,7 @@ class Data:
         sparse = {}
         for relation in self.schema.relations:
             dense = self.rel_tensors[relation.id]
-            sparse[relation.id] = self.rel_tensors[relation.id].to_sparse()
+            sparse[relation.id] = SparseTensor.from_dense_tensor(dense)
         return  Data(self.schema, sparse, batch_size=self.batch_size)
         
     def to_tensor(self):

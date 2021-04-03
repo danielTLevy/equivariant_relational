@@ -46,6 +46,8 @@ class TestSparseTensor(unittest.TestCase):
         self.W = SparseTensor(torch.LongTensor([[0]]), torch.Tensor([[1.]]), np.array([2]))
         
         
+        
+        
     def assertSame(self, sparse_tensor, val_array):
         # Assert values are the same, regardless of order
         unique_vals, val_counts = np.unique(sparse_tensor.values.numpy(), return_counts=True)
@@ -67,6 +69,11 @@ class TestSparseTensorDiagonal(TestSparseTensor):
         Yd = self.Y.diagonal(0, 1, 2)
         self.assertSame(Yd, [[4, 6]])
 
+    def test_diagonal_inverse_idx(self):
+        Yd = self.Y.diagonal(0, -2, -1)
+        self.assertSame(Yd, [[4, 6]])
+        
+
 class TestSparseTensorPermute(TestSparseTensor):
     pass
 
@@ -85,10 +92,13 @@ class TestSparseTensorBroadcast(TestSparseTensor):
         self.assertSame(Xb, self.X.values.numpy())
 
     def test_broadcast_no_matching_dim(self):
-        Xb = self.X.broadcast([self.Y.shape[0]],  self.Y.indices[0:1], self.Y.indices[1:1])
-        pdb.set_trace()
-        
-        self.assertSame(self.same_values(Xb, [1,2]))
+        empty_indices = torch.empty((0,1))
+        empty_values =  torch.Tensor([[1.],[3.]])
+        empty_size = np.array([], dtype='int64')
+        empty = SparseTensor(empty_indices, empty_values, empty_size)
+        empty_b = empty.broadcast([self.Y.shape[0]],  self.Y.indices[0:1], self.Y.indices[1:1])        
+        self.assertSame(empty_b, [[1., 1., 1., 1., 1., 1., 1.],
+                                  [3., 3., 3., 3., 3., 3., 3.]])
 
 if __name__ == '__main__':
     unittest.main()    

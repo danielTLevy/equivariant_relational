@@ -5,6 +5,7 @@
 import numpy as np
 import torch
 from src.DataSchema import DataSchema, Entity, Relation, Data
+from src.SparseTensor import SparseTensor
 from src.utils import update_observed
 import pdb
 
@@ -107,8 +108,8 @@ class RandomSparseData():
                 indices[i] = np.random.randint(0, entity.n_instances, n_entries)
 
             values = np.single(np.random.uniform(min_val, max_val, (n_channels, n_entries)))
-            data[rel.id] = torch.sparse_coo_tensor(indices, values.T,
-                rel.get_shape() + [n_channels]).coalesce()
+            shape = np.array(rel.get_shape())
+            data[rel.id] = SparseTensor(indices, values, shape).coalesce()
 
         return data
     

@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
 import torch
 import numpy as np
+import pdb
 
 class SparseTensor:
     '''
     '''
     def __init__(self, indices, values, shape):
+        assert shape.dtype == np.dtype('int64')
         assert len(shape) == indices.shape[0], "Number of dimensions in shape and indices do not match"
         assert indices.shape[1] == values.shape[1], "Number of nonzero elements in indices and values do not match"
         # array of indices with dimensions (n_dimensions, nnz)
@@ -16,7 +18,7 @@ class SparseTensor:
         self.shape = shape
 
     @classmethod
-    def from_sparse_tensor(cls, sparse_tensor):
+    def from_torch_sparse(cls, sparse_tensor):
         '''
         Initialize from pytorch's built-in sparse tensor
         '''
@@ -31,7 +33,18 @@ class SparseTensor:
         Initialize from a dense tensor
         '''
         sparse_tensor = tensor.to_sparse()
-        return SparseTensor.from_sparse_tensor(sparse_tensor)
+        return SparseTensor.from_torch_sparse(sparse_tensor)
+
+    @classmethod
+    def from_other_sparse_tensor(cls, sparse_tensor, n_channels=None):
+        '''
+        Initialize all-zero sparse tensor from the indices of another sparse tensor
+        If n_channels is specified, use this as the number of channels of the ouput
+        '''
+        out = sparse_tensor.clone().zero_()
+        if n_channels != None:
+            out.values = out.values[[0]*n_channels]
+        return out
 
     def ndimension(self):
         return self.indices.shape[0]
@@ -50,8 +63,8 @@ class SparseTensor:
     def add_sparse_tensor(self, other):
         assert (self.shape == other.shape).all(), "Mismatching shapes"
         assert self.num_channels() == other.num_channels(), "Mismatching number of channels"
-        combined_indices = torch.cat(self.indices, other.indices, dim=1)
-        combined_values = torch.cat(self.values, other.values, dim=1)
+        combined_indices = torch.cat((self.indices, other.indices), dim=1)
+        combined_values = torch.cat((self.values, other.values), dim=1)
         return SparseTensor(combined_indices, combined_values, self.shape).coalesce()
 
     def add_tensor(self, other):
@@ -128,6 +141,10 @@ class SparseTensor:
         return SparseTensor(indices_out, self.values, shape_out)
 
     def diagonal(self, offset=0, dim1=0, dim2=1):
+        if dim1 < 0:
+            dim1 = self.ndimension() + dim1
+        if dim2 < 0:
+            dim2 = self.ndimension() + dim2
         '''
         Returns a partial view of input with the its diagonal elements with
         respect to dim1 and dim2 appended as a dimension at the end of the shape.
@@ -138,13 +155,13 @@ class SparseTensor:
         assert dim1 < dim2, "Requires dim1 < dim2"
         assert self.shape[dim1] == self.shape[dim2], "dim1 and dim2 are not of equal length"
 
-        # Get only values and indices where dim1 == dim2
+        # Get only values and indices where dim1 == dim2from_
         diag_idx = torch.where(self.indices[dim1] == self.indices[dim2])[0]
         diag_values = self.values[:, diag_idx]
         indices_out = torch.index_select(self.indices, 1, diag_idx)
 
         # Remove diagonal dimensions and append to end
-        reshape_indices = torch.arange(self.ndimension() + 1)
+        reshape_indices = np.arange(self.ndimension() + 1)
         reshape_indices = reshape_indices[reshape_indices != dim1]
         reshape_indices = reshape_indices[reshape_indices != dim2]
         reshape_indices[-1] = dim1
@@ -263,7 +280,10 @@ class SparseTensor:
 
         assert values_out.shape[1] == indices_out.shape[1], "Output values and indices counts do not match"
         # Get new shape:
-        shape_out = np.concatenate((self.shape, new_dim_sizes))
+        if new_dim_sizes != []:
+            shape_out = np.concatenate((self.shape, new_dim_sizes))
+        else:
+            shape_out = self.shape
         return SparseTensor(indices_out, values_out, shape_out)
     
     def diag_embed(self, indices_tgt):
@@ -284,7 +304,12 @@ class SparseTensor:
         '''
         return sorted(list(set(range(self.ndimension())) - set(dims)))
         
-        
+    def clone(self):
+        return SparseTensor(self.indices.clone(), self.values.clone(), self.shape.copy())
+
+    def zero_(self):
+        self.values = self.values.zero_()
+        return self
 
     def to_dense(self):
         out = torch.zeros(tuple(self.shape), dtype=self.values.dtype)

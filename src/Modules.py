@@ -10,7 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from src.DataSchema import Data, DataSchema, Relation
 from src.utils import PREFIX_DIMS
-
+from src.SparseTensor import SparseTensor
 
 class RelationNorm(nn.Module):
     '''
@@ -152,3 +152,13 @@ class EntityPooling(nn.Module):
                     entity_out = self.pool_tensor_diag(entity_out)
             out[entity.id] = entity_out
         return out
+
+class SparseReLU(nn.Module):
+    '''
+    ReLU applied to sparse tensors
+    '''
+    def __init__(self):
+        super(SparseReLU, self).__init__()
+
+    def forward(self, sparse_tensor):
+        return SparseTensor( sparse_tensor.indices, F.relu(sparse_tensor.values), sparse_tensor.shape)

@@ -55,6 +55,12 @@ class SparseTensor:
     def num_channels(self):
         return self.values.shape[0]
 
+    def size(self, dim=None):
+        if dim == None:
+            return self.shape
+        else:
+            return self.shape[dim]
+
     def to(self, *args, **kwargs):
         self.indices = self.indices.to(*args, **kwargs)
         self.values = self.values.to(*args, **kwargs)
@@ -314,3 +320,7 @@ class SparseTensor:
     def to_dense(self):
         out = torch.zeros(tuple(self.shape), dtype=self.values.dtype)
         return out.index_put_(tuple(self.indices), self.values)
+
+    def to_torch_sparse(self):
+        return torch.sparse_coo_tensor(self.indices, self.values.T,
+                                   size=tuple(self.shape) + (self.num_channels(),))

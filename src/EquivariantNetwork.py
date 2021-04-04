@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 import torch.nn as nn
 from src.EquivariantLayer import EquivariantLayer
-from src.Modules import RelationNorm, Activation, EntityPooling, EntityBroadcasting
+from src.SparseEquivariantLayer import SparseEquivariantLayer
+from src.Modules import RelationNorm, Activation, EntityPooling, EntityBroadcasting, SparseReLU
 
 
 class EquivariantNetwork(nn.Module):
@@ -31,7 +32,7 @@ class EquivariantAutoEncoder(nn.Module):
         self.data_schema = data_schema
         self.encoding_dim = encoding_dim
         self.dropout_rate = 0.2
-        self.hidden_dims = [64]*7
+        self.hidden_dims = [64]*2
         self.all_dims = [1] + list(self.hidden_dims) + [self.encoding_dim]
         self.n_layers = len(self.all_dims)
 
@@ -65,4 +66,25 @@ class EquivariantAutoEncoder(nn.Module):
     def forward(self, data):
         enc  = self.encoder(data)
         out = self.decoder(enc)
+        return out
+
+class SparseEquivariantNetwork(nn.Module):
+    def __init__(self, data_schema, n_channels):
+        super(SparseEquivariantNetwork, self).__init__()
+        self.data_schema = data_schema
+        self.n_channels = n_channels
+        self.hidden_dims = (32, 64, 32)
+        self.all_dims = [n_channels] + list(self.hidden_dims) + [n_channels]
+
+        self.ReLU = Activation(data_schema, SparseReLU())
+        sequential = []
+        for i in range(1, len(self.all_dims)-1):
+            sequential.append(SparseEquivariantLayer(self.data_schema, self.all_dims[i-1], self.all_dims[i]))
+            sequential.append(self.ReLU)
+            #sequential.append(RelationNorm(self.data_schema, self.all_dims[i], affine=False))
+        sequential.append(SparseEquivariantLayer(self.data_schema, self.all_dims[-2], self.all_dims[-1]))
+        self.sequential = nn.Sequential(*sequential)
+
+    def forward(self, data):
+        out = self.sequential(data)
         return out

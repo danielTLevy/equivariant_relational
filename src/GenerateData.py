@@ -91,7 +91,7 @@ class RandomSparseData():
         relations.append(Relation(3, [ent_students, ent_professors, ent_courses], 1))
         relations.append(Relation(4, [ent_courses, ent_courses], 1))
         relations.append(Relation(5, [ent_students], 1))
-        relations.append(Relation(6, [ent_students, ent_students, ent_students, ent_courses], 1))
+        #relations.append(Relation(6, [ent_students, ent_students, ent_students, ent_courses], 1))
 
 
         self.schema = DataSchema(entities, relations)

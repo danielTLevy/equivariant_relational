@@ -6,9 +6,12 @@ import math
 import torch
 import torch.nn as nn
 import itertools
+import logging
 from src.utils import get_all_input_output_partitions, PREFIX_DIMS
 from src.DataSchema import Data
 from src.SparseTensor import SparseTensor
+
+LOG_LEVEL = logging.ERROR
 
 class SparseEquivariantLayerBlock(nn.Module):
     # Layer mapping between two relations
@@ -22,6 +25,8 @@ class SparseEquivariantLayerBlock(nn.Module):
         self.weights = nn.Parameter(torch.Tensor(self.n_params, self.in_dim, self.out_dim).uniform_(-stdv, stdv))
         self.bias = nn.Parameter(torch.ones(self.n_params))
         self.output_shape = [0, self.out_dim] + [entity.n_instances for entity in relation_out.entities]
+        self.logger = logging.getLogger()
+        self.logger.setLevel(LOG_LEVEL)
 
     
     def diag(self, X):
@@ -205,29 +210,29 @@ class SparseEquivariantLayerBlock(nn.Module):
         X_in: Source sparse tensor
         X_out: Correpsonding sparse tensor for target relation
         '''
-        print("n_params: ", self.n_params)
+        self.logger.info("n_params: {}".format(self.n_params))
         Y = SparseTensor.from_other_sparse_tensor(X_out, self.out_dim)
         for i in range(self.n_params):
             Y  += self.bias[i]
 
             self.equality_mapping = self.input_output_partitions[i]
-            print(str(i) + "                    ", end='')
+            self.logger.info(str(i))
 
             Y_out = self.diag(X_in)
             if Y_out.nnz() == 0:
-                print("Diag NNZ = 0", end='')
+                self.logger.info("Diag NNZ = 0")
                 continue
             Y_out = self.pool(Y_out)
             if Y_out.nnz() == 0:
-                print("Pool NNZ = 0")
+                self.logger.info("Pool NNZ = 0")
                 continue
             Y_out = self.broadcast(Y_out, X_out)
             if Y_out.nnz() == 0:
-                print("Broadcast NNZ = 0")
+                self.logger.info("Broadcast NNZ = 0")
                 continue
             Y_out = self.diag_mask(Y_out)
             if Y_out.nnz() == 0:
-                print("Diag_mask NNZ = 0")
+                self.logger.info("Diag_mask NNZ = 0")
                 continue
             Y_out = self.reindex(Y_out)
             
@@ -235,7 +240,6 @@ class SparseEquivariantLayerBlock(nn.Module):
             Y_out =  weight_i.T @ Y_out
 
             Y  += Y_out
-            print()
         return Y
 
 
@@ -253,11 +257,12 @@ class SparseEquivariantLayer(nn.Module):
                                                  data_schema, relation_i, relation_j)
             block_modules.append(block_module)
         self.block_modules = nn.ModuleList(block_modules)
+        self.logger = logging.getLogger()
 
     def forward(self, data):
         data_out = Data(self.data_schema)
         for i, (relation_i, relation_j) in enumerate(self.relation_pairs):
-            print("Relation: (", relation_i.id, ", ", relation_j.id, ")")
+            self.logger.info("Relation: ({}, {})".format(relation_i.id, relation_j.id))
             X_in = data[relation_i.id]
             Y_in = data[relation_j.id]
             layer = self.block_modules[i]

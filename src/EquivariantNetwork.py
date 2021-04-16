@@ -6,11 +6,12 @@ from src.Modules import RelationNorm, Activation, EntityPooling, EntityBroadcast
 
 
 class EquivariantNetwork(nn.Module):
-    def __init__(self, data_schema):
+    def __init__(self, data_schema, n_channels):
         super(EquivariantNetwork, self).__init__()
         self.data_schema = data_schema
+        self.n_channels = n_channels
         self.hidden_dims = (32, 64, 32)
-        self.all_dims = [1] + list(self.hidden_dims) + [1]
+        self.all_dims = [n_channels] + list(self.hidden_dims) + [n_channels]
         
         self.ReLU = Activation(data_schema, )
         sequential = []
@@ -81,7 +82,7 @@ class SparseEquivariantNetwork(nn.Module):
         for i in range(1, len(self.all_dims)-1):
             sequential.append(SparseEquivariantLayer(self.data_schema, self.all_dims[i-1], self.all_dims[i]))
             sequential.append(self.ReLU)
-            #sequential.append(RelationNorm(self.data_schema, self.all_dims[i], affine=False))
+            sequential.append(RelationNorm(self.data_schema, self.all_dims[i], affine=False, sparse=True))
         sequential.append(SparseEquivariantLayer(self.data_schema, self.all_dims[-2], self.all_dims[-1]))
         self.sequential = nn.Sequential(*sequential)
 

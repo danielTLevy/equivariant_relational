@@ -12,15 +12,13 @@ import sys
 sys.path.append('../src')
 import numpy as np
 import torch
-from DataSchema import DataSchema, Entity, Relation
-from EquivariantLayer import EquivariantLayerBlock
+from src.DataSchema import Entity, Relation
+from src.EquivariantLayer import EquivariantLayerBlock
 
 
 def test_layer_single_block(X, entities, relation_i, relation_j, in_dim, out_dim, batch_size):
     torch.manual_seed(0)
-    relations = [relation_i, relation_j]
-    schema = DataSchema(entities, relations)
-    layer = EquivariantLayerBlock(in_dim, out_dim, schema, relation_i, relation_j)
+    layer = EquivariantLayerBlock(in_dim, out_dim, relation_i, relation_j)
     X_out = layer.forward(X)
     #print("X_out: ", X_out)
     expected_shape = [batch_size] + [out_dim] + relation_j.get_shape()

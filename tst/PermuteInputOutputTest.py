@@ -16,6 +16,7 @@ import numpy as np
 import torch
 from DataSchema import DataSchema, Entity, Relation
 from EquivariantLayer import EquivariantLayerBlock
+
 torch.manual_seed(0)
 
 def permute_entities(X_in, X_out, entities, relation_i, relation_j):
@@ -43,19 +44,16 @@ def permute_entities(X_in, X_out, entities, relation_i, relation_j):
 
 def test_block_without_permutation(X, entities, relation_i, relation_j, input_dim, output_dim):
     torch.manual_seed(0)
-    relations = [relation_i, relation_j]
-    schema = DataSchema(entities, relations)
-    layer = EquivariantLayerBlock(input_dim, output_dim, schema, relation_i, relation_j)
+    layer = EquivariantLayerBlock(input_dim, output_dim, relation_i, relation_j)
     return layer.forward(X)
     
 def test_block_with_permutation(X, entities, relation_i, relation_j, input_dim, output_dim):
     X_exp = test_block_without_permutation(X, entities, relation_i, relation_j, input_dim, output_dim)
     X_in_perm, X_exp_perm = permute_entities(X, X_exp, entities, relation_i, relation_j)
-    relations = [relation_i, relation_j]
-    schema = DataSchema(entities, relations)
 
     torch.manual_seed(0)
-    layer = EquivariantLayerBlock(input_dim, output_dim, schema, relation_i, relation_j)
+    layer = EquivariantLayerBlock(input_dim, output_dim, relation_i, relation_j)
+    #pdb.set_trace()
     X_out_perm = layer.forward(X_in_perm)
     return torch.equal(X_out_perm, X_exp_perm)
 
@@ -112,7 +110,7 @@ if __name__ == '__main__':
     b = 3
     c = 5
     d = 2
-    X = torch.Tensor(np.arange(b*a*d*a*d*d)).view(1, 1, b, a, d, a, d, d)
+    X = torch.Tensor(np.arange(b*a*d*a*d*d, dtype=np.float32)).view(1, 1, b, a, d, a, d, d)
     entities = [Entity(0, 4), Entity(1, 3), Entity(2, 5), Entity(3, 2)]
     relation_i = Relation(0, [entities[1], entities[0], entities[3],
                            entities[0], entities[3], entities[3]])

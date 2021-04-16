@@ -242,7 +242,6 @@ class SparseTensor:
         '''
         assert len(new_dim_sizes) == indices_out_broadcast.shape[0], "new_dim_sizes must have sizes for each new broadcast dim"
         assert indices_out_matching.shape[0] == self.ndimension(), "indices_out_matching must be for each dimension in self"
-
         def get_masks_of_intersection(array1, array2):
             # Return the mask of values of indices of array2 that intersect with array1
             # For example a1 = [0, 1, 2, 5], a2 = [1, 3, 2, 4], then intersection = [1, 2]
@@ -317,10 +316,12 @@ class SparseTensor:
         self.values = self.values.zero_()
         return self
 
-    def to_dense(self):
-        out = torch.zeros(tuple(self.shape), dtype=self.values.dtype)
-        return out.index_put_(tuple(self.indices), self.values)
-
     def to_torch_sparse(self):
         return torch.sparse_coo_tensor(self.indices, self.values.T,
                                    size=tuple(self.shape) + (self.num_channels(),))
+
+    def to_dense(self):
+        out = self.to_torch_sparse().to_dense()
+        # Move channel dimension to beginning
+        permute_channel_dim = [-1] + list(range(self.ndimension()))
+        return out.permute(*permute_channel_dim)

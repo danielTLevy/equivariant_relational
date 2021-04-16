@@ -30,7 +30,7 @@ def get_partitions(collection):
         yield [ [ first ] ] + smaller
     
 
-def get_all_entity_partitions(data_schema, combined_entities):
+def get_all_entity_partitions(combined_entities):
     '''
     
     Returns: List of all mappings between entities and partitioning of their 
@@ -53,7 +53,7 @@ def get_all_entity_partitions(data_schema, combined_entities):
         entity_partitions.append(entity_partition_map)
     return entity_partitions
 
-def get_all_input_output_partitions(data_schema, relation_in, relation_out):
+def get_all_input_output_partitions(relation_in, relation_out):
     '''
     Returns: a list of all "input output partitions", which are tuple pairs
     of the set of indices in the input and the set of indices in the output
@@ -62,7 +62,7 @@ def get_all_input_output_partitions(data_schema, relation_in, relation_out):
     entities_in = relation_in.entities
     entities_out = relation_out.entities
     combined_entities = np.array(entities_in + entities_out)
-    entity_partitions = get_all_entity_partitions(data_schema, combined_entities)
+    entity_partitions = get_all_entity_partitions(combined_entities)
     relation_in_length = len(relation_in.entities)
 
     output = []

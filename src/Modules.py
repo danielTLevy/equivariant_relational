@@ -11,17 +11,50 @@ import torch.nn.functional as F
 from src.DataSchema import Data, DataSchema, Relation
 from src.utils import PREFIX_DIMS
 from src.SparseTensor import SparseTensor
+import pdb
+
+
+class SparseGroupNorm(nn.Module):
+    '''
+    Normalize each channel separately
+    '''
+    def __init__(self, num_groups, num_channels, eps=1e-05, affine=True):
+        super(SparseGroupNorm, self).__init__()
+        self.eps = eps
+        self.num_groups = num_groups
+        self.num_channels = num_channels
+        assert self.num_groups == self.num_channels, "Currently only implemented for num_groups == num_channels"
+        self.gamma = nn.Parameter(torch.ones(self.num_channels))
+        self.affine = affine
+        if self.affine:
+            self.beta = nn.Parameter(torch.zeros(self.num_channels))
+    
+    def forward(self, sparse_tensor):
+        values = sparse_tensor.values
+        var, mean = torch.var_mean(values, dim=1, unbiased=False)
+        values_out = (self.gamma * (values - mean.unsqueeze(1)) \
+                      / torch.sqrt(var + self.eps).unsqueeze(1))
+        if self.affine:
+            values_out += self.beta
+        out = sparse_tensor.clone()
+        out.values = values_out
+        return out
 
 class RelationNorm(nn.Module):
     '''
     Normalize each channel of each relation separately
     '''
-    def __init__(self, schema, num_channels, affine):
+    def __init__(self, schema, num_channels, affine, sparse=False):
         super(RelationNorm, self).__init__()
         self.schema = schema
         self.rel_norms = {}
+        if sparse:
+            GroupNorm = SparseGroupNorm
+        else:
+            GroupNorm = nn.GroupNorm
+
         for relation in schema.relations:
-            rel_norm = nn.GroupNorm(num_channels,num_channels, affine=affine)
+            rel_norm = GroupNorm(num_channels, num_channels, affine=affine)
             self.rel_norms[relation.id] = rel_norm
 
     def forward(self, X):
@@ -153,6 +186,8 @@ class EntityPooling(nn.Module):
             out[entity.id] = entity_out
         return out
 
+    
+
 class SparseReLU(nn.Module):
     '''
     ReLU applied to sparse tensors
@@ -162,3 +197,15 @@ class SparseReLU(nn.Module):
 
     def forward(self, sparse_tensor):
         return SparseTensor( sparse_tensor.indices, F.relu(sparse_tensor.values), sparse_tensor.shape)
+
+class SparseMatrixReLU(nn.Module):
+    '''
+    ReLU applied to sparse matrix
+    '''
+    def __init__(self):
+        super(SparseMatrixReLU, self).__init__()
+
+    def forward(self, sparse_matrix):
+        out =  sparse_matrix.clone()
+        out.values = F.relu(out.values)
+        return out

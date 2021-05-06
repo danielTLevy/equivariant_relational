@@ -8,13 +8,15 @@ Created on Sat Jan 30 22:31:50 2021
 
 import numpy as np
 import itertools
+import torch
 
 
 # Non-relation dimensions (batch and channel)
 # TODO: This parameter controls whether to use the sparse or dense implementation
 # Dense: use PREFIX_DIMS = 2
 # Sparse: use PREFIX_DIMS = 0 because there are no batches and channels are handled separately
-PREFIX_DIMS = 0
+# Matrix: use PREFIX_DIMS = 1 for initial channel dimension
+PREFIX_DIMS = 1
 
 # https://stackoverflow.com/questions/19368375/set-partitions-in-python/30134039
 def get_partitions(collection):
@@ -125,3 +127,101 @@ def update_observed(observed_old, p_keep, min_observed):
 
     return observed_new
 
+
+def get_ops(partition):
+    '''
+    p: pool
+    g: gather
+    i: id
+    t: transpose
+    b: broadcast
+    e: embed
+    '''
+    input_op = set()
+    output_op = set()
+    
+    for inp, out in partition:
+        if out == set():
+            if inp == {1, 2}:
+                input_op.add("p_diag")
+            elif inp == {1} == inp:
+                input_op.add("p_row")
+            elif inp == {2}:
+                input_op.add("p_col")
+        else:
+            if inp == {1, 2}:
+                input_op.add("g_diag")
+
+            if inp == {1} and out == {1}:
+                input_op.add("i_row")
+                output_op.add("i_row")
+            elif inp == {2} and out == {2}:
+                input_op.add("i_col")
+                output_op.add("i_col")
+            elif inp == {1} and out == {2}:
+                input_op.add("i_row")
+                output_op.add("t_row")
+            elif inp == {2} and out == {1}:
+                input_op.add("i_col")
+                output_op.add("t_col")
+
+        if inp == set():
+            if out == {1, 2}:
+                output_op.add("b_diag")
+            elif out == {1}:
+                output_op.add("b_row")
+            elif out == {2}:
+                output_op.add("b_col")
+        else:
+            if out == {1,2}:
+                output_op.add("e_diag")
+
+    if "p_row" in input_op and "p_col" in input_op:
+        input_op = "p_all"
+    elif "i_row" in input_op and "i_col" in input_op:
+        input_op = "i_all"
+    else:
+        input_op.discard("i_row")
+        input_op.discard("i_col")
+        if len(input_op) != 1:
+            print("input_op")
+            print(partition)
+        else:
+            input_op = input_op.pop()
+
+    if "b_row" in output_op and "b_col" in output_op:
+        output_op = "b_all"
+    elif "i_row" in output_op and "i_col" in output_op:
+        output_op = "i_all"
+    elif "t_row" in output_op and "t_col" in output_op:
+        output_op = "t_all"
+    else:
+        output_op.discard("i_row")
+        output_op.discard("i_col")
+        output_op.discard("t_row")
+        output_op.discard("t_col")
+        assert len(output_op) == 1
+
+        output_op = output_op.pop()
+
+    return input_op, output_op
+
+
+def get_all_ops(relation_in, relation_out):
+    partitions = get_all_input_output_partitions(relation_in, relation_out)
+    return [get_ops(partition) for partition in partitions]
+
+
+
+def get_masks_of_intersection(array1, array2):
+    # Return the mask of values of indices of array2 that intersect with array1
+    # For example a1 = [0, 1, 2, 5], a2 = [1, 3, 2, 4], then intersection = [1, 2]
+    # and array1_intersection_mask = [False, True, True, False]
+    # and array2_intersection_mask = [True, False, True, False]
+    n_in = array1.shape[1]
+    combined = torch.cat((array1, array2), dim=1)
+    intersection, intersection_idx, counts = combined.unique(return_counts=True, return_inverse=True, dim=1)
+    intersection_mask = (counts > 1).T[intersection_idx].T
+    array1_intersection_mask = intersection_mask[:n_in]
+    array2_intersection_mask = intersection_mask[n_in:]
+    return array1_intersection_mask, array2_intersection_mask

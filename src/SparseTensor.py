@@ -2,6 +2,7 @@
 import torch
 import numpy as np
 import pdb
+from src.utils import get_masks_of_intersection
 
 class SparseTensor:
     '''
@@ -242,18 +243,6 @@ class SparseTensor:
         '''
         assert len(new_dim_sizes) == indices_out_broadcast.shape[0], "new_dim_sizes must have sizes for each new broadcast dim"
         assert indices_out_matching.shape[0] == self.ndimension(), "indices_out_matching must be for each dimension in self"
-        def get_masks_of_intersection(array1, array2):
-            # Return the mask of values of indices of array2 that intersect with array1
-            # For example a1 = [0, 1, 2, 5], a2 = [1, 3, 2, 4], then intersection = [1, 2]
-            # and array1_intersection_mask = [False, True, True, False]
-            # and array2_intersection_mask = [True, False, True, False]
-            n_in = array1.shape[1]
-            combined = torch.cat((array1, array2), dim=1)
-            intersection, intersection_idx, counts = combined.unique(return_counts=True, return_inverse=True, dim=1)
-            intersection_mask = (counts > 1).T[intersection_idx].T
-            array1_intersection_mask = intersection_mask[:n_in]
-            array2_intersection_mask = intersection_mask[n_in:]
-            return array1_intersection_mask, array2_intersection_mask
 
         if indices_out_matching.shape[0] == 0:
             indices_out = indices_out_broadcast

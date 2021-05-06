@@ -15,11 +15,11 @@ LOG_LEVEL = logging.ERROR
 
 class SparseEquivariantLayerBlock(nn.Module):
     # Layer mapping between two relations
-    def __init__(self, input_dim, output_dim, data_schema, relation_in, relation_out):
+    def __init__(self, input_dim, output_dim, relation_in, relation_out):
         super(SparseEquivariantLayerBlock, self).__init__()
         self.in_dim = input_dim
         self.out_dim = output_dim
-        self.input_output_partitions = get_all_input_output_partitions(data_schema, relation_in, relation_out)
+        self.input_output_partitions = get_all_input_output_partitions(relation_in, relation_out)
         self.n_params = len(self.input_output_partitions)
         stdv = 0.1 / math.sqrt(self.in_dim)
         self.weights = nn.Parameter(torch.Tensor(self.n_params, self.in_dim, self.out_dim).uniform_(-stdv, stdv))
@@ -254,7 +254,7 @@ class SparseEquivariantLayer(nn.Module):
         self.output_dim = output_dim
         for relation_i, relation_j in self.relation_pairs:
             block_module = SparseEquivariantLayerBlock(self.input_dim, self.output_dim,
-                                                 data_schema, relation_i, relation_j)
+                                                       relation_i, relation_j)
             block_modules.append(block_module)
         self.block_modules = nn.ModuleList(block_modules)
         self.logger = logging.getLogger()

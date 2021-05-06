@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -8,6 +9,7 @@ Created on Sat Dec  5 20:18:51 2020
 import torch
 import numpy as np
 from src.SparseTensor import SparseTensor
+from src.SparseMatrix import SparseMatrix
 
 class DataSchema:
     def __init__(self, entities, relations):
@@ -79,6 +81,9 @@ class Data:
     def __repr__(self):
         return self.rel_tensors.__repr__()
 
+    def items(self):
+        return self.rel_tensors.items()
+
     def normalize_data(self):
         '''
         Normalize each relation by the std and mean
@@ -119,7 +124,14 @@ class Data:
             dense = self.rel_tensors[relation.id]
             sparse[relation.id] = SparseTensor.from_dense_tensor(dense)
         return  Data(self.schema, sparse, batch_size=self.batch_size)
-        
+
+    def to_sparse_matrix(self):
+        sparse = {}
+        for relation in self.schema.relations:
+            dense = self.rel_tensors[relation.id]
+            sparse[relation.id] = SparseMatrix.from_dense_tensor(dense)
+        return SparseData(self.schema, sparse, batch_size=self.batch_size)
+
     def to_tensor(self):
         # Get maximum multiplicity for each relation
         multiplicities = {}
@@ -186,4 +198,23 @@ class SparseData(Data):
     def to_tensor(self):
         pass
 
+
+    def calculate_indices(self):
+        indices_identity = {}
+        indices_transpose = {}
+        for r_i, matrix_i in self.rel_tensors.items():
+            entity_i_n = self.schema.relations[r_i].entities[0]
+            entity_i_m = self.schema.relations[r_i].entities[1]
+            for r_j, matrix_j in self.rel_tensors.items():
+                entity_j_n = self.schema.relations[r_j].entities[0]
+                entity_j_m = self.schema.relations[r_j].entities[1]
+                if entity_i_n == entity_j_n and entity_i_m == entity_j_m:
+                    indices_identity[r_i, r_j] = matrix_i.calc_intersection_mask(matrix_j)
+                else:
+                    indices_identity[r_i, r_j] = None
+                if entity_i_n == entity_j_m and entity_i_m == entity_j_n:
+                    indices_transpose[r_i, r_j] = matrix_i.calc_transpose_intersection_overlap(matrix_j)
+                else:
+                    indices_transpose[r_i, r_j] = None
+        return indices_identity, indices_transpose
     

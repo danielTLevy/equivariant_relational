@@ -29,7 +29,7 @@ class SyntheticData():
         relations.append(Relation(1, [ent_students, ent_professors], 1))
         relations.append(Relation(2, [ent_professors, ent_courses], 1))
         relations.append(Relation(3, [ent_courses, ent_courses], 1))
-
+        relations.append(Relation(4, [ent_courses, ent_courses], 1))
 
         self.schema = DataSchema(entities, relations)
         self.embedding_dims = embedding_dims

@@ -26,7 +26,7 @@ class SparseMatrixEquivariantLayerBlock(nn.Module):
         self.n_params = len(self.all_ops)
         stdv = 0.1 / math.sqrt(self.in_dim)
         self.weights = nn.Parameter(torch.Tensor(self.n_params, self.in_dim, self.out_dim).uniform_(-stdv, stdv))
-        self.bias = nn.Parameter(torch.ones(self.n_params))
+        self.bias = nn.Parameter(torch.zeros(self.n_params))
         self.output_shape = [0, self.out_dim] + [entity.n_instances for entity in relation_out.entities]
         self.logger = logging.getLogger()
         self.logger.setLevel(LOG_LEVEL)

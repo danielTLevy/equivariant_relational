@@ -32,11 +32,35 @@ class SparseGroupNorm(nn.Module):
     def forward(self, sparse_tensor):
         values = sparse_tensor.values
         var, mean = torch.var_mean(values, dim=1, unbiased=False)
-        values_out = (self.gamma * (values - mean.unsqueeze(1)) \
-                      / torch.sqrt(var + self.eps).unsqueeze(1))
+        values_out = (self.gamma * (values.T - mean) / torch.sqrt(var + self.eps)).T
         if self.affine:
             values_out += self.beta
         out = sparse_tensor.clone()
+        out.values = values_out
+        return out
+
+class SparseMatrixGroupNorm(nn.Module):
+    '''
+    Normalize each channel separately
+    '''
+    def __init__(self, num_groups, num_channels, eps=1e-05, affine=True):
+        super(SparseMatrixGroupNorm, self).__init__()
+        self.eps = eps
+        self.num_groups = num_groups
+        self.num_channels = num_channels
+        assert self.num_groups == self.num_channels, "Currently only implemented for num_groups == num_channels"
+        self.gamma = nn.Parameter(torch.ones(self.num_channels))
+        self.affine = affine
+        if self.affine:
+            self.beta = nn.Parameter(torch.zeros(self.num_channels))
+    
+    def forward(self, sparse_matrix):
+        values = sparse_matrix.values
+        var, mean = torch.var_mean(values, dim=0, unbiased=False)
+        values_out = (self.gamma * (values - mean) / torch.sqrt(var + self.eps))
+        if self.affine:
+            values_out += self.beta
+        out = sparse_matrix.clone()
         out.values = values_out
         return out
 
@@ -44,12 +68,15 @@ class RelationNorm(nn.Module):
     '''
     Normalize each channel of each relation separately
     '''
-    def __init__(self, schema, num_channels, affine, sparse=False):
+    def __init__(self, schema, num_channels, affine, sparse=False, matrix=False):
         super(RelationNorm, self).__init__()
         self.schema = schema
         self.rel_norms = {}
         if sparse:
-            GroupNorm = SparseGroupNorm
+            if matrix:
+                GroupNorm = SparseMatrixGroupNorm
+            else:
+                GroupNorm = SparseGroupNorm
         else:
             GroupNorm = nn.GroupNorm
 

@@ -71,7 +71,7 @@ class RelationNorm(nn.Module):
     def __init__(self, schema, num_channels, affine, sparse=False, matrix=False):
         super(RelationNorm, self).__init__()
         self.schema = schema
-        self.rel_norms = {}
+        self.rel_norms = nn.ModuleDict()
         if sparse:
             if matrix:
                 GroupNorm = SparseMatrixGroupNorm
@@ -82,19 +82,14 @@ class RelationNorm(nn.Module):
 
         for relation in schema.relations:
             rel_norm = GroupNorm(num_channels, num_channels, affine=affine)
-            self.rel_norms[relation.id] = rel_norm
+            self.rel_norms[str(relation.id)] = rel_norm
 
     def forward(self, X):
         for relation in self.schema.relations:
-            rel_norm = self.rel_norms[relation.id]
+            rel_norm = self.rel_norms[str(relation.id)]
             X[relation.id] = rel_norm(X[relation.id])
         return X
 
-    def to(self, *args, **kwargs):
-        self = super().to(*args, **kwargs)
-        for relation in self.schema.relations:
-            self.rel_norms[relation.id] = self.rel_norms[relation.id].to(*args, **kwargs)
-        return self
 
 class Activation(nn.Module):
     '''

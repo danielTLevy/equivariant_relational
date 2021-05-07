@@ -306,7 +306,7 @@ class SparseMatrix:
         gathered_output = torch.zeros(self.n, self.n_channels).to(device)
         return gathered_output.scatter_(0, out_idx, out_vals)
 
-    def broadcast(self, data, index_str):
+    def broadcast(self, data, index_str, device=None):
         '''
         Broadcast data into self shape along indices from index_str
         '''
@@ -314,13 +314,13 @@ class SparseMatrix:
         n_channels= data.shape[-1]
         if index_str == "diag":
             data = data.expand(self.n, n_channels)
-            return self.embed_diag(data)
+            return self.embed_diag(data, device)
         elif index_str == "row":
             indices = self.indices[1]
         elif index_str == "col":
             indices = self.indices[0]
         elif index_str == "all":
-            indices = torch.zeros(self.nnz(), dtype=torch.int64)
+            indices = torch.zeros(self.nnz(), dtype=torch.int64).to(device)
             data = data.unsqueeze(0)
         idx_0 = indices.shape[0]
         idx_tensor_expanded = indices.view(idx_0, 1).expand(idx_0, n_channels)

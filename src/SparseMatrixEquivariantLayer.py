@@ -34,7 +34,7 @@ class SparseMatrixEquivariantLayerBlock(nn.Module):
     def output_op(self, op_str, X_out, data, device):
         op, index_str = op_str.split('_')
         if op == 'b':
-            return X_out.broadcast(data, index_str)
+            return X_out.broadcast(data, index_str, device)
         elif op == 'e':
             return X_out.embed_diag(data, device)
 

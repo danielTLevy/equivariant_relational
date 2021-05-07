@@ -34,7 +34,7 @@ class SparseMatrixEquivariantLayerBlock(nn.Module):
     def output_op(self, op_str, X_out, data, device):
         op, index_str = op_str.split('_')
         if op == 'b':
-            return X_out.broadcast(data, index_str, device)
+            return X_out.broadcast(data, index_str)
         elif op == 'e':
             return X_out.embed_diag(data, device)
 
@@ -43,7 +43,7 @@ class SparseMatrixEquivariantLayerBlock(nn.Module):
         if op == 'g':
             return X_in.gather_diag(device)
         elif op == 'p':
-            return X_in.pool(index_str, device)
+            return X_in.pool(index_str, device=device)
 
     def forward(self, X_in, X_out, indices_identity, indices_trans):
         '''
@@ -69,11 +69,11 @@ class SparseMatrixEquivariantLayerBlock(nn.Module):
                 X_op_out = X_out.broadcast_from_mask(X_mul, indices_trans[1], device)
             else:
                 # Pool or Gather or Do Nothing
-                X_op_inp = self.input_op(op_inp, X_in)
+                X_op_inp = self.input_op(op_inp, X_in, device)
                 # Multiply values by weight
                 X_mul = torch.matmul(X_op_inp, weight)
                 # Broadcast or Embed Diag or Transpose
-                X_op_out = self.output_op(op_out, X_out, X_mul)
+                X_op_out = self.output_op(op_out, X_out, X_mul, device)
             assert X_op_out.nnz() == X_out.nnz()
             assert Y.nnz() == X_out.nnz(), "Y: {}, X_out: {}".format(Y.nnz(), X_out.nnz())
             assert Y.nnz() == X_op_out.nnz(), "Y: {}, X_op_out: {}".format(Y.nnz(), X_op_out.nnz())

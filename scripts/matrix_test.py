@@ -24,7 +24,7 @@ N_PROFESSOR = 400
 EMBEDDING_DIMS = 2
 
 data_generator = SyntheticData((N_STUDENT, N_COURSE, N_PROFESSOR),
-                               sparsity=0.5,  embedding_dims=EMBEDDING_DIMS, batch_dim=False).to(device)
+                               sparsity=0.9,  embedding_dims=EMBEDDING_DIMS, batch_dim=False).to(device)
 data = data_generator.data
 observed = data_generator.observed
 missing = {key:  ~val for key, val in observed.items()}
@@ -32,22 +32,25 @@ schema = data.schema
 relations = schema.relations
 
 #%%
-# Normalize the data and hide unobserved
-#data = data.normalize_data()
-data_hidden = data.mask_data(observed).to_sparse_matrix()
+# hide unobserved
+data_hidden = data.mask_data(observed).to_sparse_matrix().to(device)
 
 #%%
 
 
     
 #%%
-net = SparseMatrixEquivariantNetwork(schema, 1)
+net = SparseMatrixEquivariantNetwork(schema, 1).to(device)
 #%%
 indices_identity, indices_transpose = data_hidden.calculate_indices()
-#block = SparseMatrixEquivariantLayerBlock(1, 2, relations[3], relations[4])
-#X_in = data_hidden[3]
-#X_out = data_hidden[4]
+
 #%%
+layer = SparseMatrixEquivariantLayer(schema, 1, 3).to(device)
+#%%
+data_out_layer = layer(data_hidden, indices_identity, indices_transpose)
+#%%
+
+
 data_out = net(data_hidden, indices_identity, indices_transpose)
 
 #%%
@@ -78,7 +81,7 @@ sched = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
                                              verbose=True)
 
 #%%
-epochs=1000
+epochs= 3
 progress = tqdm(range(epochs), desc="Loss: ", position=0, leave=True)
 for i in progress:
     optimizer.zero_grad()

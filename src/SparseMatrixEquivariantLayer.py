@@ -12,7 +12,7 @@ from src.DataSchema import Data
 from src.SparseMatrix import SparseMatrix
 import pdb
 
-LOG_LEVEL = logging.ERROR
+LOG_LEVEL = logging.INFO
 
 class SparseMatrixEquivariantLayerBlock(nn.Module):
     # Layer mapping between two relations
@@ -31,19 +31,19 @@ class SparseMatrixEquivariantLayerBlock(nn.Module):
         self.logger = logging.getLogger()
         self.logger.setLevel(LOG_LEVEL)
 
-    def output_op(self, op_str, X_out, data):
+    def output_op(self, op_str, X_out, data, device):
         op, index_str = op_str.split('_')
         if op == 'b':
-            return X_out.broadcast(data, index_str)
+            return X_out.broadcast(data, index_str, device)
         elif op == 'e':
-            return X_out.embed_diag(data)
+            return X_out.embed_diag(data, device)
 
-    def input_op(self, op_str, X_in):        
+    def input_op(self, op_str, X_in, device):
         op, index_str = op_str.split('_')
         if op == 'g':
-            return X_in.gather_diag()
+            return X_in.gather_diag(device)
         elif op == 'p':
-            return X_in.pool(index_str)
+            return X_in.pool(index_str, device)
 
     def forward(self, X_in, X_out, indices_identity, indices_trans):
         '''
@@ -55,21 +55,23 @@ class SparseMatrixEquivariantLayerBlock(nn.Module):
         #TODO: can add a cache for input operations here
         for i in range(self.n_params):
             op_inp, op_out = self.all_ops[i]
+            weight = self.weights[i]
+            device = weight.device
             if op_out[0] == "i":
                 # Identity
                 X_intersection_vals = X_in.gather_mask(indices_identity[0])
-                X_mul = X_intersection_vals @ self.weights[i]
-                X_op_out = X_out.broadcast_from_mask(X_mul, indices_identity[1])
+                X_mul = X_intersection_vals @ weight
+                X_op_out = X_out.broadcast_from_mask(X_mul, indices_identity[1], device)
             elif op_out[0] == "t":
                 # Transpose
                 X_T_intersection_vals = X_in.gather_transpose(indices_trans[0])
-                X_mul = X_T_intersection_vals @ self.weights[i]
-                X_op_out = X_out.broadcast_from_mask(X_mul, indices_trans[1])
+                X_mul = X_T_intersection_vals @ weight
+                X_op_out = X_out.broadcast_from_mask(X_mul, indices_trans[1], device)
             else:
                 # Pool or Gather or Do Nothing
                 X_op_inp = self.input_op(op_inp, X_in)
                 # Multiply values by weight
-                X_mul = torch.matmul(X_op_inp, self.weights[i])
+                X_mul = torch.matmul(X_op_inp, weight)
                 # Broadcast or Embed Diag or Transpose
                 X_op_out = self.output_op(op_out, X_out, X_mul)
             assert X_op_out.nnz() == X_out.nnz()
@@ -99,7 +101,7 @@ class SparseMatrixEquivariantLayer(nn.Module):
     def forward(self, data, indices_identity=None, indices_transpose=None):
         data_out = Data(self.data_schema)
         for i, (relation_i, relation_j) in enumerate(self.relation_pairs):
-            self.logger.info("Relation: ({}, {})".format(relation_i.id, relation_j.id))
+            self.logger.warning("Relation: ({}, {})".format(relation_i.id, relation_j.id))
             X_in = data[relation_i.id]
             Y_in = data[relation_j.id]
             layer = self.block_modules[i]

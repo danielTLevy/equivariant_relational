@@ -31,7 +31,7 @@ class SparseMatrix:
 
         if self.n == self.m and self.indices_diag == None:
             self.indices_diag = self.calc_indices_diag()
-        assert self.is_sorted()
+        #assert self.is_sorted()
 
 
     @classmethod

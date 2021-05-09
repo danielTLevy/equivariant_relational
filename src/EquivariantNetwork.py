@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 import torch.nn as nn
+
 from src.EquivariantLayer import EquivariantLayer
 from src.SparseMatrixEquivariantLayer import SparseMatrixEquivariantLayer
 from src.SparseEquivariantLayer import SparseEquivariantLayer
-from src.Modules import RelationNorm, Activation, EntityPooling, EntityBroadcasting, SparseReLU, SparseMatrixReLU
+from src.Modules import RelationNorm, Activation, EntityPooling, \
+                        EntityBroadcasting, SparseActivation
 
 
 class EquivariantNetwork(nn.Module):
@@ -78,7 +80,7 @@ class SparseEquivariantNetwork(nn.Module):
         self.hidden_dims = (32, 64, 32)
         self.all_dims = [n_channels] + list(self.hidden_dims) + [n_channels]
 
-        self.ReLU = Activation(data_schema, SparseReLU())
+        self.ReLU = SparseActivation(data_schema, nn.ReLU())
         sequential = []
         for i in range(1, len(self.all_dims)-1):
             sequential.append(SparseEquivariantLayer(self.data_schema, self.all_dims[i-1], self.all_dims[i]))
@@ -99,7 +101,7 @@ class SparseMatrixEquivariantNetwork(nn.Module):
         self.n_channels = n_channels
 
 
-        self.ReLU = Activation(data_schema, SparseMatrixReLU())
+        self.ReLU = SparseActivation(data_schema, nn.ReLU())
         self.layer1 = SparseMatrixEquivariantLayer(self.data_schema, n_channels, 32)
         self.norm1 = RelationNorm(self.data_schema, 32, affine=False,
                                   sparse=True, matrix=True)
@@ -110,6 +112,7 @@ class SparseMatrixEquivariantNetwork(nn.Module):
         self.norm3 = RelationNorm(self.data_schema, 32, affine=False,
                                   sparse=True, matrix=True)
         self.layer4 = SparseMatrixEquivariantLayer(self.data_schema, 32, n_channels)
+        self.tanh = SparseActivation(data_schema, nn.Tanh())
 
     def forward(self, data, idx_identity=None, idx_transpose=None):
         if idx_identity is None or idx_transpose is None:
@@ -119,4 +122,5 @@ class SparseMatrixEquivariantNetwork(nn.Module):
         out = self.norm2(self.ReLU(self.layer2(out, idx_identity, idx_transpose)))
         out = self.norm3(self.ReLU(self.layer3(out, idx_identity, idx_transpose)))
         out = self.layer4(out, idx_identity, idx_transpose)
+        out = self.tanh(out)
         return out

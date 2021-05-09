@@ -202,6 +202,7 @@ class SparseData(Data):
     def calculate_indices(self):
         indices_identity = {}
         indices_transpose = {}
+        #TODO: add shortcut for identity when r_i == r_j
         for r_i, matrix_i in self.rel_tensors.items():
             entity_i_n = self.schema.relations[r_i].entities[0]
             entity_i_m = self.schema.relations[r_i].entities[1]

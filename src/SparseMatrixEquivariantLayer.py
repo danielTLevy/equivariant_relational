@@ -101,7 +101,7 @@ class SparseMatrixEquivariantLayer(nn.Module):
     def forward(self, data, indices_identity=None, indices_transpose=None):
         data_out = Data(self.data_schema)
         for i, (relation_i, relation_j) in enumerate(self.relation_pairs):
-            self.logger.warning("Relation: ({}, {})".format(relation_i.id, relation_j.id))
+            #self.logger.warning("Relation: ({}, {})".format(relation_i.id, relation_j.id))
             X_in = data[relation_i.id]
             Y_in = data[relation_j.id]
             layer = self.block_modules[i]

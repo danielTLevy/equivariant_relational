@@ -209,25 +209,17 @@ class EntityPooling(nn.Module):
         return out
 
     
-
-class SparseReLU(nn.Module):
+class SparseActivation(nn.Module):
     '''
-    ReLU applied to sparse tensors
+    Extend torch.nn.module modules to be applied to each relation
     '''
-    def __init__(self):
-        super(SparseReLU, self).__init__()
+    def __init__(self, schema, activation):
+        super(SparseActivation, self).__init__()
+        self.schema = schema
+        self.activation = activation
 
-    def forward(self, sparse_tensor):
-        return SparseTensor( sparse_tensor.indices, F.relu(sparse_tensor.values), sparse_tensor.shape)
+    def forward(self, X):
+        for relation in self.schema.relations:
+            X[relation.id].values = self.activation(X[relation.id].values)
+        return X
 
-class SparseMatrixReLU(nn.Module):
-    '''
-    ReLU applied to sparse matrix
-    '''
-    def __init__(self):
-        super(SparseMatrixReLU, self).__init__()
-
-    def forward(self, sparse_matrix):
-        out =  sparse_matrix.clone()
-        out.values = F.relu(out.values)
-        return out

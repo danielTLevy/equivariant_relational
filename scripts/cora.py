@@ -80,24 +80,36 @@ def load_data():
     relations = [rel_paper, rel_cites, rel_content]
     schema = DataSchema(entities, relations)
 
+    # For each paper, get a random negative sample
+    random_class_offset = np.random.randint(1, n_classes, (n_papers,))
+    paper_neg = np.stack((paper[0], (paper[1] + random_class_offset) % n_classes))
 
     paper_matrix = SparseMatrix(
-            indices = torch.LongTensor(paper),
-            values = torch.ones(paper.shape[1], 1),
+            indices = torch.LongTensor(np.concatenate((paper, paper_neg),axis=1)),
+            values = torch.cat((torch.ones(paper.shape[1], 1), torch.zeros(paper_neg.shape[1], 1))),
             shape = (n_papers, n_classes, 1)
-            )
+            ).coalesce()
     class_targets = torch.LongTensor(paper[1])
-    cites_matrix = SparseMatrix(
-            indices = torch.LongTensor(cites),
-            values = torch.ones(cites.shape[1], 1),
-            shape = (n_papers, n_papers, 1)
-            )
-    content_matrix = SparseMatrix(
-            indices = torch.LongTensor(content),
-            values = torch.ones(content.shape[1], 1),
-            shape = (n_papers, n_words, 1)
-            )
 
+
+    # Randomly fill in values and coalesce to remove duplicates
+    cites_neg = np.random.randint(0, n_papers, cites.shape)
+    cites_matrix = SparseMatrix(
+            indices = torch.LongTensor(np.concatenate((cites, cites_neg),axis=1)),
+            values = torch.cat((torch.ones(cites.shape[1], 1), torch.zeros(cites_neg.shape[1], 1))),
+            shape = (n_papers, n_papers, 1)
+            ).coalesce()
+
+    # For each paper, randomly fill in values and coalesce to remove duplicates
+    content_neg = np.stack((np.random.randint(0, n_papers, (content.shape[1],)),
+                            np.random.randint(0, n_words, (content.shape[1],))))
+    content_matrix = SparseMatrix(
+            indices = torch.LongTensor(np.concatenate((content, content_neg),axis=1)),
+            values = torch.cat((torch.ones(content.shape[1], 1), torch.zeros(content_neg.shape[1], 1))),
+            shape = (n_papers, n_words, 1)
+            ).coalesce()
+
+    '''
     paper_dense_indices = np.array([np.tile(range(n_papers), n_classes),
                                 np.repeat(range(n_classes), n_papers)])
     paper_dense_values = torch.zeros(paper_dense_indices.shape[1])
@@ -109,8 +121,9 @@ def load_data():
             values = torch.Tensor(paper_dense_values).unsqueeze(1),
             shape = (n_papers, n_classes, 1)
             )    
+    '''
     data = SparseData(schema)
-    data[0] = paper_dense_matrix
+    data[0] = paper_matrix
     data[1] = cites_matrix
     data[2] = content_matrix
     return data, schema, class_targets
@@ -128,16 +141,16 @@ if __name__ == '__main__':
 
     #%%
 
-    # Loss functions:        
-    def sparse_loss_fcn(data_pred, data_true):
+    # Loss functions:
+
+    def binary_loss(data_pred, data_true):
         '''
         Loss over all relations
         '''
         loss = torch.zeros(1).to(device)
-        
         for relation in schema.relations:
             rel_id = relation.id
-            loss += torch.mean((data_pred[rel_id].values - data_true[rel_id].values)**2)
+            loss += F.binary_cross_entropy(data_pred[rel_id].values, data_true[rel_id].values)
         loss = loss / len(relations)
         return loss
 
@@ -145,7 +158,7 @@ if __name__ == '__main__':
         return F.cross_entropy(data_pred, data_true)
 
 
-    net = SparseMatrixEquivariantNetwork(schema, 1, target_rel=0).to(device)
+    net = SparseMatrixEquivariantNetwork(schema, 1).to(device)
 
     learning_rate = 1e-5
     optimizer = optim.Adam(net.parameters(), lr=learning_rate, betas=(0.0, 0.999))
@@ -160,7 +173,7 @@ if __name__ == '__main__':
     for i in progress:
         optimizer.zero_grad()
         data_out = net.forward(data, indices_identity, indices_transpose)
-        train_loss = classification_loss(data_out, targets)
+        train_loss = binary_loss(data_out, data)
         train_loss.backward()
         optimizer.step()
         progress.set_description("Train: {:.4f}".format(train_loss.item()))

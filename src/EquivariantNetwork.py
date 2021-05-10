@@ -113,8 +113,7 @@ class SparseMatrixEquivariantNetwork(nn.Module):
                                   sparse=True, matrix=True)
         self.layer4 = SparseMatrixEquivariantLayer(self.data_schema, 32, n_channels,
                                                    target_rel=target_rel)
-        #self.sigmoid = SparseActivation(data_schema, nn.Sigmoid())
-        self.softmax = nn.Softmax()
+        self.sigmoid = SparseActivation(data_schema, nn.Sigmoid())
 
     def forward(self, data, idx_identity=None, idx_transpose=None):
         if idx_identity is None or idx_transpose is None:
@@ -124,6 +123,5 @@ class SparseMatrixEquivariantNetwork(nn.Module):
         out = self.norm2(self.ReLU(self.layer2(out, idx_identity, idx_transpose)))
         out = self.norm3(self.ReLU(self.layer3(out, idx_identity, idx_transpose)))
         out = self.layer4(out, idx_identity, idx_transpose)
-        data_out =  out[0].values.view(7, 2708).T
-        data_out = self.softmax(data_out)
-        return data_out
+        out = self.sigmoid(out)
+        return out

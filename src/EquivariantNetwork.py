@@ -95,7 +95,7 @@ class SparseEquivariantNetwork(nn.Module):
 
 
 class SparseMatrixEquivariantNetwork(nn.Module):
-    def __init__(self, data_schema, n_channels):
+    def __init__(self, data_schema, n_channels, target_rel=None):
         super(SparseMatrixEquivariantNetwork, self).__init__()
         self.data_schema = data_schema
         self.n_channels = n_channels
@@ -111,8 +111,10 @@ class SparseMatrixEquivariantNetwork(nn.Module):
         self.layer3 = SparseMatrixEquivariantLayer(self.data_schema, 64, 32)
         self.norm3 = RelationNorm(self.data_schema, 32, affine=False,
                                   sparse=True, matrix=True)
-        self.layer4 = SparseMatrixEquivariantLayer(self.data_schema, 32, n_channels)
-        self.tanh = SparseActivation(data_schema, nn.Tanh())
+        self.layer4 = SparseMatrixEquivariantLayer(self.data_schema, 32, n_channels,
+                                                   target_rel=target_rel)
+        #self.sigmoid = SparseActivation(data_schema, nn.Sigmoid())
+        self.softmax = nn.Softmax()
 
     def forward(self, data, idx_identity=None, idx_transpose=None):
         if idx_identity is None or idx_transpose is None:
@@ -122,5 +124,6 @@ class SparseMatrixEquivariantNetwork(nn.Module):
         out = self.norm2(self.ReLU(self.layer2(out, idx_identity, idx_transpose)))
         out = self.norm3(self.ReLU(self.layer3(out, idx_identity, idx_transpose)))
         out = self.layer4(out, idx_identity, idx_transpose)
-        out = self.tanh(out)
-        return out
+        data_out =  out[0].values.view(7, 2708).T
+        data_out = self.softmax(data_out)
+        return data_out

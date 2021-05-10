@@ -33,40 +33,39 @@ def load_data():
     paper_names = []
     classes = []
     word_names = ['word'+str(i+1) for i in range(1433)]
-    
+
     with open(csv_file_str.format('paper')) as paperfile:
         reader = csv.reader(paperfile)
         for paper_name, class_name in reader:
             paper_names.append(paper_name)
             classes.append(class_name)
-    
+
     class_names = list(np.unique(classes))
     class_name_to_idx = {class_name : i for i, class_name in enumerate(class_names)}
     paper_name_to_idx = {paper_name: i for i, paper_name in enumerate(paper_names)}
     paper = np.array([[paper_name_to_idx[paper_name] for paper_name in paper_names],
                       [class_name_to_idx[class_name] for class_name in classes]])
-    
+
     cites = []
     with open(csv_file_str.format('cites')) as citesfile:
         reader = csv.reader(citesfile)
         for citer, citee in reader:
             cites.append([paper_name_to_idx[citer], paper_name_to_idx[citee]])
     cites = np.array(cites).T
-    
+
     content = []
     def word_to_idx(word):
         '''
         words all formatted like: "word1328"
         '''
         return int(word[4:]) - 1
-    
+
     with open(csv_file_str.format('content')) as contentfile:
         reader = csv.reader(contentfile)
         for paper_name, word_name in reader:
             content.append([paper_name_to_idx[paper_name],
                             word_to_idx(word_name)])
     content = np.array(content).T
-    
 
     n_papers = len(paper_names)
     n_classes = len(class_names)
@@ -80,7 +79,7 @@ def load_data():
     rel_content = Relation(2, [ent_papers, ent_words])
     relations = [rel_paper, rel_cites, rel_content]
     schema = DataSchema(entities, relations)
-    
+
 
     paper_matrix = SparseMatrix(
             indices = torch.LongTensor(paper),
@@ -122,12 +121,10 @@ if __name__ == '__main__':
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     data, schema, targets = load_data()
-    data = data.to(device)    
-    target = targets.to(device)
+    data = data.to(device)   
+    targets = targets.to(device)
     indices_identity, indices_transpose = data.calculate_indices()
     relations = schema.relations
-
-    
 
     #%%
 
@@ -143,22 +140,20 @@ if __name__ == '__main__':
             loss += torch.mean((data_pred[rel_id].values - data_true[rel_id].values)**2)
         loss = loss / len(relations)
         return loss
+
     def classification_loss(data_pred, data_true):
-        pred = data_pred[0].values.view(2708, 7)
-        return F.cross_entropy(pred, data_true)
+        return F.cross_entropy(data_pred, data_true)
 
-    ce_loss = nn.CrossEntropyLoss()
-    
-    net = SparseMatrixEquivariantNetwork(schema, 1).to(device)
 
-    learning_rate = 1e-4
+    net = SparseMatrixEquivariantNetwork(schema, 1, target_rel=0).to(device)
+
+    learning_rate = 1e-5
     optimizer = optim.Adam(net.parameters(), lr=learning_rate, betas=(0.0, 0.999))
-    
+
     sched = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
                                                  factor=0.5,
                                                  patience=10,
                                                  verbose=True)
-    
     #%%
     epochs= 50
     progress = tqdm(range(epochs), desc="Loss: ", position=0, leave=True)
@@ -169,4 +164,3 @@ if __name__ == '__main__':
         train_loss.backward()
         optimizer.step()
         progress.set_description("Train: {:.4f}".format(train_loss.item()))
-    

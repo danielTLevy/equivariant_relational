@@ -220,6 +220,7 @@ class SparseActivation(nn.Module):
 
     def forward(self, X):
         for relation in self.schema.relations:
-            X[relation.id].values = self.activation(X[relation.id].values)
+            if relation.id in X:
+                X[relation.id].values = self.activation(X[relation.id].values)
         return X
 

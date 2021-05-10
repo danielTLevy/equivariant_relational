@@ -16,7 +16,7 @@ class EquivariantNetwork(nn.Module):
         self.hidden_dims = (32, 64, 32)
         self.all_dims = [n_channels] + list(self.hidden_dims) + [n_channels]
         
-        self.ReLU = Activation(data_schema, )
+        self.ReLU = Activation(data_schema, nn.ReLU())
         sequential = []
         for i in range(1, len(self.all_dims)-1):
             sequential.append(EquivariantLayer(self.data_schema, self.all_dims[i-1], self.all_dims[i]))

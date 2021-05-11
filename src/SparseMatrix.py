@@ -8,9 +8,6 @@ from src.utils import PREFIX_DIMS, get_masks_of_intersection
 import pdb
 
 class SparseMatrix:
-    '''
-    Wrapper for pytorch_sparse's sparse matrices
-    '''
     def __init__(self, indices, values, shape, indices_diag=None):
         assert indices.shape[0] == 2, "Indices must be two dimensions"
         assert indices.shape[1] == values.shape[0], "Number of nonzero elements in indices and values do not match"
@@ -138,6 +135,8 @@ class SparseMatrix:
     def to(self, *args, **kwargs):
         self.indices = self.indices.to(*args, **kwargs)
         self.values = self.values.to(*args, **kwargs)
+        if self.indices_diag != None:
+            self.indices_diag = self.indices_diag.to(*args, **kwargs)
         return self
 
     def add_sparse_matrix(self, other):

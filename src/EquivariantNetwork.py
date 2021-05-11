@@ -73,7 +73,7 @@ class EquivariantAutoEncoder(nn.Module):
         return out
 
 class SparseEquivariantNetwork(nn.Module):
-    def __init__(self, data_schema, n_channels):
+    def __init__(self, data_schema, n_channels, sigmoid=False):
         super(SparseEquivariantNetwork, self).__init__()
         self.data_schema = data_schema
         self.n_channels = n_channels
@@ -87,6 +87,8 @@ class SparseEquivariantNetwork(nn.Module):
             sequential.append(self.ReLU)
             sequential.append(RelationNorm(self.data_schema, self.all_dims[i], affine=False, sparse=True))
         sequential.append(SparseEquivariantLayer(self.data_schema, self.all_dims[-2], self.all_dims[-1]))
+        if sigmoid:
+            sequential.append(SparseActivation(self.data_schema, nn.Sigmoid()))
         self.sequential = nn.Sequential(*sequential)
 
     def forward(self, data):

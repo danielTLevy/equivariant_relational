@@ -130,7 +130,7 @@ class Data:
         for relation in self.schema.relations:
             dense = self.rel_tensors[relation.id]
             sparse[relation.id] = SparseMatrix.from_dense_tensor(dense)
-        return SparseData(self.schema, sparse, batch_size=self.batch_size)
+        return SparseMatrixData(self.schema, sparse, batch_size=self.batch_size)
 
     def to_tensor(self):
         # Get maximum multiplicity for each relation
@@ -188,7 +188,10 @@ class Data:
             tensor[relation.id] = rel_data.expand(output_size)
         return tensor
 
-class SparseData(Data):
+class SparseTensorData(Data):
+    pass
+
+class SparseMatrixData(Data):
     def mask_data(self, observed):
         pass
 

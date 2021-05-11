@@ -4,7 +4,7 @@
 Entities:
     paper: 2708: Each has unique int. Nonconsecutive, so must translate to idx
     word: 1433. Each is like "word125" so just need to convert to 125 to get idx
-    class: 7. Must translate text to idx 
+    class: 7. Must translate text to idx
 Relationships:
     cites: 5429, paper to paper
     content: 49216, paper to word
@@ -12,10 +12,10 @@ Relationships:
     Alternatively, could make class a channel attribute for a paper?
     This would involve getting the code working for sets too probably
 Goal is to predict class - use 10-fold cross validation.
-Use 8/10 for train, 1/10 for val, 1/10 for test – train on val before testing on test 
+Use 8/10 for train, 1/10 for val, 1/10 for test – train on val before testing on test
 '''
 #%%
-from src.DataSchema import DataSchema, Entity, Relation, SparseData
+from src.DataSchema import DataSchema, Entity, Relation, SparseMatrixData
 from src.SparseMatrix import SparseMatrix
 from src.EquivariantNetwork import SparseMatrixEquivariantNetwork
 import torch
@@ -80,15 +80,19 @@ def load_data():
     relations = [rel_paper, rel_cites, rel_content]
     schema = DataSchema(entities, relations)
 
+
+    '''
     # For each paper, get a random negative sample
     random_class_offset = np.random.randint(1, n_classes, (n_papers,))
     paper_neg = np.stack((paper[0], (paper[1] + random_class_offset) % n_classes))
-
     paper_matrix = SparseMatrix(
             indices = torch.LongTensor(np.concatenate((paper, paper_neg),axis=1)),
             values = torch.cat((torch.ones(paper.shape[1], 1), torch.zeros(paper_neg.shape[1], 1))),
             shape = (n_papers, n_classes, 1)
             ).coalesce()
+    '''
+    paper_set = torch.Tensor((n_papers, n_classes))
+    paper_set[paper] = 1
     class_targets = torch.LongTensor(paper[1])
 
 
@@ -122,7 +126,7 @@ def load_data():
             shape = (n_papers, n_classes, 1)
             )    
     '''
-    data = SparseData(schema)
+    data = SparseMatrixData(schema)
     data[0] = paper_matrix
     data[1] = cites_matrix
     data[2] = content_matrix
@@ -160,20 +164,38 @@ if __name__ == '__main__':
 
     net = SparseMatrixEquivariantNetwork(schema, 1).to(device)
 
-    learning_rate = 1e-5
+    learning_rate = 1e-4
     optimizer = optim.Adam(net.parameters(), lr=learning_rate, betas=(0.0, 0.999))
 
     sched = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
                                                  factor=0.5,
-                                                 patience=10,
+                                                 patience=20,
                                                  verbose=True)
     #%%
     epochs= 50
+    save_every = 10
     progress = tqdm(range(epochs), desc="Loss: ", position=0, leave=True)
+    PATH = "../TEST_MODEL2.pt"
     for i in progress:
         optimizer.zero_grad()
-        data_out = net.forward(data, indices_identity, indices_transpose)
+        data_out = net(data, indices_identity, indices_transpose)
         train_loss = binary_loss(data_out, data)
         train_loss.backward()
         optimizer.step()
         progress.set_description("Train: {:.4f}".format(train_loss.item()))
+        sched.step(train_loss.item())
+        if i % save_every == 0:
+            torch.save({
+                'epoch': i,
+                'model_state_dict': net.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'loss': train_loss.item()
+                }, PATH)
+
+    #%%
+    checkpoint = torch.load("../TEST_MODEL.pt", map_location=torch.device('cpu'))
+    net.load_state_dict(checkpoint['model_state_dict'])
+    loss = checkpoint['loss']
+    #%%
+    net.eval()
+    data_out = net(data, indices_identity, indices_transpose)

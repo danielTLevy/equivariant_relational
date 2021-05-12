@@ -128,8 +128,10 @@ class SparseEquivariantLayerBlock(nn.Module):
 
         X = X.permute(matching_in_dims)
 
-        matching_out_indices = torch.index_select(X_out.indices, 0, torch.LongTensor(matching_out_dims))
-        broadcast_out_indices = torch.index_select(X_out.indices, 0, torch.LongTensor(broadcast_out_dims))
+        matching_out_indices = torch.index_select(X_out.indices, 0, 
+                                                  torch.LongTensor(matching_out_dims).to(X_out.indices.device))
+        broadcast_out_indices = torch.index_select(X_out.indices, 0,
+                                                   torch.LongTensor(broadcast_out_dims).to(X_out.indices.device))
 
         X = X.broadcast(broadcast_sizes, broadcast_out_indices, matching_out_indices)
         # Update equality mapping
@@ -244,11 +246,16 @@ class SparseEquivariantLayerBlock(nn.Module):
 
 
 class SparseEquivariantLayer(nn.Module):
-    def __init__(self, data_schema, input_dim=1, output_dim=1):
+    def __init__(self, data_schema, input_dim=1, output_dim=1, target_rel=None):
         super(SparseEquivariantLayer, self).__init__()
         self.data_schema = data_schema
-        self.relation_pairs = list(itertools.product(self.data_schema.relations,
-                                                self.data_schema.relations))
+        self.target_rel = target_rel
+        if target_rel == None:
+            self.relation_pairs = list(itertools.product(self.data_schema.relations,
+                                                    self.data_schema.relations))
+        else:
+            self.relation_pairs = [(rel_i, self.data_schema.relations[target_rel]) \
+                                   for rel_i in self.data_schema.relations]
         block_modules = []
         self.input_dim = input_dim
         self.output_dim = output_dim

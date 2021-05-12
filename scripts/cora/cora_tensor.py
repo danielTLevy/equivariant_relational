@@ -27,7 +27,7 @@ import numpy as np
 import csv
 import pdb
 #%%
-csv_file_str = './data/cora/{}.csv'
+csv_file_str = '../data/cora/{}.csv'
 
 def load_data():
     paper_names = []
@@ -109,21 +109,21 @@ def load_data():
             shape = np.array([n_papers, n_words])
             ).coalesce()
 
-    '''
+
     paper_dense_indices = np.array([np.tile(range(n_papers), n_classes),
                                 np.repeat(range(n_classes), n_papers)])
     paper_dense_values = torch.zeros(paper_dense_indices.shape[1])
     for paper_i, class_name in enumerate(classes):
         class_i = class_name_to_idx[class_name]
         paper_dense_values[paper_i*n_classes + class_i] = 1
-    paper_dense_matrix = SparseMatrix(
+    paper_dense_matrix = SparseTensor(
             indices = torch.LongTensor(paper_dense_indices),
-            values = torch.Tensor(paper_dense_values).unsqueeze(1),
-            shape = (n_papers, n_classes, 1)
+            values = torch.Tensor(paper_dense_values).unsqueeze(0),
+            shape = np.array([n_papers, n_classes])
             )    
-    '''
+
     data = SparseTensorData(schema)
-    data[0] = paper_matrix
+    data[0] = paper_dense_matrix
     data[1] = cites_matrix
     data[2] = content_matrix
     return data, schema, class_targets
@@ -157,7 +157,7 @@ if __name__ == '__main__':
         return F.cross_entropy(data_pred, data_true)
 
 
-    net = SparseEquivariantNetwork(schema, 1, sigmoid=True).to(device)
+    net = SparseEquivariantNetwork(schema, 1, sigmoid=True, target_rel=0).to(device)
 
     learning_rate = 1e-4
     optimizer = optim.Adam(net.parameters(), lr=learning_rate, betas=(0.0, 0.999))
@@ -167,7 +167,7 @@ if __name__ == '__main__':
                                                  patience=20,
                                                  verbose=True)
     #%%
-    epochs= 50
+    epochs= 1
     save_every = 10
     progress = tqdm(range(epochs), desc="Loss: ", position=0, leave=True)
     PATH = "../cora_tensor_model.pt"
@@ -187,8 +187,8 @@ if __name__ == '__main__':
                 'loss': train_loss.item()
                 }, PATH)
 
-    '''
     #%%
+    '''
     checkpoint = torch.load("../cora_tensor_model.pt", map_location=torch.device('cpu'))
     net.load_state_dict(checkpoint['model_state_dict'])
     loss = checkpoint['loss']

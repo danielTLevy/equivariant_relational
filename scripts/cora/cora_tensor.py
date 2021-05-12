@@ -27,7 +27,7 @@ import numpy as np
 import csv
 import pdb
 #%%
-csv_file_str = '../data/cora/{}.csv'
+csv_file_str = './data/cora/{}.csv'
 
 def load_data():
     paper_names = []

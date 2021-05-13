@@ -27,7 +27,7 @@ import numpy as np
 import csv
 import pdb
 #%%
-csv_file_str = '../data/cora/{}.csv'
+csv_file_str = './data/cora/{}.csv'
 
 def load_data():
     paper_names = []
@@ -74,7 +74,7 @@ def load_data():
     ent_classes = Entity(1, n_classes)
     ent_words = Entity(2, n_words)
     entities = [ent_papers, ent_classes, ent_words]
-    rel_paper = Relation(0, [ent_papers, ent_classes])
+    rel_paper = Relation(0, [ent_papers, ent_papers], is_set=True)
     rel_cites = Relation(1, [ent_papers, ent_papers])
     rel_content = Relation(2, [ent_papers, ent_words])
     relations = [rel_paper, rel_cites, rel_content]
@@ -91,13 +91,19 @@ def load_data():
             shape = (n_papers, n_classes, 1)
             ).coalesce()
     '''
-    paper_set = torch.Tensor((n_papers, n_classes))
-    paper_set[paper] = 1
+    paper_set_values = torch.zeros((n_papers, n_classes))
+    paper_set_values[paper] = 1
+    paper_matrix = SparseMatrix(
+            indices = torch.LongTensor(np.stack([paper[0],paper[0]])),
+            values = torch.Tensor(paper_set_values),
+            shape  = (n_papers, n_papers, 7),
+            is_set = True)
     class_targets = torch.LongTensor(paper[1])
 
 
     # Randomly fill in values and coalesce to remove duplicates
-    cites_neg = np.random.randint(0, n_papers, cites.shape)
+    #cites_neg = np.random.randint(0, n_papers, cites.shape)
+    cites_neg = np.random.randint(0, n_papers, (2, 0))
     cites_matrix = SparseMatrix(
             indices = torch.LongTensor(np.concatenate((cites, cites_neg),axis=1)),
             values = torch.cat((torch.ones(cites.shape[1], 1), torch.zeros(cites_neg.shape[1], 1))),
@@ -105,8 +111,9 @@ def load_data():
             ).coalesce()
 
     # For each paper, randomly fill in values and coalesce to remove duplicates
-    content_neg = np.stack((np.random.randint(0, n_papers, (content.shape[1],)),
-                            np.random.randint(0, n_words, (content.shape[1],))))
+    #content_neg = np.stack((np.random.randint(0, n_papers, (content.shape[1],)),
+    #                        np.random.randint(0, n_words, (content.shape[1],))))
+    content_neg = np.random.randint(0, n_papers, (2,0))
     content_matrix = SparseMatrix(
             indices = torch.LongTensor(np.concatenate((content, content_neg),axis=1)),
             values = torch.cat((torch.ones(content.shape[1], 1), torch.zeros(content_neg.shape[1], 1))),
@@ -162,7 +169,12 @@ if __name__ == '__main__':
         return F.cross_entropy(data_pred, data_true)
 
 
-    net = SparseMatrixEquivariantNetwork(schema, 1).to(device)
+    
+    n_channels = {0: 7, 1:1, 2:1}
+    net = SparseMatrixEquivariantNetwork(schema, n_channels, target_rel=0,
+                                         target_channels=7,
+                                         final_activation = nn.Softmax(1))
+    net = net.to(device)
 
     learning_rate = 1e-4
     optimizer = optim.Adam(net.parameters(), lr=learning_rate, betas=(0.0, 0.999))
@@ -172,14 +184,14 @@ if __name__ == '__main__':
                                                  patience=20,
                                                  verbose=True)
     #%%
-    epochs= 50
+    epochs= 10
     save_every = 10
     progress = tqdm(range(epochs), desc="Loss: ", position=0, leave=True)
-    PATH = "../TEST_MODEL2.pt"
+    PATH = "../test_model_matrix_cora.pt"
     for i in progress:
         optimizer.zero_grad()
         data_out = net(data, indices_identity, indices_transpose)
-        train_loss = binary_loss(data_out, data)
+        train_loss = classification_loss(data_out[0].values, targets)
         train_loss.backward()
         optimizer.step()
         progress.set_description("Train: {:.4f}".format(train_loss.item()))

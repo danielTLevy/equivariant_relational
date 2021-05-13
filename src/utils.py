@@ -44,14 +44,14 @@ def get_all_entity_partitions(combined_entities):
     partitions = {}
     for entity in all_entities:
         entity_indices = PREFIX_DIMS + np.where(combined_entities == entity)[0]
-        partitions[entity] = list(get_partitions(list(entity_indices)))
+        partitions[entity.id] = list(get_partitions(list(entity_indices)))
     
     partition_product = itertools.product(*partitions.values())
     entity_partitions = []
     for combination in partition_product:
         entity_partition_map = {}
         for i, entity in enumerate(all_entities):
-            entity_partition_map[entity] = combination[i]
+            entity_partition_map[entity.id] = combination[i]
         entity_partitions.append(entity_partition_map)
     return entity_partitions
 
@@ -211,7 +211,13 @@ def get_all_ops(relation_in, relation_out):
     partitions = get_all_input_output_partitions(relation_in, relation_out)
     return [get_ops(partition) for partition in partitions]
 
-
+def get_ops_from_partitions(partitions, input_is_set=False, output_is_set=False):
+    all_ops = [get_ops(partition) for partition in partitions]
+    if input_is_set:
+        all_ops = [(op_in, op_out) for op_in, op_out in all_ops if op_in.split('_')[1] == 'diag']
+    if output_is_set:
+        all_ops = [(op_in, op_out) for op_in, op_out in all_ops if op_out.split('_')[1] == 'diag']
+    return all_ops
 
 def get_masks_of_intersection(array1, array2):
     # Return the mask of values of indices of array2 that intersect with array1

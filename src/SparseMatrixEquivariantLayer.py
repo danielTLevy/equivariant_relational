@@ -7,12 +7,13 @@ import torch
 import torch.nn as nn
 import itertools
 import logging
-from src.utils import get_all_ops, PREFIX_DIMS
+from src.utils import get_all_ops, get_all_input_output_partitions, get_ops_from_partitions
 from src.DataSchema import Data
 from src.SparseMatrix import SparseMatrix
 import pdb
 
 LOG_LEVEL = logging.INFO
+
 
 class SparseMatrixEquivariantLayerBlock(nn.Module):
     # Layer mapping between two relations
@@ -20,9 +21,13 @@ class SparseMatrixEquivariantLayerBlock(nn.Module):
         super(SparseMatrixEquivariantLayerBlock, self).__init__()
         assert len(relation_in.entities) == 2, "Relation must be second order"
         assert len(relation_out.entities) == 2, "Relation must be second order"
+        in_is_set = relation_in.is_set
+        out_is_set = relation_out.is_set
         self.in_dim = input_dim
         self.out_dim = output_dim
-        self.all_ops = get_all_ops(relation_in, relation_out)
+        self.input_output_partitions = get_all_input_output_partitions(relation_in, relation_out)
+        self.all_ops = get_ops_from_partitions(self.input_output_partitions,
+                                               in_is_set, out_is_set)
         self.n_params = len(self.all_ops)
         stdv = 0.1 / math.sqrt(self.in_dim)
         self.weights = nn.Parameter(torch.Tensor(self.n_params, self.in_dim, self.out_dim).uniform_(-stdv, stdv))
@@ -84,6 +89,8 @@ class SparseMatrixEquivariantLayerBlock(nn.Module):
 class SparseMatrixEquivariantLayer(nn.Module):
     def __init__(self, data_schema, input_dim=1, output_dim=1, target_rel=None):
         '''
+        input_dim: either a rel_id: dimension dict, or an integer for all relations
+        output_dim: either a rel_id: dimension dict, or an integer for all relations
         target_rel: only predict one matrix
         '''
         super(SparseMatrixEquivariantLayer, self).__init__()
@@ -96,10 +103,17 @@ class SparseMatrixEquivariantLayer(nn.Module):
             self.relation_pairs = [(rel_i, self.data_schema.relations[target_rel]) \
                                    for rel_i in self.data_schema.relations]
         block_modules = []
-        self.input_dim = input_dim
-        self.output_dim = output_dim
+        if type(input_dim) == dict:
+            self.input_dim = input_dim
+        else:
+            self.input_dim = {rel.id: input_dim for rel in self.data_schema.relations}
+        if type(output_dim) == dict:
+            self.output_dim = output_dim
+        else:
+            self.output_dim = {rel.id: output_dim for rel in self.data_schema.relations}
         for relation_i, relation_j in self.relation_pairs:
-            block_module = SparseMatrixEquivariantLayerBlock(self.input_dim, self.output_dim,
+            block_module = SparseMatrixEquivariantLayerBlock(self.input_dim[relation_i.id],
+                                                             self.output_dim[relation_j.id],
                                                               relation_i, relation_j)
             block_modules.append(block_module)
         self.block_modules = nn.ModuleList(block_modules)

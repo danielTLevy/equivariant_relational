@@ -156,8 +156,11 @@ if __name__ == '__main__':
     def classification_loss(data_pred, data_true):
         return F.cross_entropy(data_pred, data_true)
 
+    def binary_cross_entropy(data_pred, data_true):
+        return F.binary_cross_entropy(data_pred, data_true)
 
-    net = SparseEquivariantNetwork(schema, 1, sigmoid=True, target_rel=0).to(device)
+    net = SparseEquivariantNetwork(schema, 1,  target_rel=0,
+                                   final_activation=nn.Softmax(dim=1)).to(device)
 
     learning_rate = 1e-4
     optimizer = optim.Adam(net.parameters(), lr=learning_rate, betas=(0.0, 0.999))
@@ -167,14 +170,14 @@ if __name__ == '__main__':
                                                  patience=20,
                                                  verbose=True)
     #%%
-    epochs= 1
+    epochs= 10
     save_every = 10
     progress = tqdm(range(epochs), desc="Loss: ", position=0, leave=True)
     PATH = "../cora_tensor_model.pt"
     for i in progress:
         optimizer.zero_grad()
         data_out = net(data)
-        train_loss = binary_loss(data_out, data)
+        train_loss = classification_loss(data_out, targets)
         train_loss.backward()
         optimizer.step()
         progress.set_description("Train: {:.4f}".format(train_loss.item()))

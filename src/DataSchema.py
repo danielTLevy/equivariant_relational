@@ -27,11 +27,15 @@ class Entity:
     def __repr__(self):
         return "Entity(id={}, n_instances={})".format(self.id, self.n_instances)
     
+    def __eq__(self, other):
+        return self.id == other.id and self.n_instances == other.n_instances
+
 class Relation:
-    def __init__(self, relation_id, entities, n_channels=1):
+    def __init__(self, relation_id, entities, n_channels=1, is_set=False):
         self.id = relation_id
         self.entities = entities
         self.n_channels = n_channels
+        self.is_set = is_set
 
     def get_shape(self):
         return [entity.n_instances for entity in self.entities]

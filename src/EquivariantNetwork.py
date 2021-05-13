@@ -73,13 +73,13 @@ class EquivariantAutoEncoder(nn.Module):
         return out
 
 class SparseEquivariantNetwork(nn.Module):
-    def __init__(self, data_schema, n_channels, sigmoid=False, target_rel=None):
+    def __init__(self, data_schema, n_channels, target_rel=None, final_activation=None):
         super(SparseEquivariantNetwork, self).__init__()
         self.data_schema = data_schema
         self.n_channels = n_channels
         self.hidden_dims = (32, 64, 32)
         self.all_dims = [n_channels] + list(self.hidden_dims) + [n_channels]
-
+        self.target_rel = target_rel
         self.ReLU = SparseActivation(data_schema, nn.ReLU())
         sequential = []
         for i in range(1, len(self.all_dims)-1):
@@ -88,21 +88,29 @@ class SparseEquivariantNetwork(nn.Module):
             sequential.append(RelationNorm(self.data_schema, self.all_dims[i], affine=False, sparse=True))
         sequential.append(SparseEquivariantLayer(self.data_schema, self.all_dims[-2],
                                                  self.all_dims[-1], target_rel=target_rel))
-        if sigmoid:
-            sequential.append(SparseActivation(self.data_schema, nn.Sigmoid()))
+
         self.sequential = nn.Sequential(*sequential)
+
+        if final_activation == None:
+            final_activation = nn.Identity()
+        self.final = SparseActivation(data_schema, final_activation)
 
     def forward(self, data):
         out = self.sequential(data)
+        if self.classification:
+            out = out[self.target_rel].to_dense()[0,:]
+        out = self.final(out)
         return out
 
 
 class SparseMatrixEquivariantNetwork(nn.Module):
-    def __init__(self, data_schema, n_channels, target_rel=None):
+    def __init__(self, data_schema, n_channels, target_rel=None, target_channels=None,
+                 final_activation=None):
         super(SparseMatrixEquivariantNetwork, self).__init__()
         self.data_schema = data_schema
         self.n_channels = n_channels
-
+        if target_channels is None:
+            target_channels = n_channels
 
         self.ReLU = SparseActivation(data_schema, nn.ReLU())
         self.layer1 = SparseMatrixEquivariantLayer(self.data_schema, n_channels, 32)
@@ -114,9 +122,11 @@ class SparseMatrixEquivariantNetwork(nn.Module):
         self.layer3 = SparseMatrixEquivariantLayer(self.data_schema, 64, 32)
         self.norm3 = RelationNorm(self.data_schema, 32, affine=False,
                                   sparse=True, matrix=True)
-        self.layer4 = SparseMatrixEquivariantLayer(self.data_schema, 32, n_channels,
+        self.layer4 = SparseMatrixEquivariantLayer(self.data_schema, 32, target_channels,
                                                    target_rel=target_rel)
-        self.sigmoid = SparseActivation(data_schema, nn.Sigmoid())
+        if final_activation == None:
+            final_activation = nn.Identity()
+        self.final = SparseActivation(data_schema, final_activation)
 
     def forward(self, data, idx_identity=None, idx_transpose=None):
         if idx_identity is None or idx_transpose is None:
@@ -126,5 +136,5 @@ class SparseMatrixEquivariantNetwork(nn.Module):
         out = self.norm2(self.ReLU(self.layer2(out, idx_identity, idx_transpose)))
         out = self.norm3(self.ReLU(self.layer3(out, idx_identity, idx_transpose)))
         out = self.layer4(out, idx_identity, idx_transpose)
-        out = self.sigmoid(out)
+        out = self.final(out)
         return out

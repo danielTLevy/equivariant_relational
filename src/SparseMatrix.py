@@ -8,11 +8,12 @@ from src.utils import PREFIX_DIMS, get_masks_of_intersection
 import pdb
 
 class SparseMatrix:
-    def __init__(self, indices, values, shape, indices_diag=None):
+    def __init__(self, indices, values, shape, indices_diag=None, is_set=False):
         assert indices.shape[0] == 2, "Indices must be two dimensions"
         assert indices.shape[1] == values.shape[0], "Number of nonzero elements in indices and values do not match"
-        assert len(shape) == 3, "Number of dimensions in shape and indices do not match"
+        assert len(shape) == 3, "Shape must be 3 dimensions: n, m, and channels"
         assert len(values.shape) == 2, "Currently only support vectors as values"
+        assert shape[2] == values.shape[1], "Values channels and shape channels must match"
 
         # array of indices with dimensions (n_dimensions, nnz)
         self.indices = indices
@@ -29,7 +30,7 @@ class SparseMatrix:
         if self.n == self.m and self.indices_diag == None:
             self.indices_diag = self.calc_indices_diag()
         #assert self.is_sorted()
-
+        self.is_set = is_set
 
     @classmethod
     def from_torch_sparse(cls, sparse_tensor):

@@ -10,13 +10,33 @@ Created on Sun Nov  8 22:43:29 2020
 import sys
 import numpy as np
 import torch 
-from EquivariantLayerSingleParam import EquivariantLayerSingleParam
+from src.EquivariantLayerSingleParam import EquivariantLayerSingleParam
+import pdb
+
 #%%
 def test_layer_single_param(X, mapping, output_shape, X_expected):
     layer = EquivariantLayerSingleParam(mapping, output_shape)
-    X_out = layer.forward(X)
+    print(layer.equality_mapping)
+    print("diag")
+    Y1 = layer.diag(X)
+    print(layer.equality_mapping)
+    print("pool")
+    Y2 = layer.pool(Y1)
+    print(layer.equality_mapping)
+    print("broadcast")
+    Y3 = layer.broadcast(Y2)
+    print(layer.equality_mapping)
+    print("undiag")
+    Y4 = layer.undiag(Y3)
+    print(layer.equality_mapping)
+    print("reindex")
+    X_out = layer.reindex(Y4)
+    print(layer.equality_mapping)
+    #X_out = layer.forward(X)
     print("Out: ", X_out.shape)
     print("Expected: ", X_expected.shape)
+    
+
     return torch.equal(X_out, X_expected)
 #%%
 if __name__ == '__main__': 
@@ -49,11 +69,22 @@ if __name__ == '__main__':
     mapping = [({4}, {2}), ({2}, set()), ({3}, {3})]
     output_shape = (batch_size, n_channels, 3, 2)
     layer = EquivariantLayerSingleParam(mapping, output_shape)
+    print(layer.equality_mapping)
+    print("diag")
     Y1 = layer.diag(X)
+    print(layer.equality_mapping)
+    print("pool")
     Y2 = layer.pool(Y1)
+    print(layer.equality_mapping)
+    print("broadcast")
     Y3 = layer.broadcast(Y2)
+    print(layer.equality_mapping)
+    print("undiag")
     Y4 = layer.undiag(Y3)
+    print(layer.equality_mapping)
+    print("reindex")
     Y5 = layer.reindex(Y4)
+    print(layer.equality_mapping)
     #%%
     batch_size = 1
     n_channels = 1
@@ -202,3 +233,12 @@ if __name__ == '__main__':
     # Take diagonal of dimensions 0 and 1, and pool over the resulting dimension. 
     # Broadcast onto three dimensions. Take the diagonal of resulting dimensions 1 and 2
 
+
+    #%%
+    n_channels = 2
+    batch_size = 1
+    X = torch.arange(10).view(batch_size, n_channels, 5)
+    output_shape = (batch_size, 3, 6)
+    mapping = [(set(), {2}), ({2}, set())]
+    assert test_layer_single_param(X, mapping, output_shape,
+                                   torch.tensor([10, 35]).unsqueeze(1).repeat(1, 6).unsqueeze(0))

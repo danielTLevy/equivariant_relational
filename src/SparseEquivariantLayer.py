@@ -7,19 +7,18 @@ import torch
 import torch.nn as nn
 import itertools
 import logging
-from src.utils import get_all_input_output_partitions, PREFIX_DIMS
+from src.utils import get_all_input_output_partitions, SPARSE_PREFIX_DIMS
 from src.DataSchema import Data
 from src.SparseTensor import SparseTensor
 
 LOG_LEVEL = logging.ERROR
-
 class SparseEquivariantLayerBlock(nn.Module):
     # Layer mapping between two relations
     def __init__(self, input_dim, output_dim, relation_in, relation_out):
         super(SparseEquivariantLayerBlock, self).__init__()
         self.in_dim = input_dim
         self.out_dim = output_dim
-        self.input_output_partitions = get_all_input_output_partitions(relation_in, relation_out)
+        self.input_output_partitions = get_all_input_output_partitions(relation_in, relation_out, SPARSE_PREFIX_DIMS)
         self.n_params = len(self.input_output_partitions)
         stdv = 0.1 / math.sqrt(self.in_dim)
         self.weights = nn.Parameter(torch.Tensor(self.n_params, self.in_dim, self.out_dim).uniform_(-stdv, stdv))
@@ -68,7 +67,7 @@ class SparseEquivariantLayerBlock(nn.Module):
         for i, diag_dims in enumerate(input_diagonals):
             for j, (input_dims, output_dims) in enumerate(self.equality_mapping):
                 if set(input_dims) == set(diag_dims):
-                    updated_equalities[j] = ({PREFIX_DIMS+i}, self.equality_mapping[j][1])
+                    updated_equalities[j] = ({SPARSE_PREFIX_DIMS+i}, self.equality_mapping[j][1])
         self.equality_mapping = updated_equalities
         return X
 

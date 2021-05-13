@@ -16,7 +16,9 @@ import torch
 # Dense: use PREFIX_DIMS = 2
 # Sparse: use PREFIX_DIMS = 0 because there are no batches and channels are handled separately
 # Matrix: use PREFIX_DIMS = 1 for initial channel dimension
-PREFIX_DIMS = 1
+MATRIX_PREFIX_DIMS = 1
+SPARSE_PREFIX_DIMS = 0
+DENSE_PREFIX_DIMS = 2
 
 # https://stackoverflow.com/questions/19368375/set-partitions-in-python/30134039
 def get_partitions(collection):
@@ -32,9 +34,9 @@ def get_partitions(collection):
         yield [ [ first ] ] + smaller
     
 
-def get_all_entity_partitions(combined_entities):
+def get_all_entity_partitions(combined_entities, prefix_dims=0):
     '''
-    
+    prefix_dims: offset for dimension numbering
     Returns: List of all mappings between entities and partitioning of their 
     indicies in the concatenated input and output
     '''
@@ -43,7 +45,7 @@ def get_all_entity_partitions(combined_entities):
     # Map of entity: index
     partitions = {}
     for entity in all_entities:
-        entity_indices = PREFIX_DIMS + np.where(combined_entities == entity)[0]
+        entity_indices = prefix_dims + np.where(combined_entities == entity)[0]
         partitions[entity.id] = list(get_partitions(list(entity_indices)))
     
     partition_product = itertools.product(*partitions.values())
@@ -55,8 +57,10 @@ def get_all_entity_partitions(combined_entities):
         entity_partitions.append(entity_partition_map)
     return entity_partitions
 
-def get_all_input_output_partitions(relation_in, relation_out):
+def get_all_input_output_partitions(relation_in, relation_out, prefix_dims=1):
     '''
+    prefix_dims: Number of non-relational dimensions (e.g. channel or batch).
+                 Used as offset for dimension listings
     Returns: a list of all "input output partitions", which are tuple pairs
     of the set of indices in the input and the set of indices in the output
     that are equal to each other.
@@ -64,7 +68,7 @@ def get_all_input_output_partitions(relation_in, relation_out):
     entities_in = relation_in.entities
     entities_out = relation_out.entities
     combined_entities = np.array(entities_in + entities_out)
-    entity_partitions = get_all_entity_partitions(combined_entities)
+    entity_partitions = get_all_entity_partitions(combined_entities, prefix_dims)
     relation_in_length = len(relation_in.entities)
 
     output = []
@@ -77,7 +81,7 @@ def get_all_input_output_partitions(relation_in, relation_out):
                 inputs = []
                 outputs = []
                 for entity_index in partition:
-                    if entity_index < PREFIX_DIMS + relation_in_length:
+                    if entity_index < prefix_dims + relation_in_length:
                         inputs.append(entity_index)
                     else:
                         outputs.append(entity_index - relation_in_length)
@@ -207,8 +211,8 @@ def get_ops(partition):
     return input_op, output_op
 
 
-def get_all_ops(relation_in, relation_out):
-    partitions = get_all_input_output_partitions(relation_in, relation_out)
+def get_all_ops(relation_in, relation_out, prefix_dims=1):
+    partitions = get_all_input_output_partitions(relation_in, relation_out, prefix_dims)
     return [get_ops(partition) for partition in partitions]
 
 def get_ops_from_partitions(partitions, input_is_set=False, output_is_set=False):

@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from src.DataSchema import Data, DataSchema, Relation
-from src.utils import PREFIX_DIMS
+from src.utils import DENSE_PREFIX_DIMS
 from src.SparseTensor import SparseTensor
 import pdb
 
@@ -148,7 +148,7 @@ class EntityBroadcasting(nn.Module):
             for _ in range(num_new_dims):
                 entity_enc = entity_enc.unsqueeze(-1)
             # Transpose the entity to the appropriate dimension
-            entity_enc.transpose_(PREFIX_DIMS, entity_idx+PREFIX_DIMS)
+            entity_enc.transpose_(DENSE_PREFIX_DIMS, entity_idx+DENSE_PREFIX_DIMS)
             # Broadcast-add to output
             relation_out += entity_enc
         return relation_out
@@ -179,7 +179,7 @@ class EntityPooling(nn.Module):
         pooling_dims = []
         for entity_dim, rel_entity in enumerate(relation.entities):
             if entity != rel_entity:
-                pooling_dims += [PREFIX_DIMS + entity_dim]
+                pooling_dims += [DENSE_PREFIX_DIMS + entity_dim]
         return pooling_dims
     
     def pool_tensor(self, X, pooling_dims):
@@ -189,7 +189,7 @@ class EntityPooling(nn.Module):
             return X
 
     def pool_tensor_diag(self, X):
-        while X.ndim > PREFIX_DIMS+1:
+        while X.ndim > DENSE_PREFIX_DIMS+1:
             assert X.shape[-1] == X.shape[-2]
             X = X.diagonal(0, -1, -2)
         return X

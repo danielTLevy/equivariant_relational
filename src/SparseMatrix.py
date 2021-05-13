@@ -4,7 +4,7 @@
 import torch
 import numpy as np
 import torch_sparse
-from src.utils import PREFIX_DIMS, get_masks_of_intersection
+from src.utils import get_masks_of_intersection, MATRIX_PREFIX_DIMS
 import pdb
 
 class SparseMatrix:
@@ -44,7 +44,7 @@ class SparseMatrix:
         return cls(indices, values, shape)
 
     @classmethod
-    def from_dense_tensor(cls, tensor, prefix_dims=PREFIX_DIMS):
+    def from_dense_tensor(cls, tensor, prefix_dims=MATRIX_PREFIX_DIMS):
         '''
         Initialize from a dense tensor
         '''

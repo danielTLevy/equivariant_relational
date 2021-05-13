@@ -10,13 +10,10 @@ Created on Sun Dec  6 22:18:39 2020
 
 
 #%%
-import sys
-sys.path.append('../src')
 import numpy as np
 import torch
-from utils import PREFIX_DIMS
 from DataSchema import Entity, Relation
-from EquivariantLayerSingleParam import EquivariantLayerSingleParam
+from EquivariantLayerSingleParam import EquivariantLayerSingleParam, DENSE_PREFIX_DIMS
 torch.manual_seed(0)
 
 def permute_entities(X_in, X_out, entities, relation_i, relation_j):
@@ -28,13 +25,13 @@ def permute_entities(X_in, X_out, entities, relation_i, relation_j):
         entity_permutations[entity.id] = permutation
     
     for dim, entity in enumerate(relation_i.entities):
-        permutations = [slice(None)]*(dim + PREFIX_DIMS)
+        permutations = [slice(None)]*(dim + DENSE_PREFIX_DIMS)
         permutations += [list(entity_permutations[entity.id])]
         permutations += [...]
         X_in = X_in[permutations]
     
     for dim, entity in enumerate(relation_j.entities):
-        permutations = [slice(None)]*(dim + PREFIX_DIMS)
+        permutations = [slice(None)]*(dim + DENSE_PREFIX_DIMS)
         permutations += [list(entity_permutations[entity.id])]
         permutations += [...]
         X_out = X_out[permutations]

@@ -8,7 +8,7 @@ Created on Sun Jan 24 23:45:52 2021
 
 import numpy as np
 import torch.nn as nn
-from src.utils import PREFIX_DIMS
+from src.utils import DENSE_PREFIX_DIMS
 
 class EquivariantLayerSingleParam(nn.Module):
     # Layer mapping a single parameter between two relations
@@ -58,7 +58,7 @@ class EquivariantLayerSingleParam(nn.Module):
         for i, diag_dims in enumerate(input_diagonals):
             for j, (input_dims, output_dims) in enumerate(self.equality_mapping):
                 if set(input_dims) == set(diag_dims):
-                    updated_equalities[j] = ({PREFIX_DIMS+i}, self.equality_mapping[j][1])
+                    updated_equalities[j] = ({DENSE_PREFIX_DIMS+i}, self.equality_mapping[j][1])
         self.equality_mapping = updated_equalities
         return X
 
@@ -146,7 +146,7 @@ class EquivariantLayerSingleParam(nn.Module):
         output_dims= []
         for i, o in self.equality_mapping:
             output_dims += list(o)
-        permutation = [0, 1] + [PREFIX_DIMS + output_dims.index(PREFIX_DIMS+dim)
+        permutation = [0, 1] + [DENSE_PREFIX_DIMS + output_dims.index(DENSE_PREFIX_DIMS+dim)
                                     for dim in np.arange(len(output_dims))]
         X = X.permute(*permutation)
         return X

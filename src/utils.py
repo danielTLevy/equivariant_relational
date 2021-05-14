@@ -187,12 +187,12 @@ def get_ops(partition):
     else:
         input_op.discard("i_row")
         input_op.discard("i_col")
-        if len(input_op) != 1:
-            print("input_op")
-            print(partition)
-        else:
+        if len(input_op) == 1:
             input_op = input_op.pop()
-
+        elif input_op == set():
+            input_op = None
+        else:
+            raise AssertionError("Can only have single input op")
     if "b_row" in output_op and "b_col" in output_op:
         output_op = "b_all"
     elif "i_row" in output_op and "i_col" in output_op:
@@ -204,9 +204,12 @@ def get_ops(partition):
         output_op.discard("i_col")
         output_op.discard("t_row")
         output_op.discard("t_col")
-        assert len(output_op) == 1
-
-        output_op = output_op.pop()
+        if len(output_op) == 1:
+            output_op = output_op.pop()
+        elif output_op == set():
+            output_op = None
+        else:
+            raise AssertionError("Can only have single output op")
 
     return input_op, output_op
 

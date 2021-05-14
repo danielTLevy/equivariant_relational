@@ -2,11 +2,11 @@
 import torch.nn as nn
 
 from src.EquivariantLayer import EquivariantLayer
-from src.SparseMatrixEquivariantLayer import SparseMatrixEquivariantLayer
+from src.SparseMatrixEquivariantLayer import SparseMatrixEquivariantLayer, SparseMatrixEntityPoolingLayer
 from src.SparseEquivariantLayer import SparseEquivariantLayer
 from src.Modules import RelationNorm, Activation, EntityPooling, \
                         EntityBroadcasting, SparseActivation
-
+import pdb
 
 class EquivariantNetwork(nn.Module):
     def __init__(self, data_schema, n_channels):
@@ -104,8 +104,8 @@ class SparseEquivariantNetwork(nn.Module):
 
 
 class SparseMatrixEquivariantNetwork(nn.Module):
-    def __init__(self, data_schema, n_channels, target_rel=None, target_channels=None,
-                 final_activation=None):
+    def __init__(self, data_schema, n_channels, target_channels=None,
+                 final_pooling=False, target_entities=None, final_activation=None):
         super(SparseMatrixEquivariantNetwork, self).__init__()
         self.data_schema = data_schema
         self.n_channels = n_channels
@@ -122,19 +122,20 @@ class SparseMatrixEquivariantNetwork(nn.Module):
         self.layer3 = SparseMatrixEquivariantLayer(self.data_schema, 64, 32)
         self.norm3 = RelationNorm(self.data_schema, 32, affine=False,
                                   sparse=True, matrix=True)
-        self.layer4 = SparseMatrixEquivariantLayer(self.data_schema, 32, target_channels,
-                                                   target_rel=target_rel)
+
+        self.layer4 = SparseMatrixEntityPoolingLayer(self.data_schema, 32,target_channels,
+                                                     entities=target_entities)
         if final_activation == None:
             final_activation = nn.Identity()
         self.final = SparseActivation(data_schema, final_activation)
 
-    def forward(self, data, idx_identity=None, idx_transpose=None):
+    def forward(self, data, idx_identity=None, idx_transpose=None, data_out=None):
         if idx_identity is None or idx_transpose is None:
             print("Calculating idx_identity and idx_transpose. This can be precomputed.")
             idx_identity, idx_transpose = data.calculate_indices()
-        out = self.norm1(self.ReLU(self.layer1(data, idx_identity, idx_transpose)))
-        out = self.norm2(self.ReLU(self.layer2(out, idx_identity, idx_transpose)))
-        out = self.norm3(self.ReLU(self.layer3(out, idx_identity, idx_transpose)))
-        out = self.layer4(out, idx_identity, idx_transpose)
+        out = self.norm1(self.ReLU(self.layer1(data, indices_identity=idx_identity, indices_transpose=idx_transpose)))
+        out = self.norm2(self.ReLU(self.layer2(out, indices_identity=idx_identity, indices_transpose=idx_transpose)))
+        out = self.norm3(self.ReLU(self.layer3(out, indices_identity=idx_identity, indices_transpose=idx_transpose)))
+        out = self.layer4(out, data_out)
         out = self.final(out)
         return out

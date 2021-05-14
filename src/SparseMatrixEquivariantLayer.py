@@ -9,7 +9,7 @@ import itertools
 import logging
 from src.utils import get_all_ops, get_all_input_output_partitions, \
                         get_ops_from_partitions, MATRIX_PREFIX_DIMS
-from src.DataSchema import Data
+from src.DataSchema import SparseMatrixData, DataSchema, Data, Relation
 from src.SparseMatrix import SparseMatrix
 import pdb
 
@@ -19,8 +19,8 @@ class SparseMatrixEquivariantLayerBlock(nn.Module):
     # Layer mapping between two relations
     def __init__(self, input_dim, output_dim, relation_in, relation_out):
         super(SparseMatrixEquivariantLayerBlock, self).__init__()
-        assert len(relation_in.entities) == 2, "Relation must be second order"
-        assert len(relation_out.entities) == 2, "Relation must be second order"
+        assert len(relation_in.entities) == 2, "Relation must be second or first order"
+        assert len(relation_out.entities) <= 2, "Relation must be second order"
         in_is_set = relation_in.is_set
         out_is_set = relation_out.is_set
         self.in_dim = input_dim
@@ -56,13 +56,23 @@ class SparseMatrixEquivariantLayerBlock(nn.Module):
         X_out: Correpsonding sparse tensor for target relation
         '''
         self.logger.info("n_params: {}".format(self.n_params))
-        Y = SparseMatrix.from_other_sparse_matrix(X_out, self.out_dim)
+        if type(X_out) == SparseMatrix:
+            Y = SparseMatrix.from_other_sparse_matrix(X_out, self.out_dim)
+        else:
+            Y = X_out.clone()
         #TODO: can add a cache for input operations here
         for i in range(self.n_params):
             op_inp, op_out = self.all_ops[i]
             weight = self.weights[i]
             device = weight.device
-            if op_out[0] == "i":
+            if op_inp == None:
+                X_mul = torch.matmul(X_in, weight)
+                X_op_out = self.output_op(op_out, X_out, X_mul, device)
+            elif op_out == None:
+                X_op_inp = self.input_op(op_inp, X_in, device)
+                X_mul = torch.matmul(X_op_inp, weight)
+                X_op_out = X_mul
+            elif op_out[0] == "i":
                 # Identity
                 X_intersection_vals = X_in.gather_mask(indices_identity[0])
                 X_mul = X_intersection_vals @ weight
@@ -79,29 +89,26 @@ class SparseMatrixEquivariantLayerBlock(nn.Module):
                 X_mul = torch.matmul(X_op_inp, weight)
                 # Broadcast or Embed Diag or Transpose
                 X_op_out = self.output_op(op_out, X_out, X_mul, device)
-            assert X_op_out.nnz() == X_out.nnz()
-            assert Y.nnz() == X_out.nnz(), "Y: {}, X_out: {}".format(Y.nnz(), X_out.nnz())
-            assert Y.nnz() == X_op_out.nnz(), "Y: {}, X_op_out: {}".format(Y.nnz(), X_op_out.nnz())
+            #assert X_op_out.nnz() == X_out.nnz()
+            #assert Y.nnz() == X_out.nnz(), "Y: {}, X_out: {}".format(Y.nnz(), X_out.nnz())
+            #assert Y.nnz() == X_op_out.nnz(), "Y: {}, X_op_out: {}".format(Y.nnz(), X_op_out.nnz())
             Y = Y + X_op_out + self.bias[i]
         return Y
 
 
 class SparseMatrixEquivariantLayer(nn.Module):
-    def __init__(self, data_schema, input_dim=1, output_dim=1, target_rel=None):
+    def __init__(self, data_schema, input_dim=1, output_dim=1, data_schema_out=None):
         '''
         input_dim: either a rel_id: dimension dict, or an integer for all relations
         output_dim: either a rel_id: dimension dict, or an integer for all relations
-        target_rel: only predict one matrix
         '''
         super(SparseMatrixEquivariantLayer, self).__init__()
         self.data_schema = data_schema
-        self.target_rel = target_rel
-        if target_rel == None:
-            self.relation_pairs = list(itertools.product(self.data_schema.relations,
-                                                    self.data_schema.relations))
-        else:
-            self.relation_pairs = [(rel_i, self.data_schema.relations[target_rel]) \
-                                   for rel_i in self.data_schema.relations]
+        self.data_schema_out = data_schema_out
+        if self.data_schema_out == None:
+            self.data_schema_out = data_schema
+        self.relation_pairs = list(itertools.product(self.data_schema.relations,
+                                                    self.data_schema_out.relations))
         block_modules = []
         if type(input_dim) == dict:
             self.input_dim = input_dim
@@ -121,7 +128,7 @@ class SparseMatrixEquivariantLayer(nn.Module):
         #self.cache = {}            
 
     def forward(self, data, indices_identity=None, indices_transpose=None):
-        data_out = Data(self.data_schema)
+        data_out = SparseMatrixData(self.data_schema_out)
         for i, (relation_i, relation_j) in enumerate(self.relation_pairs):
             #self.logger.warning("Relation: ({}, {})".format(relation_i.id, relation_j.id))
             X_in = data[relation_i.id]
@@ -135,3 +142,33 @@ class SparseMatrixEquivariantLayer(nn.Module):
             else:
                 data_out[relation_j.id] = data_out[relation_j.id] + Y_out
         return data_out
+
+
+class SparseMatrixEntityPoolingLayer(SparseMatrixEquivariantLayer):
+    def __init__(self, data_schema, input_dim=1, output_dim=1, entities=None):
+        '''
+        input_dim: either a rel_id: dimension dict, or an integer for all relations
+        output_dim: either a rel_id: dimension dict, or an integer for all relations
+        '''
+        if entities == None:
+            entities = data_schema.entities
+        enc_relations = [Relation(i, [entity, entity], is_set=True)
+                                for i, entity in enumerate(entities)]
+        encodings_schema = DataSchema(entities, enc_relations)
+        super().__init__(data_schema, input_dim, output_dim,
+                                              data_schema_out=encodings_schema)
+
+    def forward(self, data, data_target=None):
+        data_out = Data(self.data_schema_out)
+        for i, (relation_i, relation_j) in enumerate(self.relation_pairs):
+            #self.logger.warning("Relation: ({}, {})".format(relation_i.id, relation_j.id))
+            X_in = data[relation_i.id]
+            Y_in = data_target[relation_j.id]
+            layer = self.block_modules[i]
+            Y_out = layer.forward(X_in, Y_in, None, None)
+            if relation_j.id not in data_out:
+                data_out[relation_j.id] = Y_out
+            else:
+                data_out[relation_j.id] = data_out[relation_j.id] + Y_out
+        return data_out
+    

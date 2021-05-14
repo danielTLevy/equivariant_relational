@@ -46,6 +46,10 @@ class Relation:
     def __repr__(self):
         return "Relation(id={}, entities={})".format(self.id, self.entities)
 
+    def __eq__(self, other):
+        return self.id == other.id and self.get_shape() == other.get_shape() \
+                    and self.entities == other.entities
+
 class Data:
     '''
     Wrapper for a dict mapping relations to tensors of their data

@@ -181,8 +181,9 @@ if __name__ == '__main__':
     data_target[0] = SparseMatrix(indices = torch.arange(len(paper_names), dtype=torch.int64).repeat(2,1),
                                    values=torch.zeros([len(paper_names), 7]),
                                    shape=(len(paper_names), len(paper_names), 7))
-              
-    learning_rate = 1e-4
+    data_target = data_target.to(device)
+
+    learning_rate = 1e-3
     optimizer = optim.Adam(net.parameters(), lr=learning_rate, betas=(0.0, 0.999))
 
     sched = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
@@ -197,7 +198,7 @@ if __name__ == '__main__':
     #%%
     epochs = 500
     save_every = 10
-    PATH = "../test_model_matrix_cora.pt"
+    PATH = "models/test_model_matrix_cora.pt"
     val_acc_best = 0
 
     progress = tqdm(range(epochs), desc="Epoch 0", position=0, leave=True)
@@ -221,8 +222,9 @@ if __name__ == '__main__':
             val_acc = (data_out_val_values.argmax(1) == val_targets).sum() / len(val_targets)
             print("\nVal Acc: {:.3f} Val Loss: {:.3f}".format(val_acc, val_loss))
             sched.step(val_acc)
-            if val_acc_best > val_acc:
+            if val_acc > val_acc_best:
                 print("Saving")
+                val_acc_best = val_acc
                 torch.save({
                     'epoch': epoch,
                     'model_state_dict': net.state_dict(),
@@ -232,7 +234,7 @@ if __name__ == '__main__':
                     }, PATH)
 
     #%%
-    checkpoint = torch.load("../test_model_matrix_cora.pt", map_location=torch.device(device))
+    checkpoint = torch.load("models/test_model_matrix_cora.pt", map_location=torch.device(device))
     net.load_state_dict(checkpoint['model_state_dict'])
     loss = checkpoint['loss']
     #%%

@@ -104,13 +104,15 @@ class SparseEquivariantNetwork(nn.Module):
 
 
 class SparseMatrixEquivariantNetwork(nn.Module):
-    def __init__(self, data_schema, n_channels, target_channels=None,
-                 final_pooling=False, target_entities=None, final_activation=None):
+    def __init__(self, data_schema, n_channels, target_embeddings=None,
+                 final_pooling=False, target_entities=None, final_channels=None, final_activation=None):
         super(SparseMatrixEquivariantNetwork, self).__init__()
         self.data_schema = data_schema
         self.n_channels = n_channels
-        if target_channels is None:
-            target_channels = n_channels
+        if target_embeddings is None:
+            target_embeddings = n_channels
+        if final_channels is None:
+            final_channels = n_channels
 
         self.ReLU = SparseActivation(data_schema, nn.ReLU())
         self.layer1 = SparseMatrixEquivariantLayer(self.data_schema, n_channels, 32)
@@ -123,11 +125,13 @@ class SparseMatrixEquivariantNetwork(nn.Module):
         self.norm3 = RelationNorm(self.data_schema, 32, affine=False,
                                   sparse=True, matrix=True)
 
-        self.layer4 = SparseMatrixEntityPoolingLayer(self.data_schema, 32,target_channels,
+        self.layer4 = SparseMatrixEntityPoolingLayer(self.data_schema, 32,target_embeddings,
                                                      entities=target_entities)
+        self.layer5 = nn.Linear(target_embeddings, final_channels)
         if final_activation == None:
             final_activation = nn.Identity()
-        self.final = SparseActivation(data_schema, final_activation)
+        #self.final = SparseActivation(data_schema, final_activation)
+        self.final = final_activation
 
     def forward(self, data, idx_identity=None, idx_transpose=None, data_out=None):
         if idx_identity is None or idx_transpose is None:
@@ -137,5 +141,7 @@ class SparseMatrixEquivariantNetwork(nn.Module):
         out = self.norm2(self.ReLU(self.layer2(out, indices_identity=idx_identity, indices_transpose=idx_transpose)))
         out = self.norm3(self.ReLU(self.layer3(out, indices_identity=idx_identity, indices_transpose=idx_transpose)))
         out = self.layer4(out, data_out)
+        out = out[0].values
+        out = self.layer5(out)
         out = self.final(out)
         return out

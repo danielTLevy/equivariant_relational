@@ -172,8 +172,9 @@ if __name__ == '__main__':
 
     n_channels = 1
     net = SparseMatrixEquivariantNetwork(schema, n_channels, final_pooling=True,
-                                         target_channels=7,
+                                         target_embeddings=32,
                                          final_activation = nn.Softmax(1),
+                                         final_channels=7,
                                          target_entities=schema_out.entities)
     net = net.to(device)
 
@@ -207,7 +208,7 @@ if __name__ == '__main__':
         net.train()
         optimizer.zero_grad()
         data_out = net(train_data, indices_identity, indices_transpose, data_target)
-        data_out_values = data_out[0].values[train_indices]
+        data_out_values = data_out[train_indices]
         train_loss = classification_loss(data_out_values, train_targets)
         train_loss.backward()
         optimizer.step()
@@ -217,7 +218,7 @@ if __name__ == '__main__':
         if epoch % save_every == 0:
             net.eval()
             data_out_val = net(val_data, idx_id_val, idx_trans_val, data_target)
-            data_out_val_values = data_out_val[0].values[val_indices]
+            data_out_val_values = data_out_val[val_indices]
             val_loss = classification_loss(data_out_val_values, val_targets)
             val_acc = (data_out_val_values.argmax(1) == val_targets).sum() / len(val_targets)
             print("\nVal Acc: {:.3f} Val Loss: {:.3f}".format(val_acc, val_loss))

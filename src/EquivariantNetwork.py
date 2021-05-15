@@ -5,7 +5,7 @@ from src.EquivariantLayer import EquivariantLayer
 from src.SparseMatrixEquivariantLayer import SparseMatrixEquivariantLayer, SparseMatrixEntityPoolingLayer
 from src.SparseEquivariantLayer import SparseEquivariantLayer
 from src.Modules import RelationNorm, Activation, EntityPooling, \
-                        EntityBroadcasting, SparseActivation
+                        EntityBroadcasting, SparseActivation, Dropout
 import pdb
 
 class EquivariantNetwork(nn.Module):
@@ -105,7 +105,8 @@ class SparseEquivariantNetwork(nn.Module):
 
 class SparseMatrixEquivariantNetwork(nn.Module):
     def __init__(self, data_schema, n_channels, target_embeddings=None,
-                 final_pooling=False, target_entities=None, final_channels=None, final_activation=None):
+                 final_pooling=False, target_entities=None, final_channels=None, final_activation=None,
+                 dropout=None):
         super(SparseMatrixEquivariantNetwork, self).__init__()
         self.data_schema = data_schema
         self.n_channels = n_channels
@@ -115,6 +116,9 @@ class SparseMatrixEquivariantNetwork(nn.Module):
             final_channels = n_channels
 
         self.ReLU = SparseActivation(data_schema, nn.ReLU())
+        self.dropout = nn.Identity()
+        if dropout is not None:
+            self.dropout  = SparseActivation(data_schema, Dropout())
         self.layer1 = SparseMatrixEquivariantLayer(self.data_schema, n_channels, 32)
         self.norm1 = RelationNorm(self.data_schema, 32, affine=False,
                                   sparse=True, matrix=True)
@@ -130,17 +134,19 @@ class SparseMatrixEquivariantNetwork(nn.Module):
         self.layer5 = nn.Linear(target_embeddings, final_channels)
         if final_activation == None:
             final_activation = nn.Identity()
-        #self.final = SparseActivation(data_schema, final_activation)
         self.final = final_activation
 
     def forward(self, data, idx_identity=None, idx_transpose=None, data_out=None):
         if idx_identity is None or idx_transpose is None:
             print("Calculating idx_identity and idx_transpose. This can be precomputed.")
             idx_identity, idx_transpose = data.calculate_indices()
-        out = self.norm1(self.ReLU(self.layer1(data, indices_identity=idx_identity, indices_transpose=idx_transpose)))
-        out = self.norm2(self.ReLU(self.layer2(out, indices_identity=idx_identity, indices_transpose=idx_transpose)))
-        out = self.norm3(self.ReLU(self.layer3(out, indices_identity=idx_identity, indices_transpose=idx_transpose)))
-        out = self.layer4(out, data_out)
+        out = self.norm1(self.ReLU(self.dropout(
+                self.layer1(data, indices_identity=idx_identity, indices_transpose=idx_transpose))))
+        out = self.norm2(self.ReLU(self.dropout(
+                self.layer2(out, indices_identity=idx_identity, indices_transpose=idx_transpose))))
+        out = self.norm3(self.ReLU(self.dropout(
+                self.layer3(out, indices_identity=idx_identity, indices_transpose=idx_transpose))))
+        out = self.dropout(self.layer4(out, data_out))
         out = out[0].values
         out = self.layer5(out)
         out = self.final(out)

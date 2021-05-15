@@ -175,7 +175,8 @@ if __name__ == '__main__':
                                          target_embeddings=32,
                                          final_activation = nn.Softmax(1),
                                          final_channels=7,
-                                         target_entities=schema_out.entities)
+                                         target_entities=schema_out.entities,
+                                         dropout=0.5)
     net = net.to(device)
 
     data_target = Data(schema_out)

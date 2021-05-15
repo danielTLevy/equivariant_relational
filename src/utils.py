@@ -238,3 +238,6 @@ def get_masks_of_intersection(array1, array2):
     array1_intersection_mask = intersection_mask[:n_in]
     array2_intersection_mask = intersection_mask[n_in:]
     return array1_intersection_mask, array2_intersection_mask
+
+def count_parameters(model):
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import torch.nn as nn
-
+import torch.nn.functional as F
 from src.EquivariantLayer import EquivariantLayer
 from src.SparseMatrixEquivariantLayer import SparseMatrixEquivariantLayer, SparseMatrixEntityPoolingLayer
 from src.SparseEquivariantLayer import SparseEquivariantLayer
@@ -104,22 +104,20 @@ class SparseEquivariantNetwork(nn.Module):
 
 
 class SparseMatrixEquivariantNetwork(nn.Module):
-    def __init__(self, data_schema, n_channels, target_embeddings=None,
+    def __init__(self, data_schema, input_channels, activation=F.relu, target_embeddings=None,
                  final_pooling=False, target_entities=None, final_channels=None, final_activation=None,
-                 dropout=None):
+                 dropout=0):
         super(SparseMatrixEquivariantNetwork, self).__init__()
         self.data_schema = data_schema
-        self.n_channels = n_channels
+        self.input_channels = input_channels
         if target_embeddings is None:
-            target_embeddings = n_channels
+            target_embeddings = input_channels
         if final_channels is None:
-            final_channels = n_channels
+            final_channels = input_channels
 
-        self.ReLU = SparseActivation(data_schema, nn.ReLU())
-        self.dropout = nn.Identity()
-        if dropout is not None:
-            self.dropout  = SparseActivation(data_schema, Dropout())
-        self.layer1 = SparseMatrixEquivariantLayer(self.data_schema, n_channels, 32)
+        self.activation = SparseActivation(data_schema, activation)
+        self.dropout  = SparseActivation(data_schema, Dropout())
+        self.layer1 = SparseMatrixEquivariantLayer(self.data_schema, input_channels, 32)
         self.norm1 = RelationNorm(self.data_schema, 32, affine=False,
                                   sparse=True, matrix=True)
         self.layer2 = SparseMatrixEquivariantLayer(self.data_schema, 32, 64)
@@ -140,11 +138,11 @@ class SparseMatrixEquivariantNetwork(nn.Module):
         if idx_identity is None or idx_transpose is None:
             print("Calculating idx_identity and idx_transpose. This can be precomputed.")
             idx_identity, idx_transpose = data.calculate_indices()
-        out = self.norm1(self.ReLU(self.dropout(
+        out = self.norm1(self.activation(self.dropout(
                 self.layer1(data, indices_identity=idx_identity, indices_transpose=idx_transpose))))
-        out = self.norm2(self.ReLU(self.dropout(
+        out = self.norm2(self.activation(self.dropout(
                 self.layer2(out, indices_identity=idx_identity, indices_transpose=idx_transpose))))
-        out = self.norm3(self.ReLU(self.dropout(
+        out = self.norm3(self.activation(self.dropout(
                 self.layer3(out, indices_identity=idx_identity, indices_transpose=idx_transpose))))
         out = self.dropout(self.layer4(out, data_out))
         out = out[0].values

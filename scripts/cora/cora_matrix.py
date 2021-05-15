@@ -15,6 +15,7 @@ Goal is to predict class - use 10-fold cross validation.
 Use 8/10 for train, 1/10 for val, 1/10 for test – train on val before testing on test
 '''
 #%%
+import sys
 from src.DataSchema import DataSchema, Entity, Relation, SparseMatrixData, Data
 from src.SparseMatrix import SparseMatrix
 from src.EquivariantNetwork import SparseMatrixEquivariantNetwork
@@ -27,18 +28,55 @@ import numpy as np
 import csv
 import random
 import pdb
+import argparse
+
 #%%
 csv_file_str = './data/cora/{}.csv'
 
-def get_data_and_targets(schema, paper, cites, content):
+def get_hyperparams(argv):
+    parser = argparse.ArgumentParser(allow_abbrev=False)
+    parser.add_argument('--checkpoint_path', type=str, required=False)
+    parser.add_argument('--num_channels', type=int, nargs='*', default=['64'])
+    parser.add_argument('--fc_layers', type=str, nargs='*', default=None,
+                        help='final fully connected layers for embeddings')
+    parser.add_argument('--target_embeddings', type=int, default=32)
+    parser.add_argument('--l2_decay', type=float, default=0)
+    parser.add_argument('--dropout_rate', type=float, default=0)
+    parser.add_argument('--learning_rate', type=float, default=1e-3)
+    parser.add_argument('--act_fn', type=str, default='ReLU')
+    parser.add_argument('--sched_factor', type=float, default=0.5)
+    parser.add_argument('--sched_patience', type=float, default=10)
+    parser.add_argument('--optimizer', type=str, default='Adam')
+    parser.add_argument('--num_epochs', type=int, default=1000)
+    parser.add_argument('--val_every', type=int, default=10)
+    parser.add_argument('--seed', type=int, default=1)
+    parser.add_argument('--use_neg', type=bool, default=False,
+                        help='Whether to use negative samples')
+    
+    args, argv = parser.parse_known_args(argv)
+
+    if args.fc_layers is not None:
+        args.fc_layers = [int(x) for x in args.fc_layers]
+    if len(args.num_channels) == 1:
+        args.num_channels = args.num_channels[0]
+    else:
+        assert len(args.num_channels) == len(args.orders) - 1, "ERROR: if --num_channels is list, length must be 1 less than --orders"
+        args.num_channels = [int(x) for x in args.num_channels]
+    
+    return args
+
+def get_data_and_targets(schema, use_neg, paper, cites, content):
     n_papers = schema.entities[0].n_instances
     n_words = schema.entities[1].n_instances
 
     train_targets = torch.LongTensor(paper[1])
 
 
-    # Randomly fill in values and coalesce to remove duplicates
-    cites_neg = np.random.randint(0, n_papers, cites.shape)
+    if use_neg:
+        # Randomly fill in values and coalesce to remove duplicates
+        cites_neg = np.random.randint(0, n_papers, cites.shape)
+    else:
+        cites_neg = np.random.randint(0, n_papers, (2, 0))
     cites_matrix = SparseMatrix(
             indices = torch.LongTensor(np.concatenate((cites, cites_neg),axis=1)),
             values = torch.cat((torch.ones(cites.shape[1], 1), torch.zeros(cites_neg.shape[1], 1))),
@@ -46,8 +84,12 @@ def get_data_and_targets(schema, paper, cites, content):
             ).coalesce()
 
     # For each paper, randomly fill in values and coalesce to remove duplicates
-    content_neg = np.stack((np.random.randint(0, n_papers, (content.shape[1],)),
-                            np.random.randint(0, n_words, (content.shape[1],))))
+    if use_neg:
+        content_neg = np.stack((np.random.randint(0, n_papers, (content.shape[1],)),
+                        np.random.randint(0, n_words, (content.shape[1],))))
+    else:
+        content_neg = np.random.randint(0, n_papers, (2,0))
+        
     content_matrix = SparseMatrix(
             indices = torch.LongTensor(np.concatenate((content, content_neg),axis=1)),
             values = torch.cat((torch.ones(content.shape[1], 1), torch.zeros(content_neg.shape[1], 1))),
@@ -61,10 +103,20 @@ def get_data_and_targets(schema, paper, cites, content):
     return data, train_targets
 
 
+def set_seed(seed):
+    random.seed(seed, version=2)
+    np.random.seed(random.randint(0, 2**32))
+    torch.manual_seed(random.randint(0, 2**32))
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 
 #%%
 if __name__ == '__main__':
+    argv = sys.argv[1:]
+    args = get_hyperparams(argv)
+
+    set_seed(args.seed)
     paper_names = []
     classes = []
     word_names = ['word'+str(i+1) for i in range(1433)]
@@ -146,6 +198,7 @@ if __name__ == '__main__':
     test_content = np.array(test_content).T
     val_content = np.array(val_content).T
 
+    n_classes = len(class_names)
     n_papers = len(paper_names)
     n_words = len(word_names)
     ent_papers = Entity(0, n_papers)
@@ -163,11 +216,21 @@ if __name__ == '__main__':
 
     #%%
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    train_data, train_targets = get_data_and_targets(schema, **train_vals)
+    train_data, train_targets = get_data_and_targets(schema, args.use_neg, **train_vals)
     train_data = train_data.to(device)
     train_targets = train_targets.to(device)
     indices_identity, indices_transpose = train_data.calculate_indices()
-    relations = schema.relations
+
+    val_data, val_targets = get_data_and_targets(schema, args.use_neg, **val_vals)
+    val_data = val_data.to(device)
+    val_targets = val_targets.to(device)
+    idx_id_val, idx_trans_val = val_data.calculate_indices()
+
+    data_target = Data(schema_out)
+    data_target[0] = SparseMatrix(indices = torch.arange(len(paper_names), dtype=torch.int64).repeat(2,1),
+                                   values=torch.zeros([len(paper_names), n_classes]),
+                                   shape=(len(paper_names), len(paper_names), n_classes))
+    data_target = data_target.to(device)
 
     #%%
 
@@ -177,47 +240,36 @@ if __name__ == '__main__':
 
     n_channels = 1
     net = SparseMatrixEquivariantNetwork(schema, n_channels, final_pooling=True,
-                                         target_embeddings=32,
+                                         target_embeddings=args.target_embeddings,
+                                         activation=eval('nn.%s()' % args.act_fn),
                                          final_activation = nn.Softmax(1),
-                                         final_channels=7,
+                                         final_channels=n_classes,
                                          target_entities=schema_out.entities,
-                                         dropout=0.5)
+                                         dropout=args.dropout_rate)
     net = net.to(device)
 
-    data_target = Data(schema_out)
-    data_target[0] = SparseMatrix(indices = torch.arange(len(paper_names), dtype=torch.int64).repeat(2,1),
-                                   values=torch.zeros([len(paper_names), 7]),
-                                   shape=(len(paper_names), len(paper_names), 7))
-    data_target = data_target.to(device)
-
     learning_rate = 1e-3
-    optimizer = optim.Adam(net.parameters(), lr=learning_rate, betas=(0.0, 0.999))
+    opt = eval('optim.%s' % args.optimizer)(net.parameters(), lr=args.learning_rate, weight_decay=args.l2_decay)
 
-    sched = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
-                                                 factor=0.5,
-                                                 patience=5,
+    sched = optim.lr_scheduler.ReduceLROnPlateau(opt, mode='min',
+                                                 factor=args.sched_factor,
+                                                 patience=args.sched_patience,
                                                  verbose=True)
     #%%
-    val_data, val_targets = get_data_and_targets(schema, **val_vals)
-    val_data = val_data.to(device)
-    val_targets = val_targets.to(device)
-    idx_id_val, idx_trans_val = val_data.calculate_indices()
-    #%%
-    epochs = 500
     save_every = 10
     PATH = "models/test_model_matrix_cora.pt"
     val_acc_best = 0
 
-    progress = tqdm(range(epochs), desc="Epoch 0", position=0, leave=True)
+    progress = tqdm(range(args.num_epochs), desc="Epoch 0", position=0, leave=True)
 
     for epoch in progress:
         net.train()
-        optimizer.zero_grad()
+        opt.zero_grad()
         data_out = net(train_data, indices_identity, indices_transpose, data_target)
         data_out_values = data_out[train_indices]
         train_loss = classification_loss(data_out_values, train_targets)
         train_loss.backward()
-        optimizer.step()
+        opt.step()
         acc = (data_out_values.argmax(1) == train_targets).sum() / len(train_targets)
         progress.set_description(f"Epoch {epoch}")
         progress.set_postfix(loss=train_loss.item(), train_acc=acc.item())
@@ -235,7 +287,7 @@ if __name__ == '__main__':
                 torch.save({
                     'epoch': epoch,
                     'model_state_dict': net.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
+                    'optimizer_state_dict': opt.state_dict(),
                     'loss': train_loss.item(),
                     'val_acc_best': val_acc_best.item()
                     }, PATH)

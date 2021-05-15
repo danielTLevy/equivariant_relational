@@ -37,15 +37,20 @@ def get_data_and_targets(schema, paper, cites, content):
     train_targets = torch.LongTensor(paper[1])
 
 
+    # Randomly fill in values and coalesce to remove duplicates
+    cites_neg = np.random.randint(0, n_papers, cites.shape)
     cites_matrix = SparseMatrix(
-            indices = torch.LongTensor(cites),
-            values = torch.ones(cites.shape[1], 1),
+            indices = torch.LongTensor(np.concatenate((cites, cites_neg),axis=1)),
+            values = torch.cat((torch.ones(cites.shape[1], 1), torch.zeros(cites_neg.shape[1], 1))),
             shape = (n_papers, n_papers, 1)
             ).coalesce()
 
+    # For each paper, randomly fill in values and coalesce to remove duplicates
+    content_neg = np.stack((np.random.randint(0, n_papers, (content.shape[1],)),
+                            np.random.randint(0, n_words, (content.shape[1],))))
     content_matrix = SparseMatrix(
-            indices = torch.LongTensor(content),
-            values = torch.ones(content.shape[1], 1),
+            indices = torch.LongTensor(np.concatenate((content, content_neg),axis=1)),
+            values = torch.cat((torch.ones(content.shape[1], 1), torch.zeros(content_neg.shape[1], 1))),
             shape = (n_papers, n_words, 1)
             ).coalesce()
 

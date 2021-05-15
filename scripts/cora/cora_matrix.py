@@ -242,6 +242,6 @@ if __name__ == '__main__':
     #%%
     net.eval()
     data_out_val = net(val_data, idx_id_val, idx_trans_val, data_target)
-    data_out_val_values = data_out_val[0].values[val_indices]
+    data_out_val_values = data_out_val[val_indices]
     val_loss = classification_loss(data_out_val_values, val_targets)
     acc = (data_out_val_values.argmax(1) == val_targets).sum() / len(val_targets)

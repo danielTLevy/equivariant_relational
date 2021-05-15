@@ -227,10 +227,11 @@ class SparseActivation(nn.Module):
 class Dropout(nn.Module):
     def __init__(self, p=0.5):
         super(Dropout, self).__init__()
+        assert p >= 0 and p < 1.0, "Require 0 <= p < 1"
         self.p = p
 
     def forward(self, X):
         if self.training:
-            binomial = torch.distributions.binomial.Binomial(probs=1-self.p)
-            return X * binomial.sample(X.shape[1:]) * (1.0/(1-self.p))
+            binomial = torch.distributions.bernoulli.Bernoulli(probs=1-self.p)
+            return X * binomial.sample(X.shape[1:]).to(X.device) * (1.0/(1-self.p))
         return X

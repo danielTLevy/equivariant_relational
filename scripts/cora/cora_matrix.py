@@ -36,9 +36,9 @@ csv_file_str = './data/cora/{}.csv'
 def get_hyperparams(argv):
     parser = argparse.ArgumentParser(allow_abbrev=False)
     parser.add_argument('--checkpoint_path', type=str, required=False)
-    parser.add_argument('--layers', type=int, nargs='*', default=['32', '64', '32'],
+    parser.add_argument('--layers', type=int, nargs='*', default=['64']*4,
                         help='Number of channels for equivariant layers')
-    parser.add_argument('--fc_layers', type=str, nargs='*', default=[],
+    parser.add_argument('--fc_layers', type=str, nargs='*', default=['32'],
                         help='Fully connected layers for target embeddings')
     parser.add_argument('--l2_decay', type=float, default=0)
     parser.add_argument('--dropout_rate', type=float, default=0)
@@ -53,7 +53,7 @@ def get_hyperparams(argv):
     parser.add_argument('--neg_data', type=float, default=0.,
                         help='Ratio of random data samples to positive. \
                               When sparse, this is similar to number of negative samples')
-    
+
     args, argv = parser.parse_known_args(argv)
     args.layers  = [int(x) for x in args.layers]
     args.fc_layers = [int(x) for x in args.fc_layers]
@@ -79,7 +79,7 @@ def get_data_and_targets(schema, neg_data, paper, cites, content):
     n_content_neg = int(neg_data*content.shape[1])
     content_neg = np.stack((np.random.randint(0, n_papers, (n_content_neg,)),
                     np.random.randint(0, n_words, (n_content_neg,))))
-        
+
     content_matrix = SparseMatrix(
             indices = torch.LongTensor(np.concatenate((content, content_neg),axis=1)),
             values = torch.cat((torch.ones(content.shape[1], 1), torch.zeros(n_content_neg, 1))),
@@ -193,7 +193,7 @@ if __name__ == '__main__':
     n_words = len(word_names)
     ent_papers = Entity(0, n_papers)
     #ent_classes = Entity(1, n_classes)
-    ent_words = Entity(2, n_words)
+    ent_words = Entity(1, n_words)
     rel_paper = Relation(2, [ent_papers, ent_papers], is_set=True)
     rel_cites = Relation(0, [ent_papers, ent_papers])
     rel_content = Relation(1, [ent_papers, ent_words])
@@ -233,7 +233,7 @@ if __name__ == '__main__':
                                          layers = args.layers,
                                          fc_layers=args.fc_layers,
                                          activation=eval('nn.%s()' % args.act_fn),
-                                         final_activation = nn.Softmax(1),
+                                         final_activation = nn.Identity(),
                                          target_entities=schema_out.entities,
                                          dropout=args.dropout_rate,
                                          output_dim=n_classes)
@@ -246,7 +246,6 @@ if __name__ == '__main__':
                                                  patience=args.sched_patience,
                                                  verbose=True)
     #%%
-    save_every = 10
     PATH = "models/test_model_matrix_cora.pt"
     val_acc_best = 0
 

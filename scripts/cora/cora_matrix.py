@@ -50,8 +50,9 @@ def get_hyperparams(argv):
     parser.add_argument('--num_epochs', type=int, default=1000)
     parser.add_argument('--val_every', type=int, default=10)
     parser.add_argument('--seed', type=int, default=1)
-    parser.add_argument('--use_neg', type=bool, default=False,
-                        help='Whether to use negative samples')
+    parser.add_argument('--neg_data', type=float, default=0.,
+                        help='Ratio of random data samples to positive. \
+                              When sparse, this is similar to number of negative samples')
     
     args, argv = parser.parse_known_args(argv)
     args.layers  = [int(x) for x in args.layers]
@@ -59,34 +60,29 @@ def get_hyperparams(argv):
 
     return args
 
-def get_data_and_targets(schema, use_neg, paper, cites, content):
+def get_data_and_targets(schema, neg_data, paper, cites, content):
     n_papers = schema.entities[0].n_instances
     n_words = schema.entities[1].n_instances
 
     train_targets = torch.LongTensor(paper[1])
 
-
-    if use_neg:
-        # Randomly fill in values and coalesce to remove duplicates
-        cites_neg = np.random.randint(0, n_papers, cites.shape)
-    else:
-        cites_neg = np.random.randint(0, n_papers, (2, 0))
+    # Randomly fill in values and coalesce to remove duplicates
+    n_cites_neg = int(neg_data*cites.shape[1])
+    cites_neg = np.random.randint(0, n_papers, (2, n_cites_neg))
     cites_matrix = SparseMatrix(
             indices = torch.LongTensor(np.concatenate((cites, cites_neg),axis=1)),
-            values = torch.cat((torch.ones(cites.shape[1], 1), torch.zeros(cites_neg.shape[1], 1))),
+            values = torch.cat((torch.ones(cites.shape[1], 1), torch.zeros(n_cites_neg, 1))),
             shape = (n_papers, n_papers, 1)
             ).coalesce()
 
     # For each paper, randomly fill in values and coalesce to remove duplicates
-    if use_neg:
-        content_neg = np.stack((np.random.randint(0, n_papers, (content.shape[1],)),
-                        np.random.randint(0, n_words, (content.shape[1],))))
-    else:
-        content_neg = np.random.randint(0, n_papers, (2,0))
+    n_content_neg = int(neg_data*content.shape[1])
+    content_neg = np.stack((np.random.randint(0, n_papers, (n_content_neg,)),
+                    np.random.randint(0, n_words, (n_content_neg,))))
         
     content_matrix = SparseMatrix(
             indices = torch.LongTensor(np.concatenate((content, content_neg),axis=1)),
-            values = torch.cat((torch.ones(content.shape[1], 1), torch.zeros(content_neg.shape[1], 1))),
+            values = torch.cat((torch.ones(content.shape[1], 1), torch.zeros(n_content_neg, 1))),
             shape = (n_papers, n_words, 1)
             ).coalesce()
 
@@ -210,12 +206,12 @@ if __name__ == '__main__':
 
     #%%
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    train_data, train_targets = get_data_and_targets(schema, args.use_neg, **train_vals)
+    train_data, train_targets = get_data_and_targets(schema, args.neg_data, **train_vals)
     train_data = train_data.to(device)
     train_targets = train_targets.to(device)
     indices_identity, indices_transpose = train_data.calculate_indices()
 
-    val_data, val_targets = get_data_and_targets(schema, args.use_neg, **val_vals)
+    val_data, val_targets = get_data_and_targets(schema, args.neg_data, **val_vals)
     val_data = val_data.to(device)
     val_targets = val_targets.to(device)
     idx_id_val, idx_trans_val = val_data.calculate_indices()
@@ -267,14 +263,14 @@ if __name__ == '__main__':
         acc = (data_out_values.argmax(1) == train_targets).sum() / len(train_targets)
         progress.set_description(f"Epoch {epoch}")
         progress.set_postfix(loss=train_loss.item(), train_acc=acc.item())
-        if epoch % save_every == 0:
+        if epoch % args.val_every == 0:
             net.eval()
             data_out_val = net(val_data, idx_id_val, idx_trans_val, data_target)
             data_out_val_values = data_out_val[val_indices]
             val_loss = classification_loss(data_out_val_values, val_targets)
             val_acc = (data_out_val_values.argmax(1) == val_targets).sum() / len(val_targets)
             print("\nVal Acc: {:.3f} Val Loss: {:.3f}".format(val_acc, val_loss))
-            sched.step(val_acc)
+            sched.step(val_loss)
             if val_acc > val_acc_best:
                 print("Saving")
                 val_acc_best = val_acc

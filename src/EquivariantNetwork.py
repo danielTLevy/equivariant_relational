@@ -115,6 +115,7 @@ class SparseMatrixEquivariantNetwork(nn.Module):
         self.activation = SparseActivation(schema, activation)
         self.dropout  = SparseActivation(schema, Dropout(p=dropout))
 
+        # Equivariant Layers
         self.n_equiv_layers = len(layers)
         self.equiv_layers = nn.ModuleList([])
         self.equiv_layers.append(SparseMatrixEquivariantLayer(
@@ -125,13 +126,13 @@ class SparseMatrixEquivariantNetwork(nn.Module):
         self.norms = nn.ModuleList([RelationNorm(schema, channels, affine=False,
                                                  sparse=True, matrix=True)
                                     for channels in layers])
-        embedding_layers = fc_layers + [output_dim]
 
-        self.n_fc_layers = len(fc_layers)
+        # Entity embeddings
+        embedding_layers = fc_layers + [output_dim]
         self.pooling = SparseMatrixEntityPoolingLayer(schema, layers[-1],
                                                       embedding_layers[0],
                                                       entities=target_entities)
-
+        self.n_fc_layers = len(fc_layers)
         self.fc_layers = nn.ModuleList([])
         self.fc_layers.extend([nn.Linear(embedding_layers[i-1], embedding_layers[i])
                             for i in range(1, self.n_fc_layers+1)])
@@ -144,10 +145,8 @@ class SparseMatrixEquivariantNetwork(nn.Module):
             print("Calculating idx_identity and idx_transpose. This can be precomputed.")
             idx_identity, idx_transpose = data.calculate_indices()
         for i in range(self.n_equiv_layers):
-            data = self.norms[i](self.activation(self.dropout(
+            data = self.norms[i](self.dropout(self.activation(
                     self.equiv_layers[i](data, idx_identity, idx_transpose))))
-            #data = self.dropout(self.activation(self.norms[i](
-            #        self.equiv_layers[i](data, idx_identity, idx_transpose))))
         data = self.dropout(self.pooling(data, data_out))
         out = data[0].values
         if self.n_fc_layers > 0:

@@ -112,8 +112,11 @@ class SparseMatrixEquivariantNetwork(nn.Module):
         self.schema = schema
         self.input_channels = input_channels
 
-        self.activation = SparseActivation(schema, activation)
-        self.dropout  = SparseActivation(schema, Dropout(p=dropout))
+        self.activation = activation
+        self.rel_activation = SparseActivation(schema, self.activation)
+
+        self.dropout = Dropout(p=dropout)
+        self.rel_dropout  = SparseActivation(schema, self.dropout)
 
         # Equivariant Layers
         self.n_equiv_layers = len(layers)
@@ -145,9 +148,9 @@ class SparseMatrixEquivariantNetwork(nn.Module):
             print("Calculating idx_identity and idx_transpose. This can be precomputed.")
             idx_identity, idx_transpose = data.calculate_indices()
         for i in range(self.n_equiv_layers):
-            data = self.norms[i](self.dropout(self.activation(
+            data = self.norms[i](self.rel_dropout(self.rel_activation(
                     self.equiv_layers[i](data, idx_identity, idx_transpose))))
-        data = self.dropout(self.pooling(data, data_out))
+        data = self.rel_dropout(self.pooling(data, data_out))
         out = data[0].values
         if self.n_fc_layers > 0:
             out = self.fc_layers[0](out)

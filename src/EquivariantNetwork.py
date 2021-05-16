@@ -132,8 +132,8 @@ class SparseMatrixEquivariantNetwork(nn.Module):
                                                       embedding_layers[0],
                                                       entities=target_entities)
 
-        self.fc = nn.ModuleList([])
-        self.fc.extend([nn.Linear(embedding_layers[i-1], embedding_layers[i])
+        self.fc_layers = nn.ModuleList([])
+        self.fc_layers.extend([nn.Linear(embedding_layers[i-1], embedding_layers[i])
                             for i in range(1, self.n_fc_layers+1)])
 
         self.final_activation = final_activation

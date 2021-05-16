@@ -36,10 +36,10 @@ csv_file_str = './data/cora/{}.csv'
 def get_hyperparams(argv):
     parser = argparse.ArgumentParser(allow_abbrev=False)
     parser.add_argument('--checkpoint_path', type=str, required=False)
-    parser.add_argument('--num_channels', type=int, nargs='*', default=['64'])
-    parser.add_argument('--fc_layers', type=str, nargs='*', default=None,
-                        help='final fully connected layers for embeddings')
-    parser.add_argument('--target_embeddings', type=int, default=32)
+    parser.add_argument('--layers', type=int, nargs='*', default=['32', '64', '32'],
+                        help='Number of channels for equivariant layers')
+    parser.add_argument('--fc_layers', type=str, nargs='*', default=[],
+                        help='Fully connected layers for target embeddings')
     parser.add_argument('--l2_decay', type=float, default=0)
     parser.add_argument('--dropout_rate', type=float, default=0)
     parser.add_argument('--learning_rate', type=float, default=1e-3)
@@ -54,15 +54,9 @@ def get_hyperparams(argv):
                         help='Whether to use negative samples')
     
     args, argv = parser.parse_known_args(argv)
+    args.layers  = [int(x) for x in args.layers]
+    args.fc_layers = [int(x) for x in args.fc_layers]
 
-    if args.fc_layers is not None:
-        args.fc_layers = [int(x) for x in args.fc_layers]
-    if len(args.num_channels) == 1:
-        args.num_channels = args.num_channels[0]
-    else:
-        assert len(args.num_channels) == len(args.orders) - 1, "ERROR: if --num_channels is list, length must be 1 less than --orders"
-        args.num_channels = [int(x) for x in args.num_channels]
-    
     return args
 
 def get_data_and_targets(schema, use_neg, paper, cites, content):
@@ -239,16 +233,16 @@ if __name__ == '__main__':
         return F.cross_entropy(data_pred, data_true)
 
     n_channels = 1
-    net = SparseMatrixEquivariantNetwork(schema, n_channels, final_pooling=True,
-                                         target_embeddings=args.target_embeddings,
+    net = SparseMatrixEquivariantNetwork(schema, n_channels,
+                                         layers = args.layers,
+                                         fc_layers=args.fc_layers,
                                          activation=eval('nn.%s()' % args.act_fn),
                                          final_activation = nn.Softmax(1),
-                                         final_channels=n_classes,
                                          target_entities=schema_out.entities,
-                                         dropout=args.dropout_rate)
+                                         dropout=args.dropout_rate,
+                                         output_dim=n_classes)
     net = net.to(device)
 
-    learning_rate = 1e-3
     opt = eval('optim.%s' % args.optimizer)(net.parameters(), lr=args.learning_rate, weight_decay=args.l2_decay)
 
     sched = optim.lr_scheduler.ReduceLROnPlateau(opt, mode='min',

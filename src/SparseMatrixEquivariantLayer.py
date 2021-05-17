@@ -29,9 +29,8 @@ class SparseMatrixEquivariantLayerBlock(nn.Module):
         self.all_ops = get_ops_from_partitions(self.input_output_partitions,
                                                in_is_set, out_is_set)
         self.n_params = len(self.all_ops)
-        stdv = 0.1 / math.sqrt(self.in_dim)
+        stdv = 1. / math.sqrt(self.in_dim)
         self.weights = nn.Parameter(torch.Tensor(self.n_params, self.in_dim, self.out_dim).uniform_(-stdv, stdv))
-        self.bias = nn.Parameter(torch.zeros(self.n_params))
         self.output_shape = [0, self.out_dim] + [entity.n_instances for entity in relation_out.entities]
         self.logger = logging.getLogger()
         self.logger.setLevel(LOG_LEVEL)
@@ -92,7 +91,7 @@ class SparseMatrixEquivariantLayerBlock(nn.Module):
             #assert X_op_out.nnz() == X_out.nnz()
             #assert Y.nnz() == X_out.nnz(), "Y: {}, X_out: {}".format(Y.nnz(), X_out.nnz())
             #assert Y.nnz() == X_op_out.nnz(), "Y: {}, X_op_out: {}".format(Y.nnz(), X_op_out.nnz())
-            Y = Y + X_op_out + self.bias[i]
+            Y = Y + X_op_out
         return Y
 
 
@@ -125,7 +124,16 @@ class SparseMatrixEquivariantLayer(nn.Module):
             block_modules[str((relation_i.id, relation_j.id))] = block_module
         self.block_modules = nn.ModuleDict(block_modules)
         self.logger = logging.getLogger()
-        #self.cache = {}            
+
+        bias = {}
+        for relation in self.schema_out.relations:
+            if relation.entities[0] == relation.entities[1] and not relation.is_set:
+                # Square matrix: One bias for diagonal, one for all
+                bias[str(relation.id)] = nn.Parameter(torch.zeros(2, self.output_dim[relation.id]))
+            else:
+                # One bias parameter for full matrix
+                bias[str(relation.id)] = nn.Parameter(torch.zeros(1, self.output_dim[relation.id]))
+        self.bias = nn.ParameterDict(bias)
 
     def forward(self, data, indices_identity=None, indices_transpose=None):
         data_out = SparseMatrixData(self.schema_out)
@@ -141,6 +149,14 @@ class SparseMatrixEquivariantLayer(nn.Module):
                 data_out[relation_j.id] = Y_out
             else:
                 data_out[relation_j.id] = data_out[relation_j.id] + Y_out
+        
+        for relation in self.schema_out.relations:
+            bias_param = self.bias[str(relation.id)]
+            data_out[relation.id] = data_out[relation.id] + bias_param[0]
+            if relation.entities[0] == relation.entities[1] and not relation.is_set:
+                device = bias_param.device
+                bias_diag = data_out[relation.id].broadcast(bias_param[1], 'diag', device)
+                data_out[relation.id] = data_out[relation.id] + bias_diag
         return data_out
 
 
@@ -170,5 +186,12 @@ class SparseMatrixEntityPoolingLayer(SparseMatrixEquivariantLayer):
                 data_out[relation_j.id] = Y_out
             else:
                 data_out[relation_j.id] = data_out[relation_j.id] + Y_out
+
+        for relation in self.schema_out.relations:
+            bias_param = self.bias[str(relation.id)]
+            data_out[relation.id] = data_out[relation.id] + bias_param[0]
+            if relation.entities[0] == relation.entities[1] and not relation.is_set:
+                device = bias_param.device
+                bias_diag = data_out[relation.id].broadcast(bias_param[1], 'diag', device)
+                data_out[relation.id] = data_out[relation.id] + bias_diag
         return data_out
-    

@@ -107,7 +107,7 @@ class SparseMatrixEquivariantNetwork(nn.Module):
     def __init__(self, schema, input_channels, activation=F.relu, 
                  layers=[32, 64, 32], target_entities=None,
                  fc_layers=[], final_activation=nn.Identity(),
-                 output_dim=1,  dropout=0):
+                 output_dim=1,  dropout=0, norm=True):
         super(SparseMatrixEquivariantNetwork, self).__init__()
         self.schema = schema
         self.input_channels = input_channels
@@ -126,9 +126,13 @@ class SparseMatrixEquivariantNetwork(nn.Module):
         self.equiv_layers.extend([
                 SparseMatrixEquivariantLayer(schema, layers[i-1], layers[i])
                 for i in range(1, len(layers))])
-        self.norms = nn.ModuleList([RelationNorm(schema, channels, affine=False,
-                                                 sparse=True, matrix=True)
-                                    for channels in layers])
+        if norm:
+            self.norms = nn.ModuleList([RelationNorm(schema, channels, affine=False,
+                                                     sparse=True, matrix=True)
+                                        for channels in layers])
+        else:
+            self.norms = nn.ModuleList([SparseActivation(schema, nn.Identity())
+                                        for _ in layers])
 
         # Entity embeddings
         embedding_layers = fc_layers + [output_dim]

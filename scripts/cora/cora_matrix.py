@@ -29,6 +29,7 @@ import csv
 import random
 import pdb
 import argparse
+import wandb
 
 #%%
 csv_file_str = './data/cora/{}.csv'
@@ -50,9 +51,12 @@ def get_hyperparams(argv):
     parser.add_argument('--num_epochs', type=int, default=1000)
     parser.add_argument('--val_every', type=int, default=10)
     parser.add_argument('--seed', type=int, default=1)
-    parser.add_argument('--neg_data', type=float, default=0.,
+    parser.add_argument('--norm', type=bool, default=True)
+    parser.add_argument('--neg_data', type=float, default=1.,
                         help='Ratio of random data samples to positive. \
                               When sparse, this is similar to number of negative samples')
+    parser.add_argument('--wandb_log_param_freq', type=int, default=250)
+    parser.add_argument('--wandb_log_loss_freq', type=int, default=1)
 
     args, argv = parser.parse_known_args(argv)
     args.layers  = [int(x) for x in args.layers]
@@ -103,8 +107,13 @@ def set_seed(seed):
 
 #%%
 if __name__ == '__main__':
+
     argv = sys.argv[1:]
     args = get_hyperparams(argv)
+
+    wandb.init(config=args,
+        project="EquivariantRelational",
+        entity='danieltlevy')
 
     set_seed(args.seed)
     paper_names = []
@@ -236,9 +245,10 @@ if __name__ == '__main__':
                                          final_activation = nn.Identity(),
                                          target_entities=schema_out.entities,
                                          dropout=args.dropout_rate,
-                                         output_dim=n_classes)
+                                         output_dim=n_classes,
+                                         norm=args.norm)
     net = net.to(device)
-
+    wandb.watch(net, log='all', log_freq=args.wandb_log_param_freq)
     opt = eval('optim.%s' % args.optimizer)(net.parameters(), lr=args.learning_rate, weight_decay=args.l2_decay)
 
     sched = optim.lr_scheduler.ReduceLROnPlateau(opt, mode='min',
@@ -262,6 +272,7 @@ if __name__ == '__main__':
         acc = (data_out_values.argmax(1) == train_targets).sum() / len(train_targets)
         progress.set_description(f"Epoch {epoch}")
         progress.set_postfix(loss=train_loss.item(), train_acc=acc.item())
+        wandb_log = {'Train Loss': train_loss.item(), 'Train Accuracy': acc.item()}
         if epoch % args.val_every == 0:
             net.eval()
             data_out_val = net(val_data, idx_id_val, idx_trans_val, data_target)
@@ -269,6 +280,7 @@ if __name__ == '__main__':
             val_loss = classification_loss(data_out_val_values, val_targets)
             val_acc = (data_out_val_values.argmax(1) == val_targets).sum() / len(val_targets)
             print("\nVal Acc: {:.3f} Val Loss: {:.3f}".format(val_acc, val_loss))
+            wandb_log.update({'Val Loss': val_loss.item(), 'Val Accuracy': val_acc.item()})
             sched.step(val_loss)
             if val_acc > val_acc_best:
                 print("Saving")
@@ -280,14 +292,5 @@ if __name__ == '__main__':
                     'loss': train_loss.item(),
                     'val_acc_best': val_acc_best.item()
                     }, PATH)
-
-    #%%
-    checkpoint = torch.load("models/test_model_matrix_cora.pt", map_location=torch.device(device))
-    net.load_state_dict(checkpoint['model_state_dict'])
-    loss = checkpoint['loss']
-    #%%
-    net.eval()
-    data_out_val = net(val_data, idx_id_val, idx_trans_val, data_target)
-    data_out_val_values = data_out_val[val_indices]
-    val_loss = classification_loss(data_out_val_values, val_targets)
-    acc = (data_out_val_values.argmax(1) == val_targets).sum() / len(val_targets)
+        if epoch % args.wandb_log_loss_freq == 0:
+            wandb.log(wandb_log)

@@ -124,7 +124,7 @@ class SparseMatrixEquivariantLayer(nn.Module):
             block_modules[str((relation_i.id, relation_j.id))] = block_module
         self.block_modules = nn.ModuleDict(block_modules)
         self.logger = logging.getLogger()
-
+        
         bias = {}
         for relation in self.schema_out.relations:
             if relation.entities[0] == relation.entities[1] and not relation.is_set:
@@ -135,10 +135,8 @@ class SparseMatrixEquivariantLayer(nn.Module):
                 bias[str(relation.id)] = nn.Parameter(torch.zeros(1, self.output_dim[relation.id]))
         self.bias = nn.ParameterDict(bias)
 
-    def forward(self, data, indices_identity=None, indices_transpose=None):
-        data_out = SparseMatrixData(self.schema_out)
+    def multiply_matrices(self, data, data_out, indices_identity=None, indices_transpose=None):
         for relation_i, relation_j in self.relation_pairs:
-            #self.logger.warning("Relation: ({}, {})".format(relation_i.id, relation_j.id))
             X_in = data[relation_i.id]
             Y_in = data[relation_j.id]
             layer = self.block_modules[str((relation_i.id, relation_j.id))]
@@ -149,14 +147,23 @@ class SparseMatrixEquivariantLayer(nn.Module):
                 data_out[relation_j.id] = Y_out
             else:
                 data_out[relation_j.id] = data_out[relation_j.id] + Y_out
+        return data_out
         
+    def add_bias(self, data):
         for relation in self.schema_out.relations:
             bias_param = self.bias[str(relation.id)]
-            data_out[relation.id] = data_out[relation.id] + bias_param[0]
+            data[relation.id] = data[relation.id] + bias_param[0]
             if relation.entities[0] == relation.entities[1] and not relation.is_set:
                 device = bias_param.device
-                bias_diag = data_out[relation.id].broadcast(bias_param[1], 'diag', device)
-                data_out[relation.id] = data_out[relation.id] + bias_diag
+                bias_diag = data[relation.id].broadcast(bias_param[1], 'diag', device)
+                data[relation.id] = data[relation.id] + bias_diag
+        return data
+
+    def forward(self, data, indices_identity=None, indices_transpose=None):
+        data_out = SparseMatrixData(self.schema_out)
+        data_out = self.multiply_matrices(data, data_out,
+                                          indices_identity, indices_transpose)
+        data_out = self.add_bias(data_out)
         return data_out
 
 
@@ -174,10 +181,8 @@ class SparseMatrixEntityPoolingLayer(SparseMatrixEquivariantLayer):
         super().__init__(schema, input_dim, output_dim,
                          schema_out=encodings_schema)
 
-    def forward(self, data, data_target=None):
-        data_out = Data(self.schema_out)
+    def multiply_matrices(self, data, data_out, data_target):
         for relation_i, relation_j in self.relation_pairs:
-            #self.logger.warning("Relation: ({}, {})".format(relation_i.id, relation_j.id))
             X_in = data[relation_i.id]
             Y_in = data_target[relation_j.id]
             layer = self.block_modules[str((relation_i.id, relation_j.id))]
@@ -186,12 +191,10 @@ class SparseMatrixEntityPoolingLayer(SparseMatrixEquivariantLayer):
                 data_out[relation_j.id] = Y_out
             else:
                 data_out[relation_j.id] = data_out[relation_j.id] + Y_out
+        return data_out
 
-        for relation in self.schema_out.relations:
-            bias_param = self.bias[str(relation.id)]
-            data_out[relation.id] = data_out[relation.id] + bias_param[0]
-            if relation.entities[0] == relation.entities[1] and not relation.is_set:
-                device = bias_param.device
-                bias_diag = data_out[relation.id].broadcast(bias_param[1], 'diag', device)
-                data_out[relation.id] = data_out[relation.id] + bias_diag
+    def forward(self, data, data_target=None):
+        data_out = Data(self.schema_out)
+        data_out = self.multiply_matrices(data, data_out, data_target)
+        data_out = self.add_bias(data_out)
         return data_out

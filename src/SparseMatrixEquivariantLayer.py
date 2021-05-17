@@ -97,27 +97,27 @@ class SparseMatrixEquivariantLayerBlock(nn.Module):
 
 
 class SparseMatrixEquivariantLayer(nn.Module):
-    def __init__(self, data_schema, input_dim=1, output_dim=1, data_schema_out=None):
+    def __init__(self, schema, input_dim=1, output_dim=1, schema_out=None):
         '''
         input_dim: either a rel_id: dimension dict, or an integer for all relations
         output_dim: either a rel_id: dimension dict, or an integer for all relations
         '''
         super(SparseMatrixEquivariantLayer, self).__init__()
-        self.data_schema = data_schema
-        self.data_schema_out = data_schema_out
-        if self.data_schema_out == None:
-            self.data_schema_out = data_schema
-        self.relation_pairs = list(itertools.product(self.data_schema.relations,
-                                                    self.data_schema_out.relations))
+        self.schema = schema
+        self.schema_out = schema_out
+        if self.schema_out == None:
+            self.schema_out = schema
+        self.relation_pairs = list(itertools.product(self.schema.relations,
+                                                    self.schema_out.relations))
         block_modules = {}
         if type(input_dim) == dict:
             self.input_dim = input_dim
         else:
-            self.input_dim = {rel.id: input_dim for rel in self.data_schema.relations}
+            self.input_dim = {rel.id: input_dim for rel in self.schema.relations}
         if type(output_dim) == dict:
             self.output_dim = output_dim
         else:
-            self.output_dim = {rel.id: output_dim for rel in self.data_schema.relations}
+            self.output_dim = {rel.id: output_dim for rel in self.schema_out.relations}
         for relation_i, relation_j in self.relation_pairs:
             block_module = SparseMatrixEquivariantLayerBlock(self.input_dim[relation_i.id],
                                                              self.output_dim[relation_j.id],
@@ -128,7 +128,7 @@ class SparseMatrixEquivariantLayer(nn.Module):
         #self.cache = {}            
 
     def forward(self, data, indices_identity=None, indices_transpose=None):
-        data_out = SparseMatrixData(self.data_schema_out)
+        data_out = SparseMatrixData(self.schema_out)
         for relation_i, relation_j in self.relation_pairs:
             #self.logger.warning("Relation: ({}, {})".format(relation_i.id, relation_j.id))
             X_in = data[relation_i.id]
@@ -145,21 +145,21 @@ class SparseMatrixEquivariantLayer(nn.Module):
 
 
 class SparseMatrixEntityPoolingLayer(SparseMatrixEquivariantLayer):
-    def __init__(self, data_schema, input_dim=1, output_dim=1, entities=None):
+    def __init__(self, schema, input_dim=1, output_dim=1, entities=None):
         '''
         input_dim: either a rel_id: dimension dict, or an integer for all relations
         output_dim: either a rel_id: dimension dict, or an integer for all relations
         '''
         if entities == None:
-            entities = data_schema.entities
+            entities = schema.entities
         enc_relations = [Relation(i, [entity, entity], is_set=True)
                                 for i, entity in enumerate(entities)]
         encodings_schema = DataSchema(entities, enc_relations)
-        super().__init__(data_schema, input_dim, output_dim,
-                                              data_schema_out=encodings_schema)
+        super().__init__(schema, input_dim, output_dim,
+                         schema_out=encodings_schema)
 
     def forward(self, data, data_target=None):
-        data_out = Data(self.data_schema_out)
+        data_out = Data(self.schema_out)
         for relation_i, relation_j in self.relation_pairs:
             #self.logger.warning("Relation: ({}, {})".format(relation_i.id, relation_j.id))
             X_in = data[relation_i.id]

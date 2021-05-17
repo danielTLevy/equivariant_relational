@@ -245,16 +245,16 @@ class SparseEquivariantLayerBlock(nn.Module):
 
 
 class SparseEquivariantLayer(nn.Module):
-    def __init__(self, data_schema, input_dim=1, output_dim=1, target_rel=None):
+    def __init__(self, schema, input_dim=1, output_dim=1, target_rel=None):
         super(SparseEquivariantLayer, self).__init__()
-        self.data_schema = data_schema
+        self.schema = schema
         self.target_rel = target_rel
         if target_rel == None:
-            self.relation_pairs = list(itertools.product(self.data_schema.relations,
-                                                    self.data_schema.relations))
+            self.relation_pairs = list(itertools.product(self.schema.relations,
+                                                    self.schema.relations))
         else:
-            self.relation_pairs = [(rel_i, self.data_schema.relations[target_rel]) \
-                                   for rel_i in self.data_schema.relations]
+            self.relation_pairs = [(rel_i, self.schema.relations[target_rel]) \
+                                   for rel_i in self.schema.relations]
         block_modules = {}
         self.input_dim = input_dim
         self.output_dim = output_dim
@@ -266,7 +266,7 @@ class SparseEquivariantLayer(nn.Module):
         self.logger = logging.getLogger()
 
     def forward(self, data):
-        data_out = Data(self.data_schema)
+        data_out = Data(self.schema)
         for relation_i, relation_j in self.relation_pairs:
             self.logger.info("Relation: ({}, {})".format(relation_i.id, relation_j.id))
             X_in = data[relation_i.id]

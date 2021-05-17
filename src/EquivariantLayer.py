@@ -194,11 +194,11 @@ class EquivariantLayerBlock(nn.Module):
 
 
 class EquivariantLayer(nn.Module):
-    def __init__(self, data_schema, input_dim=1, output_dim=1):
+    def __init__(self, schema, input_dim=1, output_dim=1):
         super(EquivariantLayer, self).__init__()
-        self.data_schema = data_schema
-        self.relation_pairs = list(itertools.product(self.data_schema.relations,
-                                                self.data_schema.relations))
+        self.schema = schema
+        self.relation_pairs = list(itertools.product(self.schema.relations,
+                                                self.schema.relations))
         block_modules = {}
         self.input_dim = input_dim
         self.output_dim = output_dim
@@ -209,7 +209,7 @@ class EquivariantLayer(nn.Module):
         self.block_modules = nn.ModuleDict(block_modules)
 
     def forward(self, data):
-        data_out = Data(self.data_schema)
+        data_out = Data(self.schema)
         for relation_i, relation_j in self.relation_pairs:
             X = data[relation_i.id]
             layer = self.block_modules[str((relation_i.id, relation_j.id))]

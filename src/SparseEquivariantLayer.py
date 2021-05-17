@@ -255,23 +255,23 @@ class SparseEquivariantLayer(nn.Module):
         else:
             self.relation_pairs = [(rel_i, self.data_schema.relations[target_rel]) \
                                    for rel_i in self.data_schema.relations]
-        block_modules = []
+        block_modules = {}
         self.input_dim = input_dim
         self.output_dim = output_dim
         for relation_i, relation_j in self.relation_pairs:
             block_module = SparseEquivariantLayerBlock(self.input_dim, self.output_dim,
                                                        relation_i, relation_j)
-            block_modules.append(block_module)
-        self.block_modules = nn.ModuleList(block_modules)
+            block_modules[str((relation_i.id, relation_j.id))] = block_module
+        self.block_modules = nn.ModuleDict(block_modules)
         self.logger = logging.getLogger()
 
     def forward(self, data):
         data_out = Data(self.data_schema)
-        for i, (relation_i, relation_j) in enumerate(self.relation_pairs):
+        for relation_i, relation_j in self.relation_pairs:
             self.logger.info("Relation: ({}, {})".format(relation_i.id, relation_j.id))
             X_in = data[relation_i.id]
             Y_in = data[relation_j.id]
-            layer = self.block_modules[i]
+            layer = self.block_modules[str((relation_i.id, relation_j.id))]
             Y_out = layer.forward(X_in, Y_in)
             if relation_j.id not in data_out:
                 data_out[relation_j.id] = Y_out

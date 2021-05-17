@@ -109,7 +109,7 @@ class SparseMatrixEquivariantLayer(nn.Module):
             self.data_schema_out = data_schema
         self.relation_pairs = list(itertools.product(self.data_schema.relations,
                                                     self.data_schema_out.relations))
-        block_modules = []
+        block_modules = {}
         if type(input_dim) == dict:
             self.input_dim = input_dim
         else:
@@ -122,18 +122,18 @@ class SparseMatrixEquivariantLayer(nn.Module):
             block_module = SparseMatrixEquivariantLayerBlock(self.input_dim[relation_i.id],
                                                              self.output_dim[relation_j.id],
                                                               relation_i, relation_j)
-            block_modules.append(block_module)
-        self.block_modules = nn.ModuleList(block_modules)
+            block_modules[str((relation_i.id, relation_j.id))] = block_module
+        self.block_modules = nn.ModuleDict(block_modules)
         self.logger = logging.getLogger()
         #self.cache = {}            
 
     def forward(self, data, indices_identity=None, indices_transpose=None):
         data_out = SparseMatrixData(self.data_schema_out)
-        for i, (relation_i, relation_j) in enumerate(self.relation_pairs):
+        for relation_i, relation_j in self.relation_pairs:
             #self.logger.warning("Relation: ({}, {})".format(relation_i.id, relation_j.id))
             X_in = data[relation_i.id]
             Y_in = data[relation_j.id]
-            layer = self.block_modules[i]
+            layer = self.block_modules[str((relation_i.id, relation_j.id))]
             indices_id = indices_identity[relation_i.id, relation_j.id]
             indices_trans = indices_transpose[relation_i.id, relation_j.id]
             Y_out = layer.forward(X_in, Y_in, indices_id, indices_trans)
@@ -160,11 +160,11 @@ class SparseMatrixEntityPoolingLayer(SparseMatrixEquivariantLayer):
 
     def forward(self, data, data_target=None):
         data_out = Data(self.data_schema_out)
-        for i, (relation_i, relation_j) in enumerate(self.relation_pairs):
+        for relation_i, relation_j in self.relation_pairs:
             #self.logger.warning("Relation: ({}, {})".format(relation_i.id, relation_j.id))
             X_in = data[relation_i.id]
             Y_in = data_target[relation_j.id]
-            layer = self.block_modules[i]
+            layer = self.block_modules[str((relation_i.id, relation_j.id))]
             Y_out = layer.forward(X_in, Y_in, None, None)
             if relation_j.id not in data_out:
                 data_out[relation_j.id] = Y_out

@@ -199,20 +199,20 @@ class EquivariantLayer(nn.Module):
         self.data_schema = data_schema
         self.relation_pairs = list(itertools.product(self.data_schema.relations,
                                                 self.data_schema.relations))
-        block_modules = []
+        block_modules = {}
         self.input_dim = input_dim
         self.output_dim = output_dim
         for relation_i, relation_j in self.relation_pairs:
             block_module = EquivariantLayerBlock(self.input_dim, self.output_dim,
                                                  relation_i, relation_j)
-            block_modules.append(block_module)
-        self.block_modules = nn.ModuleList(block_modules)
+            block_modules[str((relation_i.id, relation_j.id))] = block_module
+        self.block_modules = nn.ModuleDict(block_modules)
 
     def forward(self, data):
         data_out = Data(self.data_schema)
-        for i, (relation_i, relation_j) in enumerate(self.relation_pairs):
+        for relation_i, relation_j in self.relation_pairs:
             X = data[relation_i.id]
-            layer = self.block_modules[i]
+            layer = self.block_modules[str((relation_i.id, relation_j.id))]
             out = layer.forward(X)
             if relation_j.id not in data_out:
                 data_out[relation_j.id] = out

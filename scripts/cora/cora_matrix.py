@@ -113,7 +113,8 @@ if __name__ == '__main__':
 
     wandb.init(config=args,
         project="EquivariantRelational",
-        entity='danieltlevy')
+        entity='danieltlevy',
+        settings=wandb.Settings(start_method='fork'))
 
     set_seed(args.seed)
     paper_names = []

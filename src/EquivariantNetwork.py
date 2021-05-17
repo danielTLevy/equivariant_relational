@@ -154,7 +154,7 @@ class SparseMatrixEquivariantNetwork(nn.Module):
         for i in range(self.n_equiv_layers):
             data = self.norms[i](self.rel_dropout(self.rel_activation(
                     self.equiv_layers[i](data, idx_identity, idx_transpose))))
-        data = self.rel_dropout(self.pooling(data, data_out))
+        data = self.pooling(data, data_out)
         out = data[0].values
         if self.n_fc_layers > 0:
             out = self.fc_layers[0](out)

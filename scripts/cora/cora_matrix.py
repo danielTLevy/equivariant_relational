@@ -36,10 +36,10 @@ csv_file_str = './data/cora/{}.csv'
 
 def get_hyperparams(argv):
     parser = argparse.ArgumentParser(allow_abbrev=False)
-    parser.add_argument('--checkpoint_path', type=str, required=False)
+    parser.add_argument('--checkpoint_path', type=str, default='cora_matrix.pt')
     parser.add_argument('--layers', type=int, nargs='*', default=['64']*4,
                         help='Number of channels for equivariant layers')
-    parser.add_argument('--fc_layers', type=str, nargs='*', default=['32'],
+    parser.add_argument('--fc_layers', type=str, nargs='*', default=[],
                         help='Fully connected layers for target embeddings')
     parser.add_argument('--l2_decay', type=float, default=0)
     parser.add_argument('--dropout_rate', type=float, default=0)
@@ -64,7 +64,7 @@ def get_hyperparams(argv):
 
     return args
 
-def get_data_and_targets(schema, neg_data, paper, cites, content):
+def get_data_and_targets(schema, neg_data, data_indices, paper, cites, content):
     n_papers = schema.entities[0].n_instances
     n_words = schema.entities[1].n_instances
 
@@ -72,7 +72,7 @@ def get_data_and_targets(schema, neg_data, paper, cites, content):
 
     # Randomly fill in values and coalesce to remove duplicates
     n_cites_neg = int(neg_data*cites.shape[1])
-    cites_neg = np.random.randint(0, n_papers, (2, n_cites_neg))
+    cites_neg = np.random.choice(data_indices, (2, n_cites_neg))
     cites_matrix = SparseMatrix(
             indices = torch.LongTensor(np.concatenate((cites, cites_neg),axis=1)),
             values = torch.cat((torch.ones(cites.shape[1], 1), torch.zeros(n_cites_neg, 1))),
@@ -81,7 +81,7 @@ def get_data_and_targets(schema, neg_data, paper, cites, content):
 
     # For each paper, randomly fill in values and coalesce to remove duplicates
     n_content_neg = int(neg_data*content.shape[1])
-    content_neg = np.stack((np.random.randint(0, n_papers, (n_content_neg,)),
+    content_neg = np.stack((np.random.choice(data_indices, (n_content_neg,)),
                     np.random.randint(0, n_words, (n_content_neg,))))
 
     content_matrix = SparseMatrix(
@@ -111,11 +111,6 @@ if __name__ == '__main__':
     argv = sys.argv[1:]
     args = get_hyperparams(argv)
 
-    wandb.init(config=args,
-        project="EquivariantRelational",
-        entity='danieltlevy',
-        settings=wandb.Settings(start_method='fork'))
-
     set_seed(args.seed)
     paper_names = []
     classes = []
@@ -137,6 +132,8 @@ if __name__ == '__main__':
     val_indices  = shuffled_indices[: len(paper_names) // 10]
     test_indices  = shuffled_indices[len(paper_names) // 10: 2*(len(paper_names) // 10)]
     train_indices = shuffled_indices[2*(len(paper_names) // 10) :]
+    all_val_indices = val_indices + train_indices
+    all_test_indices = val_indices + test_indices + train_indices
     val_papers = paper_names[val_indices]
     test_papers = paper_names[test_indices]
 
@@ -210,9 +207,9 @@ if __name__ == '__main__':
     schema = DataSchema([ent_papers, ent_words], [rel_cites, rel_content])
     schema_out = DataSchema([ent_papers], [rel_paper])
 
-    train_vals = {'paper': train_paper, 'cites': train_cites, 'content': train_content}
-    val_vals = {'paper': val_paper, 'cites': val_cites, 'content': val_content}
-    test_vals = {'paper': test_paper, 'cites': test_cites, 'content': test_content}
+    train_vals = {'data_indices': train_indices, 'paper': train_paper, 'cites': train_cites, 'content': train_content}
+    val_vals = {'data_indices': all_val_indices, 'paper': val_paper, 'cites': val_cites, 'content': val_content}
+    test_vals = {'data_indices': all_test_indices, 'paper': test_paper, 'cites': test_cites, 'content': test_content}
 
     #%%
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -249,7 +246,6 @@ if __name__ == '__main__':
                                          output_dim=n_classes,
                                          norm=args.norm)
     net = net.to(device)
-    wandb.watch(net, log='all', log_freq=args.wandb_log_param_freq)
     opt = eval('optim.%s' % args.optimizer)(net.parameters(), lr=args.learning_rate, weight_decay=args.l2_decay)
 
     sched = optim.lr_scheduler.ReduceLROnPlateau(opt, mode='min',
@@ -257,7 +253,13 @@ if __name__ == '__main__':
                                                  patience=args.sched_patience,
                                                  verbose=True)
     #%%
-    PATH = "models/test_model_matrix_cora.pt"
+    wandb.init(config=args,
+        project="EquivariantRelational",
+        entity='danieltlevy',
+        settings=wandb.Settings(start_method='fork'))
+    wandb.watch(net, log='all', log_freq=args.wandb_log_param_freq)
+
+    PATH = "models/" + args.checkpoint_path
     val_acc_best = 0
 
     progress = tqdm(range(args.num_epochs), desc="Epoch 0", position=0, leave=True)

@@ -56,8 +56,13 @@ def get_hyperparams(argv):
     parser.add_argument('--neg_data', type=float, default=0.,
                         help='Ratio of random data samples to positive. \
                               When sparse, this is similar to number of negative samples')
+    parser.add_argument('--training_data', choices=['train', 'val', 'test'], default='train')
     parser.add_argument('--wandb_log_param_freq', type=int, default=250)
     parser.add_argument('--wandb_log_loss_freq', type=int, default=1)
+    parser.add_argument('--wandb_log_run', dest='wandb_log_run', action='store_true',
+                        help='Log this run in wandb')
+    parser.add_argument('--wandb_no_log_run', dest='wandb_log_run', action='store_false',
+                        help='Do not log this run in wandb')
 
     args, argv = parser.parse_known_args(argv)
     args.layers  = [int(x) for x in args.layers]
@@ -226,6 +231,19 @@ if __name__ == '__main__':
     val_targets = val_targets.to(device)
     idx_id_val, idx_trans_val = val_data.calculate_indices()
 
+    test_data, test_targets = get_data_and_targets(schema, args.neg_data, **test_vals)
+    test_data = test_data.to(device)
+    test_targets = test_targets.to(device)
+    idx_id_test, idx_trans_test = test_data.calculate_indices()
+
+    if args.training_data == 'val':
+        train_data = val_data
+        indices_identity = idx_id_val
+        indices_transpose = idx_trans_val
+    elif args.training_data == 'test':
+        train_data = test_data
+        indices_identity = idx_id_test
+        indices_transpose = idx_trans_test
     data_target = Data(schema_out)
     data_target[0] = SparseMatrix(indices = torch.arange(len(paper_names), dtype=torch.int64).repeat(2,1),
                                    values=torch.zeros([len(paper_names), n_classes]),
@@ -257,11 +275,12 @@ if __name__ == '__main__':
                                                  patience=args.sched_patience,
                                                  verbose=True)
     #%%
-    wandb.init(config=args,
-        project="EquivariantRelational",
-        entity='danieltlevy',
-        settings=wandb.Settings(start_method='fork'))
-    wandb.watch(net, log='all', log_freq=args.wandb_log_param_freq)
+    if args.wandb_log_run:
+        wandb.init(config=args,
+            project="EquivariantRelational",
+            entity='danieltlevy',
+            settings=wandb.Settings(start_method='fork'))
+        wandb.watch(net, log='all', log_freq=args.wandb_log_param_freq)
 
     PATH = "models/" + args.checkpoint_path
     val_acc_best = 0
@@ -300,4 +319,5 @@ if __name__ == '__main__':
                     'val_acc_best': val_acc_best.item()
                     }, PATH)
         if epoch % args.wandb_log_loss_freq == 0:
-            wandb.log(wandb_log)
+            if args.wandb_log_run:
+                wandb.log(wandb_log)

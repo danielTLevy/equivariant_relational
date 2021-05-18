@@ -132,11 +132,11 @@ if __name__ == '__main__':
 
     random.seed(0)
     shuffled_indices = random.sample(range(len(paper_names)), len(paper_names))
-    val_indices  = shuffled_indices[: len(paper_names) // 10]
-    test_indices  = shuffled_indices[len(paper_names) // 10: 2*(len(paper_names) // 10)]
-    train_indices = shuffled_indices[2*(len(paper_names) // 10) :]
-    all_val_indices = val_indices + train_indices
-    all_test_indices = val_indices + test_indices + train_indices
+    val_indices  = sorted(shuffled_indices[: len(paper_names) // 10])
+    test_indices  = sorted(shuffled_indices[len(paper_names) // 10: 2*(len(paper_names) // 10)])
+    train_indices = sorted(shuffled_indices[2*(len(paper_names) // 10) :])
+    all_val_indices = sorted(val_indices + train_indices)
+    all_test_indices = sorted(val_indices + test_indices + train_indices)
     val_papers = paper_names[val_indices]
     test_papers = paper_names[test_indices]
 

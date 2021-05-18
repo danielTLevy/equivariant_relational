@@ -52,7 +52,8 @@ def get_hyperparams(argv):
     parser.add_argument('--val_every', type=int, default=10)
     parser.add_argument('--seed', type=int, default=1)
     parser.add_argument('--norm', type=bool, default=True)
-    parser.add_argument('--neg_data', type=float, default=1.,
+    parser.add_argument('--pool_op', type=str, default='mean')
+    parser.add_argument('--neg_data', type=float, default=0.,
                         help='Ratio of random data samples to positive. \
                               When sparse, this is similar to number of negative samples')
     parser.add_argument('--wandb_log_param_freq', type=int, default=250)
@@ -244,7 +245,8 @@ if __name__ == '__main__':
                                          target_entities=schema_out.entities,
                                          dropout=args.dropout_rate,
                                          output_dim=n_classes,
-                                         norm=args.norm)
+                                         norm=args.norm,
+                                         pool_op=args.pool_op)
     net = net.to(device)
     opt = eval('optim.%s' % args.optimizer)(net.parameters(), lr=args.learning_rate, weight_decay=args.l2_decay)
 

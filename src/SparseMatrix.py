@@ -4,6 +4,7 @@
 import torch
 import numpy as np
 import torch_sparse
+import torch_scatter
 from src.utils import get_masks_of_intersection, MATRIX_PREFIX_DIMS
 import pdb
 
@@ -265,18 +266,32 @@ class SparseMatrix:
         return SparseMatrix(indices, values, self.shape())
 
 
-    def pool(self, index_str, norm=None, device=None):
+    def pool(self, index_str, device=None, op='add'):
         '''
         Pool self.values along indices specified by index_str
         '''
         assert index_str in {"row","col","diag", "all"}
+        assert op in {"add", "max", "mean"}
         values = self.values
         if index_str == "all" or index_str == "diag":
             pooled_output = torch.zeros(1, self.n_channels).to(device)
             if index_str == "diag":
                 assert self.n == self.m, "Diag only implemented for square matrices"
                 values = self.gather_diag(device)
-            pooled_output = values.sum(0)
+            if op == "add" or op == "mean":
+                op = torch.sum
+            elif op == "max":
+                op = torch.max
+            pooled_output = op(values, dim=0)
+            if op == "mean":
+                if index_str == "all":
+                    denom = self.nnz()
+                elif index_str == "diag":
+                    denom = self.indices_diag.shape[0]
+                if denom == 0:
+                    denom = 1.
+                pooled_output = pooled_output / denom
+
         else:
             if index_str == "row":
                 indices = self.indices[1]
@@ -284,16 +299,15 @@ class SparseMatrix:
             elif index_str == "col":
                 indices = self.indices[0]
                 n_segments = self.n
-            pooled_output = torch.zeros(n_segments, self.n_channels).to(device)
-            pooled_output = pooled_output.index_add(0, indices, values)
+            if op == "add":
+                op = torch_scatter.scatter_add
+            elif op == "mean":
+                op = torch_scatter.scatter_mean
+            elif op == "max":
+                op = torch_scatter.scatter_max
+            pooled_output = op(values.T, indices, dim_size=n_segments).T
 
-        #TODO: whatever this is
-        if norm is not None:
-            mean_pooled_output = torch.div(pooled_output, norm.view(norm.shape[0], 1))
-        else:
-            mean_pooled_output = pooled_output
-
-        return mean_pooled_output
+        return pooled_output
 
     def gather_diag(self, device=None):
         '''

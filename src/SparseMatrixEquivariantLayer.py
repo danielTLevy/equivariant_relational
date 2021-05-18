@@ -17,7 +17,7 @@ LOG_LEVEL = logging.INFO
 
 class SparseMatrixEquivariantLayerBlock(nn.Module):
     # Layer mapping between two relations
-    def __init__(self, input_dim, output_dim, relation_in, relation_out):
+    def __init__(self, input_dim, output_dim, relation_in, relation_out, pool_op='mean'):
         super(SparseMatrixEquivariantLayerBlock, self).__init__()
         assert len(relation_in.entities) == 2, "Relation must be second or first order"
         assert len(relation_out.entities) <= 2, "Relation must be second order"
@@ -34,6 +34,7 @@ class SparseMatrixEquivariantLayerBlock(nn.Module):
         self.output_shape = [0, self.out_dim] + [entity.n_instances for entity in relation_out.entities]
         self.logger = logging.getLogger()
         self.logger.setLevel(LOG_LEVEL)
+        self.pool_op = pool_op
 
     def output_op(self, op_str, X_out, data, device):
         op, index_str = op_str.split('_')
@@ -47,7 +48,7 @@ class SparseMatrixEquivariantLayerBlock(nn.Module):
         if op == 'g':
             return X_in.gather_diag(device)
         elif op == 'p':
-            return X_in.pool(index_str, device=device)
+            return X_in.pool(index_str, device=device, op=self.pool_op)
 
     def forward(self, X_in, X_out, indices_identity, indices_trans):
         '''
@@ -96,7 +97,7 @@ class SparseMatrixEquivariantLayerBlock(nn.Module):
 
 
 class SparseMatrixEquivariantLayer(nn.Module):
-    def __init__(self, schema, input_dim=1, output_dim=1, schema_out=None):
+    def __init__(self, schema, input_dim=1, output_dim=1, schema_out=None, pool_op='mean'):
         '''
         input_dim: either a rel_id: dimension dict, or an integer for all relations
         output_dim: either a rel_id: dimension dict, or an integer for all relations
@@ -120,7 +121,8 @@ class SparseMatrixEquivariantLayer(nn.Module):
         for relation_i, relation_j in self.relation_pairs:
             block_module = SparseMatrixEquivariantLayerBlock(self.input_dim[relation_i.id],
                                                              self.output_dim[relation_j.id],
-                                                              relation_i, relation_j)
+                                                              relation_i, relation_j,
+                                                              pool_op=pool_op)
             block_modules[str((relation_i.id, relation_j.id))] = block_module
         self.block_modules = nn.ModuleDict(block_modules)
         self.logger = logging.getLogger()
@@ -168,7 +170,7 @@ class SparseMatrixEquivariantLayer(nn.Module):
 
 
 class SparseMatrixEntityPoolingLayer(SparseMatrixEquivariantLayer):
-    def __init__(self, schema, input_dim=1, output_dim=1, entities=None):
+    def __init__(self, schema, input_dim=1, output_dim=1, entities=None, pool_op='mean'):
         '''
         input_dim: either a rel_id: dimension dict, or an integer for all relations
         output_dim: either a rel_id: dimension dict, or an integer for all relations
@@ -179,7 +181,7 @@ class SparseMatrixEntityPoolingLayer(SparseMatrixEquivariantLayer):
                                 for i, entity in enumerate(entities)]
         encodings_schema = DataSchema(entities, enc_relations)
         super().__init__(schema, input_dim, output_dim,
-                         schema_out=encodings_schema)
+                         schema_out=encodings_schema, pool_op=pool_op)
 
     def multiply_matrices(self, data, data_out, data_target):
         for relation_i, relation_j in self.relation_pairs:

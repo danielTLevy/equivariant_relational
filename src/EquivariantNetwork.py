@@ -107,7 +107,7 @@ class SparseMatrixEquivariantNetwork(nn.Module):
     def __init__(self, schema, input_channels, activation=F.relu, 
                  layers=[32, 64, 32], target_entities=None,
                  fc_layers=[], final_activation=nn.Identity(),
-                 output_dim=1,  dropout=0, norm=True):
+                 output_dim=1,  dropout=0, norm=True, pool_op='mean'):
         super(SparseMatrixEquivariantNetwork, self).__init__()
         self.schema = schema
         self.input_channels = input_channels
@@ -122,9 +122,9 @@ class SparseMatrixEquivariantNetwork(nn.Module):
         self.n_equiv_layers = len(layers)
         self.equiv_layers = nn.ModuleList([])
         self.equiv_layers.append(SparseMatrixEquivariantLayer(
-                schema, input_channels, layers[0]))
+                schema, input_channels, layers[0], pool_op=pool_op))
         self.equiv_layers.extend([
-                SparseMatrixEquivariantLayer(schema, layers[i-1], layers[i])
+                SparseMatrixEquivariantLayer(schema, layers[i-1], layers[i], pool_op=pool_op)
                 for i in range(1, len(layers))])
         if norm:
             self.norms = nn.ModuleList([RelationNorm(schema, channels, affine=False,
@@ -138,7 +138,8 @@ class SparseMatrixEquivariantNetwork(nn.Module):
         embedding_layers = fc_layers + [output_dim]
         self.pooling = SparseMatrixEntityPoolingLayer(schema, layers[-1],
                                                       embedding_layers[0],
-                                                      entities=target_entities)
+                                                      entities=target_entities,
+                                                      pool_op=pool_op)
         self.n_fc_layers = len(fc_layers)
         self.fc_layers = nn.ModuleList([])
         self.fc_layers.extend([nn.Linear(embedding_layers[i-1], embedding_layers[i])

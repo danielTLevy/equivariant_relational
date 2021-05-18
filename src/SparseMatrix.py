@@ -279,10 +279,9 @@ class SparseMatrix:
                 assert self.n == self.m, "Diag only implemented for square matrices"
                 values = self.gather_diag(device)
             if op == "add" or op == "mean":
-                op = torch.sum
+                pooled_output = torch.sum(values, dim=0)
             elif op == "max":
-                op = torch.max
-            pooled_output = op(values, dim=0)
+                pooled_output = torch.max(values, dim=0)[0]
             if op == "mean":
                 if index_str == "all":
                     denom = self.nnz()
@@ -300,12 +299,11 @@ class SparseMatrix:
                 indices = self.indices[0]
                 n_segments = self.n
             if op == "add":
-                op = torch_scatter.scatter_add
+                pooled_output = torch_scatter.scatter_add(values.T, indices, dim_size=n_segments).T
             elif op == "mean":
-                op = torch_scatter.scatter_mean
+                pooled_output = torch_scatter.scatter_mean(values.T, indices, dim_size=n_segments).T
             elif op == "max":
-                op = torch_scatter.scatter_max
-            pooled_output = op(values.T, indices, dim_size=n_segments).T
+                pooled_output = torch_scatter.scatter_max(values.T, indices, dim_size=n_segments)[0].T
 
         return pooled_output
 

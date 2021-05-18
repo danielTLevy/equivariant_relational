@@ -73,7 +73,8 @@ def get_data_and_targets(schema, neg_data, data_indices, paper, cites, content):
 
     # Randomly fill in values and coalesce to remove duplicates
     n_cites_neg = int(neg_data*cites.shape[1])
-    cites_neg = np.random.choice(data_indices, (2, n_cites_neg))
+    #cites_neg = np.random.choice(data_indices, (2, n_cites_neg))
+    cites_neg = np.random.randint(0, n_papers, (2, n_cites_neg))
     cites_matrix = SparseMatrix(
             indices = torch.LongTensor(np.concatenate((cites, cites_neg),axis=1)),
             values = torch.cat((torch.ones(cites.shape[1], 1), torch.zeros(n_cites_neg, 1))),
@@ -82,9 +83,10 @@ def get_data_and_targets(schema, neg_data, data_indices, paper, cites, content):
 
     # For each paper, randomly fill in values and coalesce to remove duplicates
     n_content_neg = int(neg_data*content.shape[1])
-    content_neg = np.stack((np.random.choice(data_indices, (n_content_neg,)),
-                    np.random.randint(0, n_words, (n_content_neg,))))
-
+    #content_neg = np.stack((np.random.choice(data_indices, (n_content_neg,)),
+    #                np.random.randint(0, n_words, (n_content_neg,))))
+    content_neg = np.stack((np.random.randint(0, n_papers, (n_content_neg,)),
+                np.random.randint(0, n_words, (n_content_neg,))))
     content_matrix = SparseMatrix(
             indices = torch.LongTensor(np.concatenate((content, content_neg),axis=1)),
             values = torch.cat((torch.ones(content.shape[1], 1), torch.zeros(n_content_neg, 1))),

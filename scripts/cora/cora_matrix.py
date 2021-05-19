@@ -307,29 +307,30 @@ if __name__ == '__main__':
         train_loss = classification_loss(data_out_values, train_targets)
         train_loss.backward()
         opt.step()
-        acc = (data_out_values.argmax(1) == train_targets).sum() / len(train_targets)
-        progress.set_description(f"Epoch {epoch}")
-        progress.set_postfix(loss=train_loss.item(), train_acc=acc.item())
-        wandb_log = {'Train Loss': train_loss.item(), 'Train Accuracy': acc.item()}
-        if epoch % args.val_every == 0:
-            net.eval()
-            data_out_val = net(val_data, idx_id_val, idx_trans_val, data_target)
-            data_out_val_values = data_out_val[val_indices]
-            val_loss = classification_loss(data_out_val_values, val_targets)
-            val_acc = (data_out_val_values.argmax(1) == val_targets).sum() / len(val_targets)
-            print("\nVal Acc: {:.3f} Val Loss: {:.3f}".format(val_acc, val_loss))
-            wandb_log.update({'Val Loss': val_loss.item(), 'Val Accuracy': val_acc.item()})
-            sched.step(val_loss)
-            if val_acc > val_acc_best:
-                print("Saving")
-                val_acc_best = val_acc
-                torch.save({
-                    'epoch': epoch,
-                    'model_state_dict': net.state_dict(),
-                    'optimizer_state_dict': opt.state_dict(),
-                    'loss': train_loss.item(),
-                    'val_acc_best': val_acc_best.item()
-                    }, PATH)
-        if epoch % args.wandb_log_loss_freq == 0:
-            if args.wandb_log_run:
-                wandb.log(wandb_log)
+        with torch.no_grad():
+            acc = (data_out_values.argmax(1) == train_targets).sum() / len(train_targets)
+            progress.set_description(f"Epoch {epoch}")
+            progress.set_postfix(loss=train_loss.item(), train_acc=acc.item())
+            wandb_log = {'Train Loss': train_loss.item(), 'Train Accuracy': acc.item()}
+            if epoch % args.val_every == 0:
+                net.eval()
+                data_out_val = net(val_data, idx_id_val, idx_trans_val, data_target)
+                data_out_val_values = data_out_val[val_indices]
+                val_loss = classification_loss(data_out_val_values, val_targets)
+                val_acc = (data_out_val_values.argmax(1) == val_targets).sum() / len(val_targets)
+                print("\nVal Acc: {:.3f} Val Loss: {:.3f}".format(val_acc, val_loss))
+                wandb_log.update({'Val Loss': val_loss.item(), 'Val Accuracy': val_acc.item()})
+                sched.step(val_loss)
+                if val_acc > val_acc_best:
+                    print("Saving")
+                    val_acc_best = val_acc
+                    torch.save({
+                        'epoch': epoch,
+                        'model_state_dict': net.state_dict(),
+                        'optimizer_state_dict': opt.state_dict(),
+                        'loss': train_loss.item(),
+                        'val_acc_best': val_acc_best.item()
+                        }, PATH)
+            if epoch % args.wandb_log_loss_freq == 0:
+                if args.wandb_log_run:
+                    wandb.log(wandb_log)

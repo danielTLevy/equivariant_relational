@@ -151,15 +151,20 @@ if __name__ == '__main__':
     net.train()
 
     for epoch in progress:
-        #time.sleep(1)
         opt.zero_grad()
+        net.train()
         data_out = net(data, indices_identity, indices_transpose, data_target)
-        data_out_values = data_out
-        train_loss = classification_loss(data_out_values, targets)
+        train_loss = classification_loss(data_out, targets)
         train_loss.backward()
         opt.step()
-        acc = (data_out_values.argmax(1) == targets).sum() / len(targets)
-        progress.set_description(f"Epoch {epoch}")
-        progress.set_postfix(loss=train_loss.item(), train_acc=acc.item())
+        acc = (data_out.argmax(1) == targets).sum() / len(targets)
         sched.step(train_loss.item())
+        with torch.no_grad():
+            net.eval()
+            data_out_test = net(data, indices_identity, indices_transpose, data_target)
+            test_loss = classification_loss(data_out_test, targets)
+            test_acc = (data_out_test.argmax(1) == targets).sum() / len(targets)
+            progress.set_description(f"Epoch {epoch}")
+            progress.set_postfix(loss=train_loss.item(), train_acc=acc.item(),
+                                 test_loss=test_loss.item(), test_acc=test_acc.item())
 

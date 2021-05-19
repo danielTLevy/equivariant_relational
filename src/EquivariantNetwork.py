@@ -133,7 +133,7 @@ class SparseMatrixEquivariantNetwork(nn.Module):
                 for relation in self.schema.relations:
                     norm_dict[str(relation.id)] = nn.BatchNorm1d(channels, affine=norm_affine)
                     #norm_dict[str(relation.id)] = SparseMatrixGroupNorm(channels, channels, affine=norm_affine)
-                norm_activation = Activation(schema, norm_dict, is_dict=True, is_sparse=False)
+                norm_activation = Activation(schema, norm_dict, is_dict=True, is_sparse=True)
                 self.norms.append(norm_activation)
         else:
             self.norms = nn.ModuleList([Activation(schema, nn.Identity(), is_sparse=True)
@@ -158,7 +158,7 @@ class SparseMatrixEquivariantNetwork(nn.Module):
             print("Calculating idx_identity and idx_transpose. This can be precomputed.")
             idx_identity, idx_transpose = data.calculate_indices()
         for i in range(self.n_equiv_layers):
-            data = self.norms[i](self.rel_dropout(self.rel_activation(
+            data = self.rel_dropout(self.rel_activation(self.norms[i](
                     self.equiv_layers[i](data, idx_identity, idx_transpose))))
         data = self.pooling(data, data_out)
         out = data[0].values

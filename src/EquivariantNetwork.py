@@ -5,7 +5,7 @@ from src.EquivariantLayer import EquivariantLayer
 from src.SparseMatrixEquivariantLayer import SparseMatrixEquivariantLayer, SparseMatrixEntityPoolingLayer
 from src.SparseEquivariantLayer import SparseEquivariantLayer
 from src.Modules import RelationNorm, Activation, EntityPooling, \
-                        EntityBroadcasting, Activation, Dropout
+                        EntityBroadcasting, Dropout, SparseMatrixGroupNorm
 import pdb
 
 class EquivariantNetwork(nn.Module):
@@ -131,12 +131,10 @@ class SparseMatrixEquivariantNetwork(nn.Module):
             for channels in layers:
                 norm_dict = nn.ModuleDict()
                 for relation in self.schema.relations:
-                    norm_dict[str(relation.id)] = nn.BatchNorm1d(channels, affine=norm_affine)
-                norm_activation = Activation(schema, norm_dict, is_dict=True, is_sparse=True)
+                    #norm_dict[str(relation.id)] = nn.BatchNorm1d(channels, affine=norm_affine)
+                    norm_dict[str(relation.id)] = SparseMatrixGroupNorm(channels, channels, affine=norm_affine)
+                norm_activation = Activation(schema, norm_dict, is_dict=True, is_sparse=False)
                 self.norms.append(norm_activation)
-            #self.norms = nn.ModuleList([RelationNorm(schema, channels, affine=False,
-            #                                         sparse=True, matrix=True)
-            #                            for channels in layers])
         else:
             self.norms = nn.ModuleList([Activation(schema, nn.Identity(), is_sparse=True)
                                         for _ in layers])

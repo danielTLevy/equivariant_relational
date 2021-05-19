@@ -250,6 +250,11 @@ if __name__ == '__main__':
         train_data = test_data
         indices_identity = idx_id_test
         indices_transpose = idx_trans_test
+
+        val_data = test_data
+        idx_id_val = indices_identity
+        idx_trans_val = indices_transpose
+
     data_target = Data(schema_out)
     data_target[0] = SparseMatrix(indices = torch.arange(len(paper_names), dtype=torch.int64).repeat(2,1),
                                    values=torch.zeros([len(paper_names), n_classes]),

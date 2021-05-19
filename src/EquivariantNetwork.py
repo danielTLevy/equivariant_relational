@@ -131,8 +131,8 @@ class SparseMatrixEquivariantNetwork(nn.Module):
             for channels in layers:
                 norm_dict = nn.ModuleDict()
                 for relation in self.schema.relations:
-                    #norm_dict[str(relation.id)] = nn.BatchNorm1d(channels, affine=norm_affine)
-                    norm_dict[str(relation.id)] = SparseMatrixGroupNorm(channels, channels, affine=norm_affine)
+                    norm_dict[str(relation.id)] = nn.BatchNorm1d(channels, affine=norm_affine)
+                    #norm_dict[str(relation.id)] = SparseMatrixGroupNorm(channels, channels, affine=norm_affine)
                 norm_activation = Activation(schema, norm_dict, is_dict=True, is_sparse=False)
                 self.norms.append(norm_activation)
         else:

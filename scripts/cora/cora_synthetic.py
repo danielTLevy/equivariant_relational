@@ -24,7 +24,7 @@ def get_hyperparams(argv):
                         help='Number of channels for equivariant layers')
     parser.add_argument('--fc_layers', type=str, nargs='*', default=[],
                         help='Fully connected layers for target embeddings')
-    parser.add_argument('--l2_decay', type=float, default=1)
+    parser.add_argument('--l2_decay', type=float, default=0)
     parser.add_argument('--dropout_rate', type=float, default=0)
     parser.add_argument('--learning_rate', type=float, default=1e-4)
     parser.add_argument('--act_fn', type=str, default='ReLU')
@@ -34,10 +34,13 @@ def get_hyperparams(argv):
     parser.add_argument('--num_epochs', type=int, default=1000)
     parser.add_argument('--val_every', type=int, default=10)
     parser.add_argument('--seed', type=int, default=1)
-    parser.add_argument('--norm', type=bool, default=True)
+    parser.add_argument('--norm',  dest='norm', action='store_true', default=True)
+    parser.add_argument('--no_norm', dest='norm', action='store_false', default=True)
+    parser.set_defaults(norm=True)
     parser.add_argument('--neg_data', type=float, default=1.,
                         help='Ratio of random data samples to positive. \
-                              When sparse, this is similar to number of negative samples')
+                              When sparse, this is similar to number of negative samples'),
+    parser.add_argument('--pool_op', type=str, default='add')
     
     args, argv = parser.parse_known_args(argv)
     args.layers  = [int(x) for x in args.layers]
@@ -62,7 +65,7 @@ if __name__ == '__main__':
     argv = sys.argv[1:]
     args = get_hyperparams(argv)
 
-
+    print(args)
     set_seed(args.seed)
 
     n_papers = 200
@@ -140,7 +143,7 @@ if __name__ == '__main__':
                                                  verbose=True)
 
     #%%
-    n_epochs = 10
+    n_epochs = 3000
     progress = tqdm(range(n_epochs), desc="Epoch 0", position=0, leave=True)
     net.train()
 

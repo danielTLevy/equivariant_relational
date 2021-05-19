@@ -127,9 +127,11 @@ class SparseMatrixEquivariantNetwork(nn.Module):
                 SparseMatrixEquivariantLayer(schema, layers[i-1], layers[i], pool_op=pool_op)
                 for i in range(1, len(layers))])
         if norm:
-            self.norms = nn.ModuleList([RelationNorm(schema, channels, affine=False,
-                                                     sparse=True, matrix=True)
+            self.norms = nn.ModuleList([SparseActivation(schema, nn.BatchNorm1d(channels, affine=True))
                                         for channels in layers])
+            #self.norms = nn.ModuleList([RelationNorm(schema, channels, affine=False,
+            #                                         sparse=True, matrix=True)
+            #                            for channels in layers])
         else:
             self.norms = nn.ModuleList([SparseActivation(schema, nn.Identity())
                                         for _ in layers])

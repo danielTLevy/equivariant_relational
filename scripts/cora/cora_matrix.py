@@ -51,7 +51,9 @@ def get_hyperparams(argv):
     parser.add_argument('--num_epochs', type=int, default=1000)
     parser.add_argument('--val_every', type=int, default=10)
     parser.add_argument('--seed', type=int, default=1)
-    parser.add_argument('--norm', type=bool, default=True)
+    parser.add_argument('--norm',  dest='norm', action='store_true', default=True)
+    parser.add_argument('--no_norm', dest='norm', action='store_false', default=True)
+    parser.set_defaults(norm=True)
     parser.add_argument('--pool_op', type=str, default='mean')
     parser.add_argument('--neg_data', type=float, default=0.,
                         help='Ratio of random data samples to positive. \
@@ -63,6 +65,8 @@ def get_hyperparams(argv):
                         help='Log this run in wandb')
     parser.add_argument('--wandb_no_log_run', dest='wandb_log_run', action='store_false',
                         help='Do not log this run in wandb')
+    parser.set_defaults(wandb_log_run=True)
+
 
     args, argv = parser.parse_known_args(argv)
     args.layers  = [int(x) for x in args.layers]
@@ -118,7 +122,7 @@ if __name__ == '__main__':
 
     argv = sys.argv[1:]
     args = get_hyperparams(argv)
-
+    print(args)
     set_seed(args.seed)
     paper_names = []
     classes = []

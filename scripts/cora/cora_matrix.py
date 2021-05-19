@@ -54,6 +54,8 @@ def get_hyperparams(argv):
     parser.add_argument('--norm',  dest='norm', action='store_true', default=True)
     parser.add_argument('--no_norm', dest='norm', action='store_false', default=True)
     parser.set_defaults(norm=True)
+    parser.add_argument('--norm_affine', action='store_true')
+    parser.set_defaults(norm_affine = False)
     parser.add_argument('--pool_op', type=str, default='mean')
     parser.add_argument('--neg_data', type=float, default=0.,
                         help='Ratio of random data samples to positive. \
@@ -270,7 +272,8 @@ if __name__ == '__main__':
                                          dropout=args.dropout_rate,
                                          output_dim=n_classes,
                                          norm=args.norm,
-                                         pool_op=args.pool_op)
+                                         pool_op=args.pool_op,
+                                         norm_affine=args.norm_affine)
     net = net.to(device)
     opt = eval('optim.%s' % args.optimizer)(net.parameters(), lr=args.learning_rate, weight_decay=args.l2_decay)
 

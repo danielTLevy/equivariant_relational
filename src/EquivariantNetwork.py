@@ -5,7 +5,7 @@ from src.EquivariantLayer import EquivariantLayer
 from src.SparseMatrixEquivariantLayer import SparseMatrixEquivariantLayer, SparseMatrixEntityPoolingLayer
 from src.SparseEquivariantLayer import SparseEquivariantLayer
 from src.Modules import RelationNorm, Activation, EntityPooling, \
-                        EntityBroadcasting, SparseActivation, Dropout
+                        EntityBroadcasting, Activation, Dropout
 import pdb
 
 class EquivariantNetwork(nn.Module):
@@ -80,7 +80,7 @@ class SparseEquivariantNetwork(nn.Module):
         self.hidden_dims = (32, 64, 32)
         self.all_dims = [n_channels] + list(self.hidden_dims) + [n_channels]
         self.target_rel = target_rel
-        self.ReLU = SparseActivation(schema, nn.ReLU())
+        self.ReLU = Activation(schema, nn.ReLU(), is_sparse=True)
         sequential = []
         for i in range(1, len(self.all_dims)-1):
             sequential.append(SparseEquivariantLayer(self.schema, self.all_dims[i-1], self.all_dims[i]))
@@ -93,7 +93,7 @@ class SparseEquivariantNetwork(nn.Module):
 
         if final_activation == None:
             final_activation = nn.Identity()
-        self.final = SparseActivation(schema, final_activation)
+        self.final = Activation(schema, final_activation, is_sparse=True)
 
     def forward(self, data):
         out = self.sequential(data)
@@ -107,16 +107,16 @@ class SparseMatrixEquivariantNetwork(nn.Module):
     def __init__(self, schema, input_channels, activation=F.relu, 
                  layers=[32, 64, 32], target_entities=None,
                  fc_layers=[], final_activation=nn.Identity(),
-                 output_dim=1,  dropout=0, norm=True, pool_op='mean'):
+                 output_dim=1,  dropout=0, norm=True, pool_op='mean', norm_affine=False):
         super(SparseMatrixEquivariantNetwork, self).__init__()
         self.schema = schema
         self.input_channels = input_channels
 
         self.activation = activation
-        self.rel_activation = SparseActivation(schema, self.activation)
+        self.rel_activation = Activation(schema, self.activation, is_sparse=True)
 
         self.dropout = Dropout(p=dropout)
-        self.rel_dropout  = SparseActivation(schema, self.dropout)
+        self.rel_dropout  = Activation(schema, self.dropout, is_sparse=True)
 
         # Equivariant Layers
         self.n_equiv_layers = len(layers)
@@ -127,13 +127,18 @@ class SparseMatrixEquivariantNetwork(nn.Module):
                 SparseMatrixEquivariantLayer(schema, layers[i-1], layers[i], pool_op=pool_op)
                 for i in range(1, len(layers))])
         if norm:
-            self.norms = nn.ModuleList([SparseActivation(schema, nn.BatchNorm1d(channels, affine=True))
-                                        for channels in layers])
+            self.norms = nn.ModuleList()
+            for channels in layers:
+                norm_dict = nn.ModuleDict()
+                for relation in self.schema.relations:
+                    norm_dict[str(relation.id)] = nn.BatchNorm1d(channels, affine=norm_affine)
+                norm_activation = Activation(schema, norm_dict, is_dict=True, is_sparse=True)
+                self.norms.append(norm_activation)
             #self.norms = nn.ModuleList([RelationNorm(schema, channels, affine=False,
             #                                         sparse=True, matrix=True)
             #                            for channels in layers])
         else:
-            self.norms = nn.ModuleList([SparseActivation(schema, nn.Identity())
+            self.norms = nn.ModuleList([Activation(schema, nn.Identity(), is_sparse=True)
                                         for _ in layers])
 
         # Entity embeddings

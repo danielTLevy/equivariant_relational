@@ -72,6 +72,7 @@ class RelationNorm(nn.Module):
         super(RelationNorm, self).__init__()
         self.schema = schema
         self.rel_norms = nn.ModuleDict()
+        self.sparse = True
         if sparse:
             if matrix:
                 GroupNorm = SparseMatrixGroupNorm
@@ -93,16 +94,30 @@ class RelationNorm(nn.Module):
 
 class Activation(nn.Module):
     '''
-    Extend torch.nn.module modules to be applied to each relation
+    Extend torch.nn.module modules to be applied to each relation for a
+    sparse matrix or tensor.
+    Activation can either be an initialized nn.Module, an nn.functional,
+    or a ModuleDict of initialized str(relation.id) to nn.Modules.
+    If is_sparse=True, then using sparse tensor or matrix, so call .values first
     '''
-    def __init__(self, schema, activation):
+    def __init__(self, schema, activation, is_dict=False, is_sparse=False):
         super(Activation, self).__init__()
         self.schema = schema
         self.activation = activation
+        self.is_dict = is_dict
+        self.is_sparse = is_sparse
 
     def forward(self, X):
         for relation in self.schema.relations:
-            X[relation.id] = self.activation(X[relation.id])
+            if relation.id in X:
+                if self.is_dict:
+                    activation = self.activation[str(relation.id)]
+                else:
+                    activation = self.activation
+                if self.is_sparse:
+                    X[relation.id].values = activation(X[relation.id].values)
+                else:
+                    X[relation.id] = activation(X[relation.id])
         return X
 
 def functional(function, schema, X, *args, **kwargs):
@@ -208,21 +223,6 @@ class EntityPooling(nn.Module):
             out[entity.id] = entity_out
         return out
 
-    
-class SparseActivation(nn.Module):
-    '''
-    Extend torch.nn.module modules to be applied to each relation
-    '''
-    def __init__(self, schema, activation):
-        super(SparseActivation, self).__init__()
-        self.schema = schema
-        self.activation = activation
-
-    def forward(self, X):
-        for relation in self.schema.relations:
-            if relation.id in X:
-                X[relation.id].values = self.activation(X[relation.id].values)
-        return X
 
 class Dropout(nn.Module):
     def __init__(self, p=0.5):

@@ -61,6 +61,8 @@ def get_hyperparams(argv):
                         help='Ratio of random data samples to positive. \
                               When sparse, this is similar to number of negative samples')
     parser.add_argument('--training_data', choices=['train', 'val', 'test'], default='train')
+    parser.add_argument('--semi_supervised', action='store_true', help='switch to low-label regime')
+    parser.set_defaults(semi_supervised=False)
     parser.add_argument('--wandb_log_param_freq', type=int, default=250)
     parser.add_argument('--wandb_log_loss_freq', type=int, default=1)
     parser.add_argument('--wandb_log_run', dest='wandb_log_run', action='store_true',
@@ -143,9 +145,19 @@ if __name__ == '__main__':
 
     random.seed(0)
     shuffled_indices = random.sample(range(len(paper_names)), len(paper_names))
-    val_indices  = sorted(shuffled_indices[: len(paper_names) // 10])
-    test_indices  = sorted(shuffled_indices[len(paper_names) // 10: 2*(len(paper_names) // 10)])
-    train_indices = sorted(shuffled_indices[2*(len(paper_names) // 10) :])
+    if args.semi_supervised:
+        val_start = 0
+        test_start = 4*(len(paper_names) // 10)
+        train_start =  test_start + 5*(len(paper_names)//10)
+    else:
+        val_start = 0
+        test_start = len(paper_names) // 10
+        train_start = test_start + len(paper_names) // 10
+
+    val_indices  = sorted(shuffled_indices[val_start:test_start])
+    test_indices  = sorted(shuffled_indices[test_start:train_start])
+    train_indices = sorted(shuffled_indices[train_start:])
+
     all_val_indices = sorted(val_indices + train_indices)
     all_test_indices = sorted(val_indices + test_indices + train_indices)
     val_papers = paper_names[val_indices]

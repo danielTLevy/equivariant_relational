@@ -45,6 +45,7 @@ def get_hyperparams(argv):
     parser.add_argument('--dropout_rate', type=float, default=0)
     parser.add_argument('--learning_rate', type=float, default=1e-3)
     parser.add_argument('--act_fn', type=str, default='ReLU')
+    parser.add_argument('--no_scheduler', action='store_true', default=False)
     parser.add_argument('--sched_factor', type=float, default=0.5)
     parser.add_argument('--sched_patience', type=float, default=10)
     parser.add_argument('--optimizer', type=str, default='Adam')
@@ -61,6 +62,8 @@ def get_hyperparams(argv):
                         help='Ratio of random data samples to positive. \
                               When sparse, this is similar to number of negative samples')
     parser.add_argument('--training_data', choices=['train', 'val', 'test'], default='train')
+    parser.add_argument('--val_pct', type=float, default=10.)
+    parser.add_argument('--test_pct', type=float, default=10.)
     parser.add_argument('--semi_supervised', action='store_true', help='switch to low-label regime')
     parser.set_defaults(semi_supervised=False)
     parser.add_argument('--wandb_log_param_freq', type=int, default=250)
@@ -145,14 +148,9 @@ if __name__ == '__main__':
 
     random.seed(0)
     shuffled_indices = random.sample(range(len(paper_names)), len(paper_names))
-    if args.semi_supervised:
-        val_start = 0
-        test_start = 4*(len(paper_names) // 10)
-        train_start =  test_start + 5*(len(paper_names)//10)
-    else:
-        val_start = 0
-        test_start = len(paper_names) // 10
-        train_start = test_start + len(paper_names) // 10
+    val_start = 0
+    test_start = int(args.val_pct * (len(paper_names)/100.))
+    train_start =  test_start + int(args.test_pct * (len(paper_names)/100.))
 
     val_indices  = sorted(shuffled_indices[val_start:test_start])
     test_indices  = sorted(shuffled_indices[test_start:train_start])
@@ -294,10 +292,11 @@ if __name__ == '__main__':
     net = net.to(device)
     opt = eval('optim.%s' % args.optimizer)(net.parameters(), lr=args.learning_rate, weight_decay=args.l2_decay)
 
-    sched = optim.lr_scheduler.ReduceLROnPlateau(opt, mode='min',
-                                                 factor=args.sched_factor,
-                                                 patience=args.sched_patience,
-                                                 verbose=True)
+    if not args.no_scheduler:
+        sched = optim.lr_scheduler.ReduceLROnPlateau(opt, mode='min',
+                                                     factor=args.sched_factor,
+                                                     patience=args.sched_patience,
+                                                     verbose=True)
     #%%
     if args.wandb_log_run:
         wandb.init(config=args,
@@ -332,7 +331,8 @@ if __name__ == '__main__':
                 val_acc = (data_out_val_values.argmax(1) == val_targets).sum() / len(val_targets)
                 print("\nVal Acc: {:.3f} Val Loss: {:.3f}".format(val_acc, val_loss))
                 wandb_log.update({'Val Loss': val_loss.item(), 'Val Accuracy': val_acc.item()})
-                sched.step(val_loss)
+                if not args.no_scheduler:
+                    sched.step(val_loss)
                 if val_acc > val_acc_best:
                     print("Saving")
                     val_acc_best = val_acc

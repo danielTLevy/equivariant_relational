@@ -223,14 +223,14 @@ class SparseMatrixData(Data):
                 entity_j_m = self.schema.relations[r_j].entities[1]
                 if entity_i_n == entity_j_n and entity_i_m == entity_j_m:
                     if r_i == r_j:
-                        idx_id_ij = (torch.BoolTensor([True]*matrix_i.nnz()),
-                                     torch.BoolTensor([True]*matrix_i.nnz()))
+                        idx_id_ij = (torch.BoolTensor([True]*matrix_i.nnz()).to(matrix_i.device),
+                                     torch.BoolTensor([True]*matrix_i.nnz()).to(matrix_i.device))
                     else:
                         idx_trans_ij = matrix_i.calc_intersection_mask(matrix_j)
                 if entity_i_n == entity_j_m and entity_i_m == entity_j_n:
                     if r_i == r_j and self.schema.relations[r_i].is_set:
-                        idx_trans_ij = (torch.BoolTensor([True]*matrix_i.nnz()),
-                                        torch.BoolTensor([True]*matrix_i.nnz()))
+                        idx_trans_ij = (torch.BoolTensor([True]*matrix_i.nnz()).to(matrix_i.device),
+                                        torch.BoolTensor([True]*matrix_i.nnz()).to(matrix_i.device))
                     else:
                         idx_trans_ij = matrix_i.calc_transpose_intersection_overlap(matrix_j)
 

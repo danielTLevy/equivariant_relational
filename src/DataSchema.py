@@ -213,20 +213,28 @@ class SparseMatrixData(Data):
     def calculate_indices(self):
         indices_identity = {}
         indices_transpose = {}
-        #TODO: add shortcut for identity when r_i == r_j
         for r_i, matrix_i in self.rel_tensors.items():
             entity_i_n = self.schema.relations[r_i].entities[0]
             entity_i_m = self.schema.relations[r_i].entities[1]
             for r_j, matrix_j in self.rel_tensors.items():
+                idx_id_ij = None
+                idx_trans_ij = None
                 entity_j_n = self.schema.relations[r_j].entities[0]
                 entity_j_m = self.schema.relations[r_j].entities[1]
                 if entity_i_n == entity_j_n and entity_i_m == entity_j_m:
-                    indices_identity[r_i, r_j] = matrix_i.calc_intersection_mask(matrix_j)
-                else:
-                    indices_identity[r_i, r_j] = None
+                    if r_i == r_j:
+                        idx_id_ij = (torch.BoolTensor([True]*matrix_i.nnz()),
+                                     torch.BoolTensor([True]*matrix_i.nnz()))
+                    else:
+                        idx_trans_ij = matrix_i.calc_intersection_mask(matrix_j)
                 if entity_i_n == entity_j_m and entity_i_m == entity_j_n:
-                    indices_transpose[r_i, r_j] = matrix_i.calc_transpose_intersection_overlap(matrix_j)
-                else:
-                    indices_transpose[r_i, r_j] = None
+                    if r_i == r_j and self.schema.relations[r_i].is_set:
+                        idx_trans_ij = (torch.BoolTensor([True]*matrix_i.nnz()),
+                                        torch.BoolTensor([True]*matrix_i.nnz()))
+                    else:
+                        idx_trans_ij = matrix_i.calc_transpose_intersection_overlap(matrix_j)
+
+                indices_identity[r_i, r_j] = idx_id_ij
+                indices_transpose[r_i, r_j] = idx_trans_ij
         return indices_identity, indices_transpose
     

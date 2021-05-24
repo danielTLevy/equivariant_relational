@@ -319,19 +319,19 @@ if __name__ == '__main__':
 
     loss_fcn = nn.BCELoss().to(device)
     def acc_fcn(values, target):
-        return (((data_out > 0.5) == target).sum() / len(target)).item()
+        return (((values > 0.5) == target).sum() / len(target)).item()
 
     val_acc_best = 0
     for epoch in progress:
         net.train()
         opt.zero_grad()
         data_out = net(data, indices_identity, indices_transpose, data_target).squeeze()
-        data_out_train_values = []
-        train_loss = loss_fcn(data_out, target)
+        data_out_train_values = data_out[train_indices]
+        train_loss = loss_fcn(data_out_train_values, target)
         train_loss.backward()
         opt.step()
         with torch.no_grad():
-            acc = acc_fcn(data_out, target)
+            acc = acc_fcn(data_out, train_targets)
             progress.set_description(f"Epoch {epoch}")
             progress.set_postfix(loss=train_loss.item(), train_acc=acc)
             if epoch % args.val_every == 0:

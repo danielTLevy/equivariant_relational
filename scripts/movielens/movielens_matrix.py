@@ -327,7 +327,7 @@ if __name__ == '__main__':
         opt.zero_grad()
         data_out = net(data, indices_identity, indices_transpose, data_target).squeeze()
         data_out_train_values = data_out[train_indices]
-        train_loss = loss_fcn(data_out_train_values, target)
+        train_loss = loss_fcn(data_out_train_values, train_targets)
         train_loss.backward()
         opt.step()
         with torch.no_grad():

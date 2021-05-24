@@ -134,7 +134,6 @@ if __name__ == '__main__':
     paper_names = []
     classes = []
     word_names = ['word'+str(i+1) for i in range(1433)]
-    np.random.seed(0)
     with open(csv_file_str.format('paper')) as paperfile:
         reader = csv.reader(paperfile)
         for paper_name, class_name in reader:
@@ -146,7 +145,6 @@ if __name__ == '__main__':
     class_name_to_idx = {class_name : i for i, class_name in enumerate(class_names)}
     paper_name_to_idx = {paper_name: i for i, paper_name in enumerate(paper_names)}
 
-    random.seed(0)
     shuffled_indices = random.sample(range(len(paper_names)), len(paper_names))
     val_start = 0
     test_start = int(args.val_pct * (len(paper_names)/100.))

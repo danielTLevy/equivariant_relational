@@ -111,7 +111,7 @@ schema_dict = {
                 'rating': 'ordinal' # 5 values, ordinal
                 })
         }
-
+TARGET_RELATION = 'users'
 TARGET_KEY = 'u_gender'
 #TODO: generate this automatically
 data_raw = {rel_name: {key: list() for key in schema_dict[rel_name].keys()}
@@ -201,7 +201,6 @@ def ent_name_to_id_name(ent_name):
 ent_id_to_idx_dict = {ent_name: id_to_idx(data_raw[ent_name][ent_name_to_id_name(ent_name)])
                     for ent_name in entity_names}
 
-
 def binary_relation_to_matrix(relation, typedict, raw_vals):
     assert not relation.is_set
     ent_n = relation.entities[0]
@@ -235,7 +234,7 @@ def binary_relation_to_matrix(relation, typedict, raw_vals):
             indices = torch.stack((indices_n, indices_m)),
             values = values,
             shape = (instances_n, instances_m, values.shape[1]))
-    
+
 for relation in relations:
     relation_name = rel_names[relation.id]
     print(relation_name)
@@ -246,7 +245,17 @@ for relation in relations:
     data[relation.id] = relation_to_matrix(relation, schema_dict[relation_name],
                                             data_raw[relation_name])
 
+def get_targets(target_vals, target_type):
+    if target_type == 'ordinal':
+        func = ordinal_to_tensor
+    elif target_type == 'categorical':
+        func = categorical_to_tensor
+    elif target_type == 'binary':
+        func = binary_to_tensor
+    return torch.Tensor(func(target_vals)).squeeze()
 
+target = get_targets(data_raw[TARGET_RELATION][TARGET_KEY],
+                     schema_dict[TARGET_RELATION][TARGET_KEY])
 #%%
 #TODO: 
 argv = sys.argv[1:]
@@ -269,12 +278,6 @@ data = data.to(device)
 data_target = data_target.to(device)
 indices_identity, indices_transpose = data.calculate_indices()
 
-#%%
-
-def classification_loss(data_pred, data_true):
-    return F.cross_entropy(data_pred, data_true)
-
-
 input_channels = {rel.id: data[rel.id].n_channels for rel in relations}
 #%%
 net = SparseMatrixEntityPredictor(schema, input_channels,
@@ -288,8 +291,27 @@ net = SparseMatrixEntityPredictor(schema, input_channels,
                                      norm=args.norm,
                                      pool_op=args.pool_op,
                                      norm_affine=args.norm_affine)
-net = net.to(device)
-#%%
 
-net.train()
-data_out = net(data, indices_identity, indices_transpose, data_target)
+net = net.to(device)
+opt = eval('optim.%s' % args.optimizer)(net.parameters(), lr=args.learning_rate, weight_decay=args.l2_decay)
+
+if not args.no_scheduler:
+    sched = optim.lr_scheduler.ReduceLROnPlateau(opt, mode='min',
+                                                 factor=args.sched_factor,
+                                                 patience=args.sched_patience,
+                                                 verbose=True)
+
+progress = tqdm(range(args.num_epochs), desc="Epoch 0", position=0, leave=True)
+
+loss_fcn = nn.BCELoss()
+for epoch in progress:
+    net.train()
+    opt.zero_grad()
+    data_out = net(data, indices_identity, indices_transpose, data_target).squeeze()
+    train_loss = loss_fcn(data_out, target)
+    train_loss.backward()
+    opt.step()
+    with torch.no_grad():
+        acc = ((data_out > 0.5) == target).sum() / len(target)
+        progress.set_description(f"Epoch {epoch}")
+        progress.set_postfix(loss=train_loss.item(), train_acc=acc.item())

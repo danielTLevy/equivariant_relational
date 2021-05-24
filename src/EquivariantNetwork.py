@@ -103,12 +103,16 @@ class SparseEquivariantNetwork(nn.Module):
         return out
 
 
-class SparseMatrixEquivariantNetwork(nn.Module):
+class SparseMatrixEntityPredictor(nn.Module):
+    '''
+    Network for predicting properties of a single entity, where relations
+    take the form of sparse matrices
+    '''
     def __init__(self, schema, input_channels, activation=F.relu, 
                  layers=[32, 64, 32], target_entities=None,
                  fc_layers=[], final_activation=nn.Identity(),
                  output_dim=1,  dropout=0, norm=True, pool_op='mean', norm_affine=False):
-        super(SparseMatrixEquivariantNetwork, self).__init__()
+        super(SparseMatrixEntityPredictor, self).__init__()
         self.schema = schema
         self.input_channels = input_channels
 

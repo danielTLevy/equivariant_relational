@@ -23,6 +23,7 @@ class SparseMatrixEquivariantLayerBlock(nn.Module):
         assert len(relation_out.entities) <= 2, "Relation must be second order"
         in_is_set = relation_in.is_set
         out_is_set = relation_out.is_set
+        self.block_id = (relation_in.id, relation_out.id)
         self.in_dim = input_dim
         self.out_dim = output_dim
         self.input_output_partitions = get_all_input_output_partitions(relation_in, relation_out, MATRIX_PREFIX_DIMS)

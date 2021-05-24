@@ -18,7 +18,7 @@ Use 8/10 for train, 1/10 for val, 1/10 for test – train on val before testing 
 import sys
 from src.DataSchema import DataSchema, Entity, Relation, SparseMatrixData, Data
 from src.SparseMatrix import SparseMatrix
-from src.EquivariantNetwork import SparseMatrixEquivariantNetwork
+from src.EquivariantNetwork import SparseMatrixEntityPredictor
 import torch
 import torch.optim as optim
 import torch.nn as nn
@@ -278,7 +278,7 @@ if __name__ == '__main__':
         return F.cross_entropy(data_pred, data_true)
 
     n_channels = 1
-    net = SparseMatrixEquivariantNetwork(schema, n_channels,
+    net = SparseMatrixEntityPredictor(schema, n_channels,
                                          layers = args.layers,
                                          fc_layers=args.fc_layers,
                                          activation=eval('nn.%s()' % args.act_fn),

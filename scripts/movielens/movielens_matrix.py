@@ -21,7 +21,7 @@ from collections import OrderedDict
 def get_hyperparams(argv):
     parser = argparse.ArgumentParser(allow_abbrev=False)
     parser.add_argument('--checkpoint_path', type=str, default='cora_matrix.pt')
-    parser.add_argument('--layers', type=int, nargs='*', default=['64']*2,
+    parser.add_argument('--layers', type=int, nargs='*', default=['64']*4,
                         help='Number of channels for equivariant layers')
     parser.add_argument('--fc_layers', type=str, nargs='*', default=[],
                         help='Fully connected layers for target embeddings')
@@ -66,6 +66,8 @@ def get_hyperparams(argv):
     return args
 
 #%%
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 csv_file_str = './data/movielens/movielens_{}.csv'
 entity_names = ['actors', 'movies', 'directors', 'users']
 relation_names = ['actors', 'movies', 'directors', 'users', 'movies2actors', 
@@ -113,7 +115,8 @@ schema_dict = {
         }
 TARGET_RELATION = 'users'
 TARGET_KEY = 'u_gender'
-#TODO: generate this automatically
+
+
 data_raw = {rel_name: {key: list() for key in schema_dict[rel_name].keys()}
                 for rel_name in schema_dict.keys()}
 
@@ -255,13 +258,12 @@ def get_targets(target_vals, target_type):
     return torch.Tensor(func(target_vals)).squeeze()
 
 target = get_targets(data_raw[TARGET_RELATION][TARGET_KEY],
-                     schema_dict[TARGET_RELATION][TARGET_KEY])
+                     schema_dict[TARGET_RELATION][TARGET_KEY]).to(device)
 #%%
 #TODO: 
 argv = sys.argv[1:]
 args = get_hyperparams(argv)
 print(args)
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 #%%
 rel_out = Relation(0, [ent_users, ent_users], is_set=True)
@@ -303,7 +305,7 @@ if not args.no_scheduler:
 
 progress = tqdm(range(args.num_epochs), desc="Epoch 0", position=0, leave=True)
 
-loss_fcn = nn.BCELoss()
+loss_fcn = nn.BCELoss().to(device)
 for epoch in progress:
     net.train()
     opt.zero_grad()

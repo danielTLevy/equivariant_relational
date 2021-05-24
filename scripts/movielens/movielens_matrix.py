@@ -331,7 +331,7 @@ if __name__ == '__main__':
         train_loss.backward()
         opt.step()
         with torch.no_grad():
-            acc = acc_fcn(data_out, train_targets)
+            acc = acc_fcn(data_out_train_values, train_targets)
             progress.set_description(f"Epoch {epoch}")
             progress.set_postfix(loss=train_loss.item(), train_acc=acc)
             if epoch % args.val_every == 0:

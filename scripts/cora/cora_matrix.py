@@ -36,6 +36,7 @@ csv_file_str = './data/cora/{}.csv'
 
 def get_hyperparams(argv):
     parser = argparse.ArgumentParser(allow_abbrev=False)
+    parser.set_defaults(dataset='cora')
     parser.add_argument('--checkpoint_path', type=str, default='cora_matrix.pt')
     parser.add_argument('--layers', type=int, nargs='*', default=['64']*4,
                         help='Number of channels for equivariant layers')
@@ -72,7 +73,7 @@ def get_hyperparams(argv):
                         help='Log this run in wandb')
     parser.add_argument('--wandb_no_log_run', dest='wandb_log_run', action='store_false',
                         help='Do not log this run in wandb')
-    parser.set_defaults(wandb_log_run=True)
+    parser.set_defaults(wandb_log_run=False)
 
 
     args, argv = parser.parse_known_args(argv)
@@ -296,7 +297,6 @@ if __name__ == '__main__':
                                                      patience=args.sched_patience,
                                                      verbose=True)
     #%%
-    args.update({'dataset': 'cora'})
     if args.wandb_log_run:
         wandb.init(config=args,
             project="EquivariantRelational",

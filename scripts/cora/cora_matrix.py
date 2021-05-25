@@ -296,11 +296,11 @@ if __name__ == '__main__':
                                                      patience=args.sched_patience,
                                                      verbose=True)
     #%%
+    args.update({'dataset': 'cora'})
     if args.wandb_log_run:
         wandb.init(config=args,
             project="EquivariantRelational",
             entity='danieltlevy',
-            dataset='cora',
             settings=wandb.Settings(start_method='fork'))
         wandb.watch(net, log='all', log_freq=args.wandb_log_param_freq)
 

@@ -316,11 +316,11 @@ if __name__ == '__main__':
                                                      verbose=True)
 
     #%%
+    args.update({'dataset': 'MovieLens'})
     if args.wandb_log_run:
         wandb.init(config=args,
             project="EquivariantRelational",
             entity='danieltlevy',
-            dataset='MovieLens',
             settings=wandb.Settings(start_method='fork'))
         wandb.watch(net, log='all', log_freq=args.wandb_log_param_freq)
 

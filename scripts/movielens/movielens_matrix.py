@@ -350,7 +350,7 @@ if __name__ == '__main__':
                 val_loss = loss_fcn(data_out_val_values, val_targets)
                 val_acc = acc_fcn(data_out_val_values, val_targets)
                 print("\nVal Acc: {:.3f} Val Loss: {:.3f}".format(val_acc, val_loss))
-                wandb_log.update({'Val Loss': val_loss.item(), 'Val Accuracy': val_acc.item()})
+                wandb_log.update({'Val Loss': val_loss.item(), 'Val Accuracy': val_acc})
                 if val_acc > val_acc_best:
                     print("New best")
                 if not args.no_scheduler:

@@ -315,6 +315,15 @@ if __name__ == '__main__':
                                                      patience=args.sched_patience,
                                                      verbose=True)
 
+    #%%
+    if args.wandb_log_run:
+        wandb.init(config=args,
+            project="EquivariantRelational",
+            entity='danieltlevy',
+            dataset='MovieLens',
+            settings=wandb.Settings(start_method='fork'))
+        wandb.watch(net, log='all', log_freq=args.wandb_log_param_freq)
+
     progress = tqdm(range(args.num_epochs), desc="Epoch 0", position=0, leave=True)
 
     loss_fcn = nn.BCELoss().to(device)
@@ -334,6 +343,7 @@ if __name__ == '__main__':
             acc = acc_fcn(data_out_train_values, train_targets)
             progress.set_description(f"Epoch {epoch}")
             progress.set_postfix(loss=train_loss.item(), train_acc=acc)
+            wandb_log = {'Train Loss': train_loss.item(), 'Train Accuracy': acc}
             if epoch % args.val_every == 0:
                 net.eval()
                 data_out_val = net(data, indices_identity, indices_transpose, data_target).squeeze()
@@ -341,5 +351,11 @@ if __name__ == '__main__':
                 val_loss = loss_fcn(data_out_val_values, val_targets)
                 val_acc = acc_fcn(data_out_val_values, val_targets)
                 print("\nVal Acc: {:.3f} Val Loss: {:.3f}".format(val_acc, val_loss))
+                wandb_log.update({'Val Loss': val_loss.item(), 'Val Accuracy': val_acc.item()})
+                if val_acc > val_acc_best:
+                    print("New best")
                 if not args.no_scheduler:
                     sched.step(val_loss)
+            if epoch % args.wandb_log_loss_freq == 0:
+                if args.wandb_log_run:
+                    wandb.log(wandb_log)

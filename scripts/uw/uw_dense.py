@@ -24,7 +24,7 @@ def get_hyperparams(argv):
     parser.add_argument('--checkpoint_path', type=str, default='cora_matrix.pt')
     parser.add_argument('--source_layers', type=int, nargs='*', default=['64']*4,
                         help='Number of channels for equivariant layers with source schema')
-    parser.add_argument('--target_layers', type=str, nargs='*', default=[],
+    parser.add_argument('--target_layers', type=str, nargs='*', default=['32']*1,
                         help='Number of channels for equivariant layers with target schema')
     parser.add_argument('--l2_decay', type=float, default=0)
     parser.add_argument('--dropout_rate', type=float, default=0)
@@ -296,8 +296,7 @@ if __name__ == '__main__':
     #val_targets = target[val_indices]
     #%%
     net = EquivariantNetwork(schema, input_channels,
-                                         #source_layers=args.source_layers,
-                                         source_layers = [32],
+                                         source_layers=args.source_layers,
                                          target_layers=args.target_layers,
                                          activation=eval('nn.%s()' % args.act_fn),
                                          final_activation = nn.Sigmoid(),

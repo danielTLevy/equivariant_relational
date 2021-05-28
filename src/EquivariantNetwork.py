@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from src.EquivariantLayer import EquivariantLayer
 from src.SparseMatrixEquivariantLayer import SparseMatrixEquivariantLayer, \
-                    SparseMatrixEntityPoolingLayer, SparseMatrixDenseLayer
+                    SparseMatrixEntityPoolingLayer
 from src.SparseEquivariantLayer import SparseEquivariantLayer
 from src.Modules import RelationNorm, Activation, EntityPooling, \
                         EntityBroadcasting, Dropout
@@ -23,11 +23,12 @@ class EquivariantNetwork(nn.Module):
         self.input_channels = input_channels
 
         self.activation = activation
-        self.rel_activation = Activation(schema, self.activation)
+        self.source_activation = Activation(schema, self.activation)
+        self.target_activation = Activation(self.schema_out, self.activation)
 
         self.dropout = Dropout(p=dropout)
-        self.rel_dropout  = Activation(self.schema, self.dropout)
-
+        self.source_dropout  = Activation(self.schema, self.dropout)
+        self.target_dropout = Activation(self.schema_out, self.dropout)
         # Equivariant layers with source schema
         self.n_source_layers = len(source_layers)
         self.source_layers = nn.ModuleList([])
@@ -65,7 +66,7 @@ class EquivariantNetwork(nn.Module):
             for channels in target_layers:
                 norm_dict = nn.ModuleDict()
                 for relation in self.schema_out.relations:
-                    norm_dict[str(relation.id)] = nn.BatchNorm1d(channels, affine=norm_affine, track_running_stats=False)
+                    norm_dict[str(relation.id)] = nn.GroupNorm(channels, channels, affine=norm_affine)
                 norm_activation = Activation(self.schema_out, norm_dict, is_dict=True)
                 self.target_norms.append(norm_activation)
         else:
@@ -77,10 +78,10 @@ class EquivariantNetwork(nn.Module):
 
     def forward(self, data):
         for i in range(self.n_source_layers):
-            data = self.rel_dropout(self.rel_activation(self.source_norms[i](
+            data = self.source_dropout(self.source_activation(self.source_norms[i](
                     self.source_layers[i](data))))
         for i in range(self.n_target_layers - 1):
-            data = self.rel_dropout(self.rel_activation(self.target_norms[i](
+            data = self.target_dropout(self.target_activation(self.target_norms[i](
                     self.target_layers[i](data))))
         data = self.target_layers[-1](data)
         out = self.final_rel_activation(data)

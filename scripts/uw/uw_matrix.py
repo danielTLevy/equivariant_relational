@@ -67,7 +67,7 @@ def get_hyperparams(argv):
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-csv_file_str = './data/uw_cse/UW_std_{}.csv'
+csv_file_str = './data/uw_cse/uw_std_{}.csv'
 entity_names = ['person', 'course']
 relation_names = ['person', 'course', 'advisedBy', 'taughtBy']
 

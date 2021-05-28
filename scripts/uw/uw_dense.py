@@ -277,7 +277,7 @@ if __name__ == '__main__':
                 data[rel.id] = dense_data
     data = data.to(device)
 
-    target = matrix_data[TARGET_RELATION_ID].to_dense().squeeze()
+    target = matrix_data[TARGET_RELATION_ID].to_dense().squeeze().to(device)
     #%%
     input_channels = {rel.id: data[rel.id].shape[1] for rel in relations}
 

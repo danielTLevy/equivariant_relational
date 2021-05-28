@@ -2,31 +2,88 @@
 import torch.nn as nn
 import torch.nn.functional as F
 from src.EquivariantLayer import EquivariantLayer
-from src.SparseMatrixEquivariantLayer import SparseMatrixEquivariantLayer, SparseMatrixEntityPoolingLayer
+from src.SparseMatrixEquivariantLayer import SparseMatrixEquivariantLayer, \
+                    SparseMatrixEntityPoolingLayer, SparseMatrixDenseLayer
 from src.SparseEquivariantLayer import SparseEquivariantLayer
 from src.Modules import RelationNorm, Activation, EntityPooling, \
-                        EntityBroadcasting, Dropout, SparseMatrixGroupNorm
+                        EntityBroadcasting, Dropout
 import pdb
 
 class EquivariantNetwork(nn.Module):
-    def __init__(self, schema, n_channels):
+    def __init__(self, schema, input_channels, source_layers=[32,64,32],
+                 target_layers=[32], output_dim=1, schema_out=None,
+                 activation=F.relu, dropout=0, pool_op='mean',
+                 norm=True, norm_affine=True, final_activation=nn.Identity()):
         super(EquivariantNetwork, self).__init__()
         self.schema = schema
-        self.n_channels = n_channels
-        self.hidden_dims = (32, 64, 32)
-        self.all_dims = [n_channels] + list(self.hidden_dims) + [n_channels]
-        
-        self.ReLU = Activation(schema, nn.ReLU())
-        sequential = []
-        for i in range(1, len(self.all_dims)-1):
-            sequential.append(EquivariantLayer(self.schema, self.all_dims[i-1], self.all_dims[i]))
-            sequential.append(self.ReLU)
-            sequential.append(RelationNorm(self.schema, self.all_dims[i], affine=False))
-        sequential.append(EquivariantLayer(self.schema, self.all_dims[-2], self.all_dims[-1]))
-        self.sequential = nn.Sequential(*sequential)
-        
+        if schema_out == None:
+            self.schema_out = schema
+        else:
+            self.schema_out = schema_out
+        self.input_channels = input_channels
+
+        self.activation = activation
+        self.rel_activation = Activation(schema, self.activation)
+
+        self.dropout = Dropout(p=dropout)
+        self.rel_dropout  = Activation(self.schema, self.dropout)
+
+        # Equivariant layers with source schema
+        self.n_source_layers = len(source_layers)
+        self.source_layers = nn.ModuleList([])
+        self.source_layers.append(EquivariantLayer(
+                self.schema, input_channels, source_layers[0], pool_op=pool_op))
+        self.source_layers.extend([
+                EquivariantLayer(self.schema, source_layers[i-1], source_layers[i], pool_op=pool_op)
+                for i in range(1, len(source_layers))])
+        if norm:
+            self.source_norms = nn.ModuleList()
+            for channels in source_layers:
+                norm_dict = nn.ModuleDict()
+                for relation in self.schema.relations:
+                    norm_dict[str(relation.id)] = nn.GroupNorm(channels, channels, affine=norm_affine)
+                norm_activation = Activation(self.schema, norm_dict, is_dict=True)
+                self.source_norms.append(norm_activation)
+        else:
+            self.source_norms = nn.ModuleList([Activation(schema, nn.Identity())
+                                        for _ in source_layers])
+
+        # Equivariant layers with target schema
+        target_layers = target_layers + [output_dim]
+        self.n_target_layers = len(target_layers)
+        self.target_layers = nn.ModuleList([])
+        self.target_layers.append(EquivariantLayer(self.schema, source_layers[-1],
+                                                   target_layers[0],
+                                                   schema_out=self.schema_out,
+                                                   pool_op=pool_op))
+        self.target_layers.extend([
+                EquivariantLayer(self.schema_out, target_layers[i-1],
+                                 target_layers[i], pool_op=pool_op)
+                for i in range(1, len(target_layers))])
+        if norm:
+            self.target_norms = nn.ModuleList()
+            for channels in target_layers:
+                norm_dict = nn.ModuleDict()
+                for relation in self.schema_out.relations:
+                    norm_dict[str(relation.id)] = nn.BatchNorm1d(channels, affine=norm_affine, track_running_stats=False)
+                norm_activation = Activation(self.schema_out, norm_dict, is_dict=True)
+                self.target_norms.append(norm_activation)
+        else:
+            self.target_norms = nn.ModuleList([Activation(self.schema_out, nn.Identity())
+                                        for _ in target_layers])
+
+        self.final_activation = final_activation
+        self.final_rel_activation = Activation(self.schema_out, self.final_activation)
+
     def forward(self, data):
-        out = self.sequential(data)
+        for i in range(self.n_source_layers):
+            data = self.rel_dropout(self.rel_activation(self.source_norms[i](
+                    self.source_layers[i](data))))
+        for i in range(self.n_target_layers - 1):
+            data = self.rel_dropout(self.rel_activation(self.target_norms[i](
+                    self.target_layers[i](data))))
+        data = self.target_layers[-1](data)
+        out = self.final_rel_activation(data)
         return out
 
 

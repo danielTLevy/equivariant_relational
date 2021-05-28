@@ -224,9 +224,6 @@ if __name__ == '__main__':
                 for key, col in zip(keys, cols):
                     data_raw[relation_name][key].append(col)
 
-    entity_names = ['actors', 'movies', 'directors', 'users']
-    rel_names = ['actors', 'movies', 'directors', 'users',
-                 'movies2actors', 'movies2directors', 'u2base']
     ent_actors = Entity(0, len(data_raw['actors']['actorid']))
     ent_movies = Entity(1, len(data_raw['movies']['movieid']))
     ent_directors = Entity(2, len(data_raw['directors']['directorid']))
@@ -251,7 +248,7 @@ if __name__ == '__main__':
                         for ent_name in entity_names}
 
     for relation in relations:
-        relation_name = rel_names[relation.id]
+        relation_name = relation_names[relation.id]
         print(relation_name)
         if relation.is_set:
             data_matrix = set_relation_to_matrix(relation, schema_dict[relation_name],
@@ -352,6 +349,7 @@ if __name__ == '__main__':
                 print("\nVal Acc: {:.3f} Val Loss: {:.3f}".format(val_acc, val_loss))
                 wandb_log.update({'Val Loss': val_loss.item(), 'Val Accuracy': val_acc})
                 if val_acc > val_acc_best:
+                    val_acc_best = val_acc
                     print("New best")
                 if not args.no_scheduler:
                     sched.step(val_loss)

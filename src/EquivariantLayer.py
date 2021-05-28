@@ -14,10 +14,12 @@ import torch.nn.functional as F
 import itertools
 from src.utils import get_all_input_output_partitions, DENSE_PREFIX_DIMS
 from src.DataSchema import Data
+import pdb
 
 class EquivariantLayerBlock(nn.Module):
     # Layer mapping between two relations
-    def __init__(self, input_dim, output_dim, relation_in, relation_out):
+    def __init__(self, input_dim, output_dim, relation_in, relation_out,
+                 bias=True, pool_op='mean'):
         super(EquivariantLayerBlock, self).__init__()
         self.in_dim = input_dim
         self.out_dim = output_dim
@@ -25,8 +27,11 @@ class EquivariantLayerBlock(nn.Module):
         self.n_params = len(self.input_output_partitions)
         stdv = 0.1 / math.sqrt(self.in_dim)
         self.weights = nn.Parameter(torch.Tensor(self.n_params, self.in_dim, self.out_dim).uniform_(-stdv, stdv))
-        self.bias = nn.Parameter(torch.ones(self.n_params))
+        self.use_bias = bias
+        if bias:
+            self.bias = nn.Parameter(torch.ones(self.n_params))
         self.output_shape = [0, self.out_dim] + [entity.n_instances for entity in relation_out.entities]
+        self.pool_op = pool_op
 
 
     def diag(self, X, equality_mapping):
@@ -85,9 +90,10 @@ class EquivariantLayerBlock(nn.Module):
                 pooling_dims += list(i)
         pooling_dims = sorted(pooling_dims)
         if pooling_dims != []:
-            # TODO: can make this a max
-            #X = X.amax(pooling_dims)
-            X = X.mean(pooling_dims)
+            if self.pool_op == 'mean':
+                X = X.mean(pooling_dims)
+            elif self.pool_op == 'max':
+                X = X.amax(pooling_dims)
     
             # Get updated indices
             index_array = np.delete(index_array, pooling_dims)
@@ -183,8 +189,9 @@ class EquivariantLayerBlock(nn.Module):
             Y_i, equality_mapping = self.undiag(Y_i, equality_mapping)
 
             Y_i, equality_mapping = self.reindex(Y_i, equality_mapping)
-
-            Y_i = F.linear(Y_i.transpose(1,-1), self.weights[i].T).transpose(1,-1) + self.bias[i]
+            Y_i = F.linear(Y_i.transpose(1,-1), self.weights[i].T).transpose(1,-1)
+            if self.use_bias:
+                Y_i = Y_i + self.bias[i]
             if Y == None:
                 Y = Y_i
             else:
@@ -194,17 +201,27 @@ class EquivariantLayerBlock(nn.Module):
 
 
 class EquivariantLayer(nn.Module):
-    def __init__(self, schema, input_dim=1, output_dim=1):
+    def __init__(self, schema, input_dim=1, output_dim=1, schema_out=None, use_bias=True, pool_op='mean'):
         super(EquivariantLayer, self).__init__()
         self.schema = schema
+        self.schema_out = schema_out
+        if self.schema_out == None:
+            self.schema_out = schema
         self.relation_pairs = list(itertools.product(self.schema.relations,
-                                                self.schema.relations))
+                                                self.schema_out.relations))
         block_modules = {}
-        self.input_dim = input_dim
-        self.output_dim = output_dim
+        if type(input_dim) == dict:
+            self.input_dim = input_dim
+        else:
+            self.input_dim = {rel.id: input_dim for rel in self.schema.relations}
+        if type(output_dim) == dict:
+            self.output_dim = output_dim
+        else:
+            self.output_dim = {rel.id: output_dim for rel in self.schema_out.relations}
         for relation_i, relation_j in self.relation_pairs:
-            block_module = EquivariantLayerBlock(self.input_dim, self.output_dim,
-                                                 relation_i, relation_j)
+            block_module = EquivariantLayerBlock(self.input_dim[relation_i.id],
+                                                 self.output_dim[relation_j.id],
+                                                 relation_i, relation_j, use_bias)
             block_modules[str((relation_i.id, relation_j.id))] = block_module
         self.block_modules = nn.ModuleDict(block_modules)
 

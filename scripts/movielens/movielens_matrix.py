@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import sys
+import os
 from src.DataSchema import DataSchema, Entity, Relation, SparseMatrixData, Data
 from src.SparseMatrix import SparseMatrix
 from src.EquivariantNetwork import SparseMatrixEntityPredictor
@@ -21,7 +22,7 @@ from collections import OrderedDict
 def get_hyperparams(argv):
     parser = argparse.ArgumentParser(allow_abbrev=False)
     parser.set_defaults(dataset='MovieLens')
-    parser.add_argument('--checkpoint_path', type=str, default='cora_matrix.pt')
+    parser.add_argument('--checkpoint_path', type=str, default='./models/movielens/')
     parser.add_argument('--layers', type=int, nargs='*', default=['64']*4,
                         help='Number of channels for equivariant layers')
     parser.add_argument('--fc_layers', type=str, nargs='*', default=[],
@@ -115,6 +116,13 @@ schema_dict = {
 TARGET_RELATION = 'users'
 TARGET_KEY = 'u_gender'
 
+
+def set_seed(seed):
+    random.seed(seed, version=2)
+    np.random.seed(random.randint(0, 2**32))
+    torch.manual_seed(random.randint(0, 2**32))
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 def binary_to_tensor(values_list):
     assert len(np.unique(values_list)) == 2
@@ -212,6 +220,8 @@ if __name__ == '__main__':
     argv = sys.argv[1:]
     args = get_hyperparams(argv)
     print(args)
+
+    set_seed(args.seed)
 
     data_raw = {rel_name: {key: list() for key in schema_dict[rel_name].keys()}
                     for rel_name in schema_dict.keys()}
@@ -320,6 +330,10 @@ if __name__ == '__main__':
             settings=wandb.Settings(start_method='fork'))
         wandb.watch(net, log='all', log_freq=args.wandb_log_param_freq)
 
+
+    if not os.path.exists(args.checkpoint_path):
+        os.makedirs(args.checkpoint_path)
+
     progress = tqdm(range(args.num_epochs), desc="Epoch 0", position=0, leave=True)
 
     loss_fcn = nn.BCELoss().to(device)
@@ -346,11 +360,21 @@ if __name__ == '__main__':
                 data_out_val_values = data_out_val[val_indices]
                 val_loss = loss_fcn(data_out_val_values, val_targets)
                 val_acc = acc_fcn(data_out_val_values, val_targets)
-                print("\nVal Acc: {:.3f} Val Loss: {:.3f}".format(val_acc, val_loss))
+                print("\nVal Loss: {:.3f} Val Acc: {:.3f}".format(val_acc, val_loss))
                 wandb_log.update({'Val Loss': val_loss.item(), 'Val Accuracy': val_acc})
                 if val_acc > val_acc_best:
                     val_acc_best = val_acc
-                    print("New best")
+                    print("New best, saving")
+                    torch.save({
+                        'epoch': epoch,
+                        'net_state_dict': net.state_dict(),
+                        'optimizer_state_dict': opt.state_dict(),
+                        'train_loss': train_loss.item(),
+                        'train_acc': acc,
+                        'val_loss': val_loss.item(),
+                        'val_acc': val_acc
+                        }, args.checkpoint_path + 'model.pt')
+                wandb.save(args.checkpoint_path + 'model.pt')
                 if not args.no_scheduler:
                     sched.step(val_loss)
             if epoch % args.wandb_log_loss_freq == 0:

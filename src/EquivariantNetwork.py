@@ -10,6 +10,21 @@ from src.Modules import RelationNorm, Activation, EntityPooling, \
 import pdb
 
 class EquivariantNetwork(nn.Module):
+    '''
+    Equivariant Network for dense tensor inputs and outputs
+    schema: source schema of input data
+    input_channels: number of channels in input tensor for each relation
+    source_layers: channels of layers fully equivariant to source schema
+    target_layers: channels of layers fully equivariant to target schema
+    output_dim: number of dimensions of output tensor
+    schema_out: schema representing target tensor
+    activation: layer activations for source and target
+    dropout: rate of dropout at each layer
+    pool_op: 'mean' or 'add' pooling at each layer
+    norm: whether to normalize output of each layer
+    norm_affine: if normalizing output, whether norm is affine
+    final_activation: activation of output of last layer
+    '''
     def __init__(self, schema, input_channels, source_layers=[32,64,32],
                  target_layers=[32], output_dim=1, schema_out=None,
                  activation=F.relu, dropout=0, pool_op='mean',

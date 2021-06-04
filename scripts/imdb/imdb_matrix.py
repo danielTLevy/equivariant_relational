@@ -13,6 +13,7 @@ import torch.optim as optim
 import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import tqdm
+from sklearn.metrics import f1_score
 import numpy as np
 import scipy.sparse as sp
 import csv
@@ -45,7 +46,7 @@ def get_hyperparams(argv):
     parser.add_argument('--no_norm', dest='norm', action='store_false', default=True)
     parser.set_defaults(norm=True)
     parser.add_argument('--norm_affine', action='store_true')
-    parser.set_defaults(norm_affine = False)
+    parser.set_defaults(norm_affine=True)
     parser.add_argument('--pool_op', type=str, default='mean')
     parser.add_argument('--neg_data', type=float, default=0.,
                         help='Ratio of random data samples to positive. \
@@ -61,7 +62,7 @@ def get_hyperparams(argv):
                         help='Log this run in wandb')
     parser.add_argument('--wandb_no_log_run', dest='wandb_log_run', action='store_false',
                         help='Do not log this run in wandb')
-    parser.set_defaults(wandb_log_run=False)
+    parser.set_defaults(wandb_log_run=True)
 
     args, argv = parser.parse_known_args(argv)
     args.layers  = [int(x) for x in args.layers]
@@ -98,30 +99,30 @@ if __name__ == '__main__':
     
     def preprocess_features(features):
         """Row-normalize feature matrix and convert to tuple representation"""
-        features = sp.csr_matrix(features, dtype=np.float32) 
+        features = sp.csr_matrix(features, dtype=np.float32)
         rowsum = np.array(features.sum(1))
         r_inv = np.power(rowsum, -1).flatten()
         r_inv[np.isinf(r_inv)] = 0.
         r_mat_inv = sp.diags(r_inv)
         features = r_mat_inv.dot(features)
         return torch.Tensor(features.todense())
-    
+
     ent_movie = Entity(0, raw_data['movie_feature'].shape[0])
     ent_actor = Entity(1, raw_data['movie_actor'].shape[1])
     ent_director = Entity(2, raw_data['movie_director'].shape[1])
     ent_keyword = Entity(3, raw_data['movie_keyword'].shape[1])
     entities = [ent_movie, ent_actor, ent_director, ent_keyword]
-    
+
     relations = []
     rel_movie_actor = Relation(0, [ent_movie, ent_actor])
     rel_movie_director = Relation(1, [ent_movie, ent_director])
     rel_movie_keyword = Relation(2, [ent_movie, ent_keyword])
     rel_movie_feature = Relation(3, [ent_movie, ent_movie], is_set=True)
     relations = [rel_movie_actor, rel_movie_director, rel_movie_keyword, rel_movie_feature]
-    
+
     schema = DataSchema(entities, relations)
     schema_out = DataSchema([ent_movie], [Relation(0, [ent_movie, ent_movie], is_set=True)])
-    
+
     data = SparseMatrixData(schema)
     for rel_i, rel_name in enumerate(relation_names):
         if rel_name == 'movie_feature':
@@ -141,7 +142,7 @@ if __name__ == '__main__':
             label = line.rstrip().split(',')[1]
             labels.append(int(label))
     labels = torch.LongTensor(labels).to(device) - min(labels)
-    
+
     shuffled_indices = random.sample(range(n_movies), n_movies)
     val_start = 0
     test_start = int(args.val_pct * (n_movies/100.))
@@ -156,7 +157,7 @@ if __name__ == '__main__':
     train_targets = labels[train_indices]
     val_targets = labels[val_indices]
     test_targets = labels[test_indices]
-    
+
     n_output_classes = len(labels.unique())
     data_target[0] = SparseMatrix(
             indices = torch.arange(n_movies, dtype=torch.int64).repeat(2,1),
@@ -175,7 +176,7 @@ if __name__ == '__main__':
                                          norm=args.norm,
                                          pool_op=args.pool_op,
                                          norm_affine=args.norm_affine)
-    
+
     net = net.to(device)
     opt = eval('optim.%s' % args.optimizer)(net.parameters(), lr=args.learning_rate, weight_decay=args.l2_decay)
     
@@ -184,7 +185,7 @@ if __name__ == '__main__':
                                                      factor=args.sched_factor,
                                                      patience=args.sched_patience,
                                                      verbose=True)
-    
+
     #%%
     if args.wandb_log_run:
         wandb.init(config=args,
@@ -200,6 +201,11 @@ if __name__ == '__main__':
 
     def acc_fcn(values, target):
         return ((values.argmax(1) == target).sum() / len(target)).item()
+
+    def f1_scores(values, target, ):
+        micro = f1_score(values.argmax(1), target, average='micro')
+        macro = f1_score(values.argmax(1), target, average='macro')
+        return micro, macro
 
     val_acc_best = 0
     for epoch in progress:
@@ -221,8 +227,11 @@ if __name__ == '__main__':
                 data_out_val_values = data_out_val[val_indices]
                 val_loss = loss_fcn(data_out_val_values, val_targets)
                 val_acc = acc_fcn(data_out_val_values, val_targets)
-                print("\nVal Acc: {:.3f} Val Loss: {:.3f}".format(val_acc, val_loss))
-                wandb_log.update({'Val Loss': val_loss.item(), 'Val Accuracy': val_acc})
+                val_micro, val_macro = f1_scores(data_out_val_values, val_targets)
+                print("\nVal Acc: {:.3f} Val Loss: {:.3f} Val Micro-F1: {:.3f} \
+                      Val Macro-F1: {:.3f}".format(val_acc, val_loss, val_micro, val_macro))
+                wandb_log.update({'Val Loss': val_loss.item(), 'Val Accuracy': val_acc,
+                                  'Val Micro-F1': val_micro, 'Val Macro-F1': val_macro})
                 if val_acc > val_acc_best:
                     val_acc_best = val_acc
                     print("New best")

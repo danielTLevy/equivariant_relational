@@ -45,6 +45,21 @@ class SparseMatrix:
         return cls(indices, values, shape)
 
     @classmethod
+    def from_scipy_sparse(cls, sparse_matrix):
+        values = sparse_matrix.data
+        indices = np.vstack((sparse_matrix.row, sparse_matrix.col))
+
+        torch_indices = torch.LongTensor(indices)
+        torch_values = torch.FloatTensor(values)
+        if torch_values.ndim == 1:
+            torch_values = torch_values.unsqueeze(1)
+        shape = sparse_matrix.shape + (torch_values.shape[1], )
+
+        torch_sparse =  torch.sparse.FloatTensor(torch_indices, torch_values,
+                                                 torch.Size(shape))
+        return SparseMatrix.from_torch_sparse(torch_sparse)
+
+    @classmethod
     def from_dense_tensor(cls, tensor, prefix_dims=MATRIX_PREFIX_DIMS):
         '''
         Initialize from a dense tensor
@@ -67,6 +82,13 @@ class SparseMatrix:
             out.n_channels = n_channels
         return out
 
+    @classmethod
+    def from_embed_diag(cls, values):
+        n_instances = values.shape[0]
+        n_channels = values.shape[1]
+        shape = np.array([n_instances, n_instances, n_channels])
+        indices = torch.arange(n_instances).repeat(2,1)
+        return SparseMatrix(indices=indices, values=values, shape=shape)
 
     def ndimension(self):
         return self.indices.shape[0]

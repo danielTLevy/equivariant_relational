@@ -5,18 +5,16 @@ import sys
 from src.DataSchema import DataSchema, Entity, Relation, SparseMatrixData, Data
 from src.SparseMatrix import SparseMatrix
 from src.EquivariantNetwork import SparseMatrixEntityPredictor
+from scripts.UWDataLoader import UWPhaseData
 import torch
 import torch.optim as optim
 import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import tqdm
-import numpy as np
-import csv
 import random
 import pdb
 import argparse
 import wandb
-from collections import OrderedDict
 
 def get_hyperparams(argv):
     parser = argparse.ArgumentParser(allow_abbrev=False)
@@ -67,134 +65,6 @@ def get_hyperparams(argv):
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-csv_file_str = './data/uw_cse/uw_std_{}.csv'
-entity_names = ['person', 'course']
-relation_names = ['person', 'course', 'advisedBy', 'taughtBy']
-
-schema_dict = {
-        'person': OrderedDict({
-                'p_id': 'id', # ID
-                'professor': 'binary', 
-                'student': 'binary',
-                'hasPosition': 'categorical',
-                'inPhase': 'categorical',
-                'yearsInProgram': 'categorical'
-                }),
-        'course': OrderedDict({
-                'course_id': 'id',
-                'courseLevel': 'categorical'
-                }),
-        'advisedBy': OrderedDict({ 
-                'p_id': 'id', # Student
-                'p_id_dummy': 'id' # Professor
-                }),
-        'taughtBy': OrderedDict({
-                'course_id': 'id', # Course
-                'p_id': 'id'
-                })
-        }
-TARGET_RELATION = 'person'
-TARGET_KEY = 'inPhase'
-
-
-def binary_to_tensor(values_list):
-    assert len(np.unique(values_list)) == 2
-    value = values_list[0]
-    return torch.Tensor(np.array(values_list) == value).unsqueeze(1)
-
-def ordinal_to_tensor(values_list):
-    values_int_list = list(map(int, values_list))
-    return torch.Tensor(np.array(values_int_list)).unsqueeze(1)
-    
-def categorical_to_tensor(values_list):
-    values_array = np.array(values_list)
-    categories = np.unique(values_array)
-    one_hot = torch.zeros(len(values_list), len(categories))
-    for i, category in enumerate(categories):
-        one_hot[:, i] = torch.Tensor(values_array == category)
-    return one_hot
-
-def set_relation_to_matrix(relation, typedict, raw_vals):
-    assert relation.entities[0] == relation.entities[1]
-    assert relation.is_set
-    n_instances = relation.entities[0].n_instances
-    tensor_list = []
-    for key, val in typedict.items():
-        if key == TARGET_KEY:
-            continue
-        if val == 'id':
-            continue
-        elif val == 'ordinal':
-            func = ordinal_to_tensor
-        elif val == 'categorical':
-            func = categorical_to_tensor
-        elif val == 'binary':
-            func = binary_to_tensor
-        tensor_list.append(func(raw_vals[key]))
-
-    if len(tensor_list) != 0:
-        values = torch.cat(tensor_list, 1)
-    else:
-        values = torch.ones(n_instances, 1)
-    indices = torch.arange(n_instances).repeat(2,1)
-    return SparseMatrix(
-            indices = indices,
-            values = values,
-            shape = (n_instances, n_instances, values.shape[1]))
-
-def id_to_idx(ids_list):
-    return {ids_list[i]: i  for i in range(len(ids_list))}
-
-def ent_name_to_id_name(ent_name):
-    return ent_name[:-1] + 'id'
-
-def binary_relation_to_matrix(relation, typedict, raw_vals, ent_id_to_idx_dict,
-                              ent_n_id_str, ent_m_id_str):
-    assert not relation.is_set
-    ent_n = relation.entities[0]
-    ent_n_name = entity_names[ent_n.id]
-    ent_m = relation.entities[1]
-    ent_m_name = entity_names[ent_m.id]
-    instances_n = ent_n.n_instances
-    instances_m = ent_m.n_instances
-    tensor_list = []
-    for key, val in typedict.items():
-        if val == 'id':
-            continue
-        elif val == 'ordinal':
-            func = ordinal_to_tensor
-        elif val == 'categorical':
-            func = categorical_to_tensor
-        elif val == 'binary':
-            func = binary_to_tensor
-        tensor_list.append(func(raw_vals[key]))
-    n_ids = raw_vals[ent_n_id_str]
-    m_ids = raw_vals[ent_m_id_str]
-    if len(tensor_list) != 0:
-        values = torch.cat(tensor_list, 1)
-    else:
-        values = torch.ones(len(n_ids), 1)
-    indices_n = torch.LongTensor([
-            ent_id_to_idx_dict[ent_n_name][ent_i] for ent_i in n_ids
-            ])
-    indices_m = torch.LongTensor([
-            ent_id_to_idx_dict[ent_m_name][ent_i] for ent_i in m_ids
-            ])
-
-    return SparseMatrix(
-            indices = torch.stack((indices_n, indices_m)),
-            values = values,
-            shape = (instances_n, instances_m, values.shape[1]))
-
-
-def get_targets(target_vals, target_type):
-    if target_type == 'ordinal':
-        return torch.Tensor(ordinal_to_tensor(target_vals)).squeeze()
-    elif target_type == 'categorical':
-        return torch.Tensor(categorical_to_tensor(target_vals)).argmax(1)
-    elif target_type == 'binary':
-        return torch.Tensor(binary_to_tensor(target_vals)).squeeze()
-    
 
 #%%
 if __name__ == '__main__':
@@ -202,75 +72,22 @@ if __name__ == '__main__':
     args = get_hyperparams(argv)
     print(args)
 
-    data_raw = {rel_name: {key: list() for key in schema_dict[rel_name].keys()}
-                    for rel_name in schema_dict.keys()}
-
-    for relation_name in relation_names:
-        with open(csv_file_str.format(relation_name)) as file:
-            reader = csv.reader(file)
-            keys = schema_dict[relation_name].keys()
-            for cols in reader:
-                for key, col in zip(keys, cols):
-                    data_raw[relation_name][key].append(col)
-
-    ent_person = Entity(0, len(data_raw['person']['p_id']))
-    ent_course = Entity(1, len(data_raw['course']['course_id']))
-    entities = [ent_person, ent_course]
-
-    rel_person = Relation(0, [ent_person, ent_person], is_set=True)
-    rel_course = Relation(1, [ent_course, ent_course], is_set=True)
-    rel_advisedBy = Relation(2, [ent_person, ent_person])
-    rel_taughtBy = Relation(3, [ent_course, ent_person])
-    relations = [rel_person, rel_course, rel_advisedBy, rel_taughtBy]
-
-    schema = DataSchema(entities, relations)
-    data = SparseMatrixData(schema)
-
-
-    ent_id_to_idx_dict = {'person': id_to_idx(data_raw['person']['p_id']),
-                          'course': id_to_idx(data_raw['course']['course_id'])}
-
-    for relation in relations:
-        relation_name = relation_names[relation.id]
-        print(relation_name)
-        if relation.is_set:
-            data_matrix = set_relation_to_matrix(relation, schema_dict[relation_name],
-                                                data_raw[relation_name])
-        else:
-            if relation_name == 'advisedBy':
-                ent_n_id_str = 'p_id'
-                ent_m_id_str = 'p_id_dummy'
-            elif relation_name == 'taughtBy':
-                ent_n_id_str = 'course_id'
-                ent_m_id_str = 'p_id'
-            data_matrix = binary_relation_to_matrix(relation, schema_dict[relation_name],
-                                                data_raw[relation_name], ent_id_to_idx_dict,
-                                                ent_n_id_str, ent_m_id_str)
-        data[relation.id] = data_matrix
-
-
-    target = get_targets(data_raw[TARGET_RELATION][TARGET_KEY],
-                         schema_dict[TARGET_RELATION][TARGET_KEY]).to(device)
-
-    rel_out = Relation(0, [ent_person, ent_person], is_set=True)
-    schema_out = DataSchema([ent_person], [rel_out])
-    data_target = Data(schema_out)
-    n_output_classes = len(np.unique(data_raw[TARGET_RELATION][TARGET_KEY]))
-    n_person = ent_person.n_instances
-    data_target[0] = SparseMatrix(
-                        indices=torch.arange(n_person, dtype=torch.int64).repeat(2,1),
-                        values=torch.zeros([n_person, n_output_classes]),
-                        shape=(n_person, n_person, n_output_classes))
-    data = data.to(device)
-    data_target = data_target.to(device)
+    dataloader = UWPhaseData()
+    schema = dataloader.schema
+    data = dataloader.data.to(device)
+    data_target = dataloader.data_target.to(device)
     indices_identity, indices_transpose = data.calculate_indices()
+    target = dataloader.target.to(device)
+    output_dim = dataloader.output_dim
+    schema_out = dataloader.schema_out
+    n_targets = target.shape[0]
+    #%%
+    input_channels = {rel.id: data[rel.id].n_channels for rel in schema.relations}
 
-    input_channels = {rel.id: data[rel.id].n_channels for rel in relations}
-
-    shuffled_indices = random.sample(range(n_person), n_person)
+    shuffled_indices = random.sample(range(n_targets), n_targets)
     val_start = 0
-    test_start = int(args.val_pct * (n_person/100.))
-    train_start =  test_start + int(args.test_pct * (n_person/100.))
+    test_start = int(args.val_pct * (n_targets/100.))
+    train_start =  test_start + int(args.test_pct * (n_targets/100.))
 
     val_indices  = sorted(shuffled_indices[val_start:test_start])
     test_indices  = sorted(shuffled_indices[test_start:train_start])
@@ -288,7 +105,7 @@ if __name__ == '__main__':
                                          final_activation = nn.Sigmoid(),
                                          target_entities=schema_out.entities,
                                          dropout=args.dropout_rate,
-                                         output_dim=n_output_classes,
+                                         output_dim=output_dim,
                                          norm=args.norm,
                                          pool_op=args.pool_op,
                                          norm_affine=args.norm_affine)

@@ -1,8 +1,14 @@
 # -*- coding: utf-8 -*-
 
 '''
-Source of IMDB dataset, as well as dataset preparation procedures:
-https://github.com/YuxiangRen/Heterogeneous-Deep-Graph-Infomax/tree/master/data/IMDB
+Source of Pubmed dataset, as well as dataset preparation procedures:
+https://arxiv.org/pdf/2004.00216.pdf
+https://github.com/yangji9181/HNE
+May be downloaded via:
+    ```
+    pip install gdown
+    gdown https://drive.google.com/uc?id=1ZEi2sTaZ2bk8cQwyCxtlwuWJsAq9N-Cl
+    ```
 '''
 import sys
 from src.DataSchema import DataSchema, Entity, Relation, SparseMatrixData, Data
@@ -15,19 +21,16 @@ import torch.nn.functional as F
 from tqdm import tqdm
 from sklearn.metrics import f1_score
 import numpy as np
-import scipy.sparse as sp
-import csv
 import random
 import pdb
 import argparse
 import wandb
-import pickle
 import warnings
 warnings.filterwarnings("ignore", message="Setting attributes on ParameterDict is not supported.")
 
 def get_hyperparams(argv):
     parser = argparse.ArgumentParser(allow_abbrev=False)
-    parser.set_defaults(dataset='IMDB')
+    parser.set_defaults(dataset='PubMed')
     parser.add_argument('--checkpoint_path', type=str, default='cora_matrix.pt')
     parser.add_argument('--layers', type=int, nargs='*', default=['64']*4,
                         help='Number of channels for equivariant layers')
@@ -42,7 +45,7 @@ def get_hyperparams(argv):
     parser.add_argument('--sched_patience', type=float, default=10)
     parser.add_argument('--optimizer', type=str, default='Adam')
     parser.add_argument('--num_epochs', type=int, default=1000)
-    parser.add_argument('--val_every', type=int, default=10)
+    parser.add_argument('--val_every', type=int, default=1)
     parser.add_argument('--seed', type=int, default=1)
     parser.add_argument('--norm',  dest='norm', action='store_true', default=True)
     parser.add_argument('--no_norm', dest='norm', action='store_false', default=True)
@@ -64,7 +67,7 @@ def get_hyperparams(argv):
                         help='Log this run in wandb')
     parser.add_argument('--wandb_no_log_run', dest='wandb_log_run', action='store_false',
                         help='Do not log this run in wandb')
-    parser.set_defaults(wandb_log_run=True)
+    parser.set_defaults(wandb_log_run=False)
 
     args, argv = parser.parse_known_args(argv)
     args.layers  = [int(x) for x in args.layers]
@@ -74,11 +77,19 @@ def get_hyperparams(argv):
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-data_file_dir = './data/imdb_het/'
-entity_names = ['movie', 'actor', 'director', 'keyword']
-relation_names = ['movie_actor', 'movie_director', 'movie_keyword', 'movie_feature']
-
-
+data_file_dir = './data/pubmed/'
+entity_names = ['GENE', 'DISEASE', 'CHEMICAL', 'SPECIES']
+relation_idx = {0: (0, 0),
+                1: (0, 1),
+                2: (1, 1),
+                3: (2, 0),
+                4: (2, 1),
+                5: (2, 2),
+                6: (2, 3),
+                7: (3, 0),
+                8: (3, 1),
+                9: (3, 3),
+                }
 #%%
 def set_seed(seed):
     random.seed(seed, version=2)
@@ -93,79 +104,132 @@ if __name__ == '__main__':
     print(args)
     set_seed(args.seed)
 
-    raw_data = {}
-    for rel_name in relation_names:
-        file_name = data_file_dir + rel_name + '_adj.pickle'
-        with open(file_name, 'rb') as rel_file:
-            raw_data[rel_name] = pickle.load(rel_file)
-    
-    def preprocess_features(features):
-        """Row-normalize feature matrix and convert to tuple representation"""
-        features = sp.csr_matrix(features, dtype=np.float32)
-        rowsum = np.array(features.sum(1))
-        r_inv = np.power(rowsum, -1).flatten()
-        r_inv[np.isinf(r_inv)] = 0.
-        r_mat_inv = sp.diags(r_inv)
-        features = r_mat_inv.dot(features)
-        return torch.Tensor(features.todense())
-
-    ent_movie = Entity(0, raw_data['movie_feature'].shape[0])
-    ent_actor = Entity(1, raw_data['movie_actor'].shape[1])
-    ent_director = Entity(2, raw_data['movie_director'].shape[1])
-    ent_keyword = Entity(3, raw_data['movie_keyword'].shape[1])
-    entities = [ent_movie, ent_actor, ent_director, ent_keyword]
-
+    entities = [
+            Entity(0, 13561),
+            Entity(1, 20163),
+            Entity(2, 26522),
+            Entity(3, 2863)
+            ]
     relations = []
-    rel_movie_actor = Relation(0, [ent_movie, ent_actor])
-    rel_movie_director = Relation(1, [ent_movie, ent_director])
-    rel_movie_keyword = Relation(2, [ent_movie, ent_keyword])
-    rel_movie_feature = Relation(3, [ent_movie, ent_movie], is_set=True)
-    relations = [rel_movie_actor, rel_movie_director, rel_movie_keyword, rel_movie_feature]
-
+    for rel_id in range(10):
+        rel = Relation(rel_id, [entities[relation_idx[rel_id][0]],
+                                entities[relation_idx[rel_id][1]]])
+        relations.append(rel)
+    for entity_id in range(0, 4):
+        rel = Relation(10 + entity_id, [entities[entity_id], entities[entity_id]],
+                       is_set=True)
+        relations.append(rel)
     schema = DataSchema(entities, relations)
-    schema_out = DataSchema([ent_movie], [Relation(0, [ent_movie, ent_movie], is_set=True)])
+    
 
+    #%%
+    node_file_str = data_file_dir + 'node.dat'
+    node_id_to_idx = {ent_i: {} for ent_i in range(len(entities))}
+    with open(node_file_str, 'r') as node_file:
+        lines = node_file.readlines()
+        node_counter = {ent_i: 0 for ent_i in range(len(entities))}
+        for line in lines:
+            node_id, node_name, node_type, values = line.rstrip().split('\t')
+            node_id = int(node_id)
+            node_type = int(node_type)
+            node_id_to_idx[node_type][node_id] = node_counter[node_type]
+            node_counter[node_type] += 1
+
+    raw_data_indices = {rel_id: [] for rel_id in range(len(relations))}
+    raw_data_values = {rel_id: [] for rel_id in range(len(relations))}
+
+    with open(node_file_str, 'r') as node_file:
+        lines = node_file.readlines()
+        for line in lines:
+            node_id, node_name, node_type, values = line.rstrip().split('\t')
+            node_type = int(node_type)
+            node_id = node_id_to_idx[node_type][int(node_id)]
+            values  = list(map(float, values.split(',')))
+            raw_data_indices[10 + node_type].append([node_id, node_id])
+            raw_data_values[10 + node_type].append(values)
+
+    link_file_str = data_file_dir + 'link.dat'
+    with open(link_file_str, 'r') as link_file:
+        lines = link_file.readlines()
+        for line in lines:
+            node_i, node_j, rel_num, val = line.rstrip().split('\t')
+            rel_num = int(rel_num)
+            node_i_type, node_j_type = relation_idx[rel_num]
+            node_i = node_id_to_idx[node_i_type][int(node_i)]
+            node_j = node_id_to_idx[node_j_type][int(node_j)]
+            val = float(val)
+            raw_data_indices[rel_num].append([node_i, node_j])
+            raw_data_values[rel_num].append([val])
+
+
+    #%%
     data = SparseMatrixData(schema)
-    for rel_i, rel_name in enumerate(relation_names):
-        if rel_name == 'movie_feature':
-            values = preprocess_features(raw_data[rel_name])
-            data[rel_i] = SparseMatrix.from_embed_diag(values)
-        else:
-            data[rel_i] = SparseMatrix.from_scipy_sparse(raw_data[rel_name])
+    for rel in relations:
+        indices = torch.LongTensor(raw_data_indices[rel.id]).T
+        values = torch.Tensor(raw_data_values[rel.id])
+        n = rel.entities[0].n_instances
+        m = rel.entities[1].n_instances
+        n_channels = values.shape[1]
+        data_matrix = SparseMatrix(
+                indices = indices,
+                values = values,
+                shape = np.array([n, m, n_channels]),
+                is_set = rel.is_set
+                )
+        del raw_data_indices[rel.id]
+        del raw_data_values[rel.id]
+        data[rel.id] = data_matrix
+
+    #%%
+    schema_out = DataSchema([entities[1]], [Relation(0, [entities[1], entities[1]], is_set=True)])
+    label_file_str = data_file_dir + 'label.dat'
+    target_indices = []
+    targets = []
+    with open(label_file_str, 'r') as label_file:
+        lines = label_file.readlines()
+        for line in lines:
+            node_id, node_name, node_type, node_label = line.rstrip().split('\t')
+            node_type = int(node_type)
+            node_id = node_id_to_idx[node_type][int(node_id)]
+            node_label  = int(node_label)
+            target_indices.append(node_id)
+            targets.append(node_label)
+
+    target_indices = torch.LongTensor(target_indices).to(device)
+    targets = torch.LongTensor(targets).to(device)
+    n_outputs = entities[1].n_instances
+    n_targets = len(targets)
+    
+    #%%    
     data = data.to(device)
     indices_identity, indices_transpose = data.calculate_indices()
     input_channels = {rel.id: data[rel.id].n_channels for rel in relations}
-    data_target = Data(schema_out)
-    n_movies = ent_movie.n_instances
-    labels = []
-    with open(data_file_dir + 'index_label.txt', 'r') as label_file:
-        lines = label_file.readlines()
-        for line in lines:
-            label = line.rstrip().split(',')[1]
-            labels.append(int(label))
-    labels = torch.LongTensor(labels).to(device) - min(labels)
+    data_target = SparseMatrixData(schema_out)
+    #%%
 
-    shuffled_indices = random.sample(range(n_movies), n_movies)
+    shuffled_indices_idx = random.sample(range(n_targets), n_targets)
     val_start = 0
-    test_start = int(args.val_pct * (n_movies/100.))
-    train_start =  test_start + int(args.test_pct * (n_movies/100.))
+    train_start = int(args.val_pct * (n_targets/100.))
+    
+    val_indices_idx  = shuffled_indices_idx[val_start:train_start]
+    val_indices = target_indices[val_indices_idx]
+    
+    train_indices_idx = shuffled_indices_idx[train_start:]
+    train_indices = target_indices[train_indices_idx]
 
-    val_indices  = sorted(shuffled_indices[val_start:test_start])
-    test_indices  = sorted(shuffled_indices[test_start:train_start])
-    train_indices = sorted(shuffled_indices[train_start:])
+    #%%
+    train_targets = targets[train_indices_idx]
+    val_targets = targets[val_indices_idx]
 
-    all_val_indices = sorted(val_indices + train_indices)
-    all_test_indices = sorted(val_indices + test_indices + train_indices)
-    train_targets = labels[train_indices]
-    val_targets = labels[val_indices]
-    test_targets = labels[test_indices]
 
-    n_output_classes = len(labels.unique())
+    n_output_classes = len(targets.unique())
     data_target[0] = SparseMatrix(
-            indices = torch.arange(n_movies, dtype=torch.int64).repeat(2,1),
-            values=torch.zeros([n_movies, n_output_classes]),
-            shape=(n_movies, n_movies, n_output_classes))
+            indices = torch.arange(n_outputs, dtype=torch.int64).repeat(2,1),
+            values=torch.zeros([n_outputs, n_output_classes]),
+            shape=(n_outputs, n_outputs, n_output_classes),
+            is_set=True)
     data_target = data_target.to(device)
+
     #%%
     net = SparseMatrixEntityPredictor(schema, input_channels,
                                          layers = args.layers,

@@ -15,7 +15,8 @@ class SparseMatrix:
         assert len(shape) == 3, "Shape must be 3 dimensions: n, m, and channels"
         assert len(values.shape) == 2, "Currently only support vectors as values"
         assert shape[2] == values.shape[1], "Values channels and shape channels must match"
-
+        assert indices[0].max() <= shape[0]
+        assert indices[1].max() <= shape[1]
         # array of indices with dimensions (n_dimensions, nnz)
         self.indices = indices
         # Array of values with dimensions (n_channels, nnz)

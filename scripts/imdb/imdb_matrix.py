@@ -202,9 +202,9 @@ if __name__ == '__main__':
     def acc_fcn(values, target):
         return ((values.argmax(1) == target).sum() / len(target)).item()
 
-    def f1_scores(values, target, ):
-        micro = f1_score(values.argmax(1), target, average='micro')
-        macro = f1_score(values.argmax(1), target, average='macro')
+    def f1_scores(values, target):
+        micro = f1_score(values.argmax(1).cpu(), target.cpu(), average='micro')
+        macro = f1_score(values.argmax(1).cpu(), target.cpu(), average='macro')
         return micro, macro
 
     val_acc_best = 0

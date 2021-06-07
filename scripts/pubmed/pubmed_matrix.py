@@ -31,10 +31,10 @@ warnings.filterwarnings("ignore", message="Setting attributes on ParameterDict i
 def get_hyperparams(argv):
     parser = argparse.ArgumentParser(allow_abbrev=False)
     parser.set_defaults(dataset='PubMed')
-    parser.add_argument('--checkpoint_path', type=str, default='cora_matrix.pt')
-    parser.add_argument('--layers', type=int, nargs='*', default=['64']*4,
+    parser.add_argument('--checkpoint_path', type=str, default='pubmed_node.pt')
+    parser.add_argument('--layers', type=int, nargs='*', default=['64']*3,
                         help='Number of channels for equivariant layers')
-    parser.add_argument('--fc_layers', type=str, nargs='*', default=[],
+    parser.add_argument('--fc_layers', type=str, nargs='*', default=[50],
                         help='Fully connected layers for target embeddings')
     parser.add_argument('--l2_decay', type=float, default=0)
     parser.add_argument('--dropout_rate', type=float, default=0)
@@ -45,7 +45,7 @@ def get_hyperparams(argv):
     parser.add_argument('--sched_patience', type=float, default=10)
     parser.add_argument('--optimizer', type=str, default='Adam')
     parser.add_argument('--num_epochs', type=int, default=1000)
-    parser.add_argument('--val_every', type=int, default=1)
+    parser.add_argument('--val_every', type=int, default=10)
     parser.add_argument('--seed', type=int, default=1)
     parser.add_argument('--norm',  dest='norm', action='store_true', default=True)
     parser.add_argument('--no_norm', dest='norm', action='store_false', default=True)
@@ -61,6 +61,9 @@ def get_hyperparams(argv):
     parser.add_argument('--test_pct', type=float, default=10.)
     parser.add_argument('--semi_supervised', action='store_true', help='switch to low-label regime')
     parser.set_defaults(semi_supervised=False)
+    parser.add_argument('--node_labels', dest='node_labels', action='store_true')
+    parser.add_argument('--no_node_labels', dest='node_labels', action='store_false')
+    parser.set_defaults(node_labels=False)
     parser.add_argument('--wandb_log_param_freq', type=int, default=250)
     parser.add_argument('--wandb_log_loss_freq', type=int, default=1)
     parser.add_argument('--wandb_log_run', dest='wandb_log_run', action='store_true',
@@ -77,7 +80,7 @@ def get_hyperparams(argv):
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-data_file_dir = './data/pubmed/'
+data_file_dir = './data/PubMed/'
 entity_names = ['GENE', 'DISEASE', 'CHEMICAL', 'SPECIES']
 relation_idx = {0: (0, 0),
                 1: (0, 1),
@@ -115,10 +118,11 @@ if __name__ == '__main__':
         rel = Relation(rel_id, [entities[relation_idx[rel_id][0]],
                                 entities[relation_idx[rel_id][1]]])
         relations.append(rel)
-    for entity_id in range(0, 4):
-        rel = Relation(10 + entity_id, [entities[entity_id], entities[entity_id]],
-                       is_set=True)
-        relations.append(rel)
+    if args.node_labels:
+        for entity_id in range(0, 4):
+            rel = Relation(10 + entity_id, [entities[entity_id], entities[entity_id]],
+                           is_set=True)
+            relations.append(rel)
     schema = DataSchema(entities, relations)
     
 
@@ -138,15 +142,16 @@ if __name__ == '__main__':
     raw_data_indices = {rel_id: [] for rel_id in range(len(relations))}
     raw_data_values = {rel_id: [] for rel_id in range(len(relations))}
 
-    with open(node_file_str, 'r') as node_file:
-        lines = node_file.readlines()
-        for line in lines:
-            node_id, node_name, node_type, values = line.rstrip().split('\t')
-            node_type = int(node_type)
-            node_id = node_id_to_idx[node_type][int(node_id)]
-            values  = list(map(float, values.split(',')))
-            raw_data_indices[10 + node_type].append([node_id, node_id])
-            raw_data_values[10 + node_type].append(values)
+    if args.node_labels:
+        with open(node_file_str, 'r') as node_file:
+            lines = node_file.readlines()
+            for line in lines:
+                node_id, node_name, node_type, values = line.rstrip().split('\t')
+                node_type = int(node_type)
+                node_id = node_id_to_idx[node_type][int(node_id)]
+                values  = list(map(float, values.split(',')))
+                raw_data_indices[10 + node_type].append([node_id, node_id])
+                raw_data_values[10 + node_type].append(values)
 
     link_file_str = data_file_dir + 'link.dat'
     with open(link_file_str, 'r') as link_file:
@@ -300,7 +305,17 @@ if __name__ == '__main__':
                                   'Val Micro-F1': val_micro, 'Val Macro-F1': val_macro})
                 if val_acc > val_acc_best:
                     val_acc_best = val_acc
-                    print("New best")
+                    print("New best, saving")
+                    torch.save({
+                        'epoch': epoch,
+                        'net_state_dict': net.state_dict(),
+                        'optimizer_state_dict': opt.state_dict(),
+                        'train_loss': train_loss.item(),
+                        'train_acc': acc,
+                        'val_loss': val_loss.item(),
+                        'val_acc': val_acc
+                        }, args.checkpoint_path + 'model.pt')
+                    wandb.save(args.checkpoint_path + 'model.pt')
                 if not args.no_scheduler:
                     sched.step(val_loss)
             if epoch % args.wandb_log_loss_freq == 0:

@@ -209,7 +209,6 @@ class SparseMatrixEntityPredictor(nn.Module):
                 norm_dict = nn.ModuleDict()
                 for relation in self.schema.relations:
                     norm_dict[str(relation.id)] = nn.BatchNorm1d(channels, affine=norm_affine, track_running_stats=False)
-                    #norm_dict[str(relation.id)] = SparseMatrixGroupNorm(channels, channels, affine=norm_affine)
                 norm_activation = Activation(schema, norm_dict, is_dict=True, is_sparse=True)
                 self.norms.append(norm_activation)
         else:
@@ -230,7 +229,7 @@ class SparseMatrixEntityPredictor(nn.Module):
         self.final_activation = final_activation
 
 
-    def forward(self, data, idx_identity=None, idx_transpose=None, data_out=None):
+    def forward(self, data, idx_identity=None, idx_transpose=None, data_out=None, get_embeddings=False):
         if idx_identity is None or idx_transpose is None:
             print("Calculating idx_identity and idx_transpose. This can be precomputed.")
             idx_identity, idx_transpose = data.calculate_indices()
@@ -239,7 +238,7 @@ class SparseMatrixEntityPredictor(nn.Module):
                     self.equiv_layers[i](data, idx_identity, idx_transpose))))
         data = self.pooling(data, data_out)
         out = data[0].values
-        if self.n_fc_layers > 0:
+        if self.n_fc_layers > 0 and get_embeddings == False:
             out = self.fc_layers[0](out)
             for i in range(1, self.n_fc_layers):
                 out = self.fc_layers[i](self.dropout(self.activation(out)))

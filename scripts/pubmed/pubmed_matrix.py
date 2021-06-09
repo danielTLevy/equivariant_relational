@@ -58,7 +58,7 @@ def get_hyperparams(argv):
                               When sparse, this is similar to number of negative samples')
     parser.add_argument('--training_data', choices=['train', 'val', 'test'], default='train')
     parser.add_argument('--val_pct', type=float, default=10.)
-    parser.add_argument('--test_pct', type=float, default=10.)
+    parser.add_argument('--test_pct', type=float, default=0.)
     parser.add_argument('--semi_supervised', action='store_true', help='switch to low-label regime')
     parser.set_defaults(semi_supervised=False)
     parser.add_argument('--node_labels', dest='node_labels', action='store_true')
@@ -70,12 +70,14 @@ def get_hyperparams(argv):
                         help='Log this run in wandb')
     parser.add_argument('--wandb_no_log_run', dest='wandb_log_run', action='store_false',
                         help='Do not log this run in wandb')
+    parser.add_argument('--output', type=str)
     parser.set_defaults(wandb_log_run=False)
 
     args, argv = parser.parse_known_args(argv)
+    if args.output == None:
+        args.output = args.dataset + '_emb.dat'
     args.layers  = [int(x) for x in args.layers]
     args.fc_layers = [int(x) for x in args.fc_layers]
-
     return args
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -101,12 +103,22 @@ def set_seed(seed):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
+def save_embeddings(args, embeddings, node_idx_to_id):
+    with open(args.output, 'w') as file:
+        file.write(str(args))
+        for idx in range(embeddings.shape[0]):
+            embedding = embeddings[idx]
+            name = node_idx_to_id[idx]
+            file.write('{}\t{}\n'.format(name, ' '.join(embedding.astype(str))))
+
+
 if __name__ == '__main__':
     argv = sys.argv[1:]
     args = get_hyperparams(argv)
     print(args)
     set_seed(args.seed)
 
+    TARGET_NODE_TYPE = 1
     entities = [
             Entity(0, 13561),
             Entity(1, 20163),
@@ -129,6 +141,7 @@ if __name__ == '__main__':
     #%%
     node_file_str = data_file_dir + 'node.dat'
     node_id_to_idx = {ent_i: {} for ent_i in range(len(entities))}
+    target_node_idx_to_id = {}
     with open(node_file_str, 'r') as node_file:
         lines = node_file.readlines()
         node_counter = {ent_i: 0 for ent_i in range(len(entities))}
@@ -136,7 +149,10 @@ if __name__ == '__main__':
             node_id, node_name, node_type, values = line.rstrip().split('\t')
             node_id = int(node_id)
             node_type = int(node_type)
-            node_id_to_idx[node_type][node_id] = node_counter[node_type]
+            node_idx = node_counter[node_type]
+            node_id_to_idx[node_type][node_id] = node_idx
+            if node_type == TARGET_NODE_TYPE:
+                target_node_idx_to_id[node_idx] = node_id
             node_counter[node_type] += 1
 
     raw_data_indices = {rel_id: [] for rel_id in range(len(relations))}
@@ -186,7 +202,11 @@ if __name__ == '__main__':
         data[rel.id] = data_matrix
 
     #%%
-    schema_out = DataSchema([entities[1]], [Relation(0, [entities[1], entities[1]], is_set=True)])
+    schema_out = DataSchema([entities[TARGET_NODE_TYPE]],
+                            [Relation(0, 
+                                      [entities[TARGET_NODE_TYPE],
+                                       entities[TARGET_NODE_TYPE]],
+                                       is_set=True)])
     label_file_str = data_file_dir + 'label.dat'
     target_indices = []
     targets = []
@@ -202,7 +222,7 @@ if __name__ == '__main__':
 
     target_indices = torch.LongTensor(target_indices).to(device)
     targets = torch.LongTensor(targets).to(device)
-    n_outputs = entities[1].n_instances
+    n_outputs = entities[TARGET_NODE_TYPE].n_instances
     n_targets = len(targets)
     
     #%%    
@@ -314,10 +334,19 @@ if __name__ == '__main__':
                         'train_acc': acc,
                         'val_loss': val_loss.item(),
                         'val_acc': val_acc
-                        }, args.checkpoint_path + 'model.pt')
-                    wandb.save(args.checkpoint_path + 'model.pt')
+                        }, args.checkpoint_path)
+                    if args.wandb_log_run:
+                        wandb.save(args.checkpoint_path)
                 if not args.no_scheduler:
                     sched.step(val_loss)
             if epoch % args.wandb_log_loss_freq == 0:
                 if args.wandb_log_run:
                     wandb.log(wandb_log)
+    checkpoint = torch.load(args.checkpoint_path)
+    net.load_state_dict(checkpoint['net_state_dict'])
+    train_loss = checkpoint['train_loss']
+    val_loss = checkpoint['val_loss']
+    net.eval()
+    target_embeddings = net(data, indices_identity, indices_transpose,
+                            data_target, get_embeddings=True).squeeze().detach().cpu().numpy()
+    save_embeddings(args, target_embeddings, target_node_idx_to_id)

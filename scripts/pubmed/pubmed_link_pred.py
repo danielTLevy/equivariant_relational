@@ -234,5 +234,6 @@ if __name__ == '__main__':
     if args.save_embeddings:
         net.eval()
         target_embeddings = net(data, indices_identity, indices_transpose,
-                                data_target, get_embeddings=True).squeeze().detach().cpu().numpy()
+                                data_embedding=data_embedding,
+                                get_embeddings=True)[0].values.squeeze().detach().cpu().numpy()
         save_embeddings(args, target_embeddings, target_node_idx_to_id)

@@ -305,7 +305,7 @@ class SparseMatrixAutoEncoder(nn.Module):
 
 
     def forward(self, data, idx_identity=None, idx_transpose=None,
-                data_target=None, data_embedding=None):
+                data_target=None, data_embedding=None, get_embeddings=False):
         if idx_identity is None or idx_transpose is None:
             print("Calculating idx_identity and idx_transpose. This can be precomputed.")
             idx_identity, idx_transpose = data.calculate_indices()
@@ -313,6 +313,8 @@ class SparseMatrixAutoEncoder(nn.Module):
             data = self.rel_dropout(self.rel_activation(self.norms[i](
                     self.equiv_layers[i](data, idx_identity, idx_transpose))))
         data = self.pooling(data, data_embedding)
+        if get_embeddings:
+            return data
         data = self.broadcasting(data, data_target)
-        out = self.final_activation(data)
-        return out
+        data = self.final_activation(data)
+        return data

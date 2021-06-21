@@ -282,7 +282,6 @@ class SparseMatrix:
         '''
         Add all duplicated entries together
         '''
-        print("COALESCING")
         indices, values = torch_sparse.coalesce(self.indices, self.values,
                                                           self.m, self.n)
         return SparseMatrix(indices, values, self.shape())

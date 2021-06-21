@@ -28,6 +28,8 @@ class Entity:
         return "Entity(id={}, n_instances={})".format(self.id, self.n_instances)
     
     def __eq__(self, other):
+        if type(other) != type(self):
+            return False
         return self.id == other.id and self.n_instances == other.n_instances
 
 class Relation:
@@ -47,6 +49,8 @@ class Relation:
         return "Relation(id={}, entities={})".format(self.id, self.entities)
 
     def __eq__(self, other):
+        if type(other) != type(self):
+            return False
         return self.id == other.id and self.get_shape() == other.get_shape() \
                     and self.entities == other.entities
 

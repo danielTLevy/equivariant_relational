@@ -171,6 +171,9 @@ class SparseMatrixEquivariantLayer(nn.Module):
 
 
 class SparseMatrixEntityPoolingLayer(SparseMatrixEquivariantLayer):
+    '''
+    Pool all relations an entity takes part in to create entity-specific embeddings
+    '''
     def __init__(self, schema, input_dim=1, output_dim=1, entities=None, pool_op='mean'):
         '''
         input_dim: either a rel_id: dimension dict, or an integer for all relations
@@ -196,8 +199,46 @@ class SparseMatrixEntityPoolingLayer(SparseMatrixEquivariantLayer):
                 data_out[relation_j.id] = data_out[relation_j.id] + Y_out
         return data_out
 
+    def forward(self, data, data_target):
+        data_out = SparseMatrixData(self.schema_out)
+        data_out = self.multiply_matrices(data, data_out, data_target)
+        data_out = self.add_bias(data_out)
+        return data_out
+
+class SparseMatrixEntityBroadcastingLayer(SparseMatrixEquivariantLayer):
+    '''
+    Given entity-specific embeddings, return activations for the specified
+    indices for every relation in the given schema
+    '''
+    def __init__(self, schema, input_dim=1, output_dim=1, entities=None, pool_op='mean'):
+        '''
+        schema: schema to broadcast to
+        input_dim: either a rel_id: dimension dict, or an integer for all relations
+        output_dim: either a rel_id: dimension dict, or an integer for all relations
+        entities: if specified, these are the input entities for the encodings
+        '''
+        if entities == None:
+            entities = schema.entities
+        enc_relations = [Relation(i, [entity, entity], is_set=True)
+                                for i, entity in enumerate(entities)]
+        encodings_schema = DataSchema(entities, enc_relations)
+        super().__init__(encodings_schema, input_dim, output_dim,
+                         schema_out=schema, pool_op=pool_op)
+
+    def multiply_matrices(self, data, data_out, data_target):
+        for relation_i, relation_j in self.relation_pairs:
+            X_in = data[relation_i.id]
+            Y_in = data_target[relation_j.id]
+            layer = self.block_modules[str((relation_i.id, relation_j.id))]
+            Y_out = layer.forward(X_in, Y_in, None, None)
+            if relation_j.id not in data_out:
+                data_out[relation_j.id] = Y_out
+            else:
+                data_out[relation_j.id] = data_out[relation_j.id] + Y_out
+        return data_out
+
     def forward(self, data, data_target=None):
-        data_out = Data(self.schema_out)
+        data_out = SparseMatrixData(self.schema_out)
         data_out = self.multiply_matrices(data, data_out, data_target)
         data_out = self.add_bias(data_out)
         return data_out

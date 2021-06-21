@@ -11,9 +11,10 @@ May be downloaded via:
     ```
 '''
 import sys
-from scripts.pubmed.PubMedDataLoader import PubMedData
+from scripts.pubmed.PubMedDataLoader import PubMedData, TARGET_NODE_TYPE, TARGET_REL_ID
+from src.DataSchema import DataSchema, Entity, Relation, SparseMatrixData
 from src.SparseMatrix import SparseMatrix
-from src.EquivariantNetwork import SparseMatrixEntityPredictor
+from src.EquivariantNetwork import SparseMatrixAutoEncoder
 import torch
 import torch.optim as optim
 import torch.nn as nn
@@ -53,12 +54,16 @@ def get_hyperparams(argv):
     parser.add_argument('--norm_affine', action='store_true')
     parser.set_defaults(norm_affine=True)
     parser.add_argument('--pool_op', type=str, default='mean')
+    parser.add_argument('--embedding_dim', type=int, default=50)
     parser.add_argument('--neg_data', type=float, default=0.,
                         help='Ratio of random data samples to positive. \
                               When sparse, this is similar to number of negative samples')
     parser.add_argument('--training_data', choices=['train', 'val', 'test'], default='train')
     parser.add_argument('--val_pct', type=float, default=10.)
     parser.add_argument('--test_pct', type=float, default=0.)
+    parser.add_argument('--target_n_samples', type=int, default=1000)
+    parser.add_argument('--target_pos_rate', type=float, default=0.5)
+
     parser.add_argument('--semi_supervised', action='store_true', help='switch to low-label regime')
     parser.set_defaults(semi_supervised=False)
     parser.add_argument('--node_labels', dest='node_labels', action='store_true')
@@ -102,6 +107,34 @@ def save_embeddings(args, embeddings, node_idx_to_id):
             name = node_idx_to_id[idx]
             file.write('{}\t{}\n'.format(name, ' '.join(embedding.astype(str))))
 
+def generate_target_matrix(true_matrix, n_samples, pos_rate):
+    '''
+    Generate a target matrix with n_samples indices, of which pos_rate
+    is the proportion are true positives, while 1-pos_rate is the proportion
+    of randomly generated links.
+    true_matrix is a matrix containing all true positive links
+    Note that the randomly generated links have a ~99.99% of being negative but
+    there may be some false negatives (1e-4 sparsity for each relation)
+    '''
+    n_n = true_matrix.n
+    n_m = true_matrix.m
+    n_channels = 1
+    n_pos_samples = int(pos_rate * n_samples)
+    perm = torch.randperm(true_matrix.nnz())
+    pos_sample_idx = perm[:n_pos_samples]
+    pos_indices = true_matrix.indices[:, pos_sample_idx]
+    pos_values = torch.ones(n_pos_samples)
+    
+    n_neg_samples = n_samples - n_pos_samples
+    neg_indices_n = torch.randint(0, n_n, [n_neg_samples])
+    neg_indices_m = torch.randint(0, n_m, [n_neg_samples])
+    neg_indices = torch.stack((neg_indices_n, neg_indices_m))
+    neg_values = torch.zeros(n_neg_samples)
+    
+    return SparseMatrix(
+            indices = torch.cat((pos_indices, neg_indices), 1),
+            values = torch.cat((pos_values, neg_values), 0).unsqueeze(1),
+            shape = (n_n, n_m, n_channels)).coalesce()
 
 if __name__ == '__main__':
     argv = sys.argv[1:]
@@ -110,58 +143,37 @@ if __name__ == '__main__':
     set_seed(args.seed)
 
     dataloader = PubMedData(args.node_labels)
-    dataloader.get_node_classification_data()
     schema = dataloader.schema
     data = dataloader.data.to(device)
-    data_target = dataloader.data_target.to(device)
     indices_identity, indices_transpose = data.calculate_indices()
-    targets = dataloader.targets.to(device)
-    schema_out = dataloader.schema_out
-    n_targets = targets.shape[0]
-    target_indices = dataloader.target_indices
-    n_outputs = dataloader.n_outputs
-    targets = dataloader.targets
-    target_node_idx_to_id = dataloader.target_node_idx_to_id
-
-    #%%
+    embedding_entity = schema.entities[TARGET_NODE_TYPE]
     input_channels = {rel.id: data[rel.id].n_channels for rel in schema.relations}
-
-    shuffled_indices_idx = random.sample(range(n_targets), n_targets)
-    val_start = 0
-    train_start = int(args.val_pct * (n_targets/100.))
-
-    val_indices_idx  = shuffled_indices_idx[val_start:train_start]
-    val_indices = target_indices[val_indices_idx]
-
-    train_indices_idx = shuffled_indices_idx[train_start:]
-    train_indices = target_indices[train_indices_idx]
-
-    #%%
-    train_targets = targets[train_indices_idx]
-    val_targets = targets[val_indices_idx]
-
-
-    n_output_classes = len(targets.unique())
-    data_target[0] = SparseMatrix(
-            indices = torch.arange(n_outputs, dtype=torch.int64).repeat(2,1),
-            values=torch.zeros([n_outputs, n_output_classes]),
-            shape=(n_outputs, n_outputs, n_output_classes),
+    embedding_schema = DataSchema(schema.entities,
+                                  Relation(0,
+                                           [embedding_entity, embedding_entity],
+                                           is_set=True))
+    n_instances = embedding_entity.n_instances
+    data_embedding = SparseMatrixData(embedding_schema)
+    data_embedding[0] = SparseMatrix(
+            indices = torch.arange(n_instances, dtype=torch.int64).repeat(2,1),
+            values=torch.zeros([n_instances, args.embedding_dim]),
+            shape=(n_instances, n_instances, args.embedding_dim),
             is_set=True)
-
-
+    data_embedding.to(device)
+    target_schema = DataSchema(schema.entities, schema.relations[TARGET_REL_ID])
+    target_node_idx_to_id = dataloader.target_node_idx_to_id
     #%%
-    net = SparseMatrixEntityPredictor(schema, input_channels,
+    net = SparseMatrixAutoEncoder(schema, input_channels,
                                          layers = args.layers,
-                                         fc_layers=args.fc_layers,
+                                         embedding_dim=args.embedding_dim,
+                                         embedding_entities=[embedding_entity],
                                          activation=eval('nn.%s()' % args.act_fn),
-                                         final_activation = nn.Identity(),
-                                         target_entities=schema_out.entities,
+                                         final_activation = nn.Sigmoid(),
                                          dropout=args.dropout_rate,
-                                         output_dim=n_output_classes,
                                          norm=args.norm,
                                          pool_op=args.pool_op,
-                                         norm_affine=args.norm_affine)
-
+                                         norm_affine=args.norm_affine,
+                                         output_relations=[target_schema.relations])
     net = net.to(device)
     opt = eval('optim.%s' % args.optimizer)(net.parameters(), lr=args.learning_rate, weight_decay=args.l2_decay)
     
@@ -181,65 +193,42 @@ if __name__ == '__main__':
 
     progress = tqdm(range(args.num_epochs), desc="Epoch 0", position=0, leave=True)
 
-    def loss_fcn(data_pred, data_true):
-        return F.cross_entropy(data_pred, data_true)
+    def reconstruction_loss(data_pred, data_true):
+        return torch.sum((data_pred - data_true)**2)
 
-    def acc_fcn(values, target):
-        return ((values.argmax(1) == target).sum() / len(target)).item()
+    def acc_fcn(data_pred, data_true):
+        # TODO: return AUC ROC
+        return (((data_pred > 0.5) == data_true).sum() / len(data_true)).item()
 
-    def f1_scores(values, target):
-        micro = f1_score(values.argmax(1).cpu(), target.cpu(), average='micro')
-        macro = f1_score(values.argmax(1).cpu(), target.cpu(), average='macro')
-        return micro, macro
+    def generate_target():
+        target_matrix = generate_target_matrix(data[TARGET_REL_ID],
+                                               args.target_n_samples,
+                                               args.target_pos_rate)
+        data_target = SparseMatrixData(target_schema)
+        data_target[TARGET_REL_ID] = target_matrix
+        data_target.to(device)
+        return data_target
 
-    val_acc_best = 0
     for epoch in progress:
         net.train()
         opt.zero_grad()
-        data_out = net(data, indices_identity, indices_transpose, data_target).squeeze()
-        data_out_train_values = data_out[train_indices]
-        train_loss = loss_fcn(data_out_train_values, train_targets)
-        train_loss.backward()
+        data_target = generate_target()
+        data_out = net(data, indices_identity, indices_transpose,
+                       data_target, data_embedding)
+        data_out_values = data_out[TARGET_REL_ID].values.squeeze()
+        data_target_values = data_target[TARGET_REL_ID].values.squeeze()
+        loss = reconstruction_loss(data_out_values, data_target_values)
+        loss.backward()
         opt.step()
         with torch.no_grad():
-            acc = acc_fcn(data_out_train_values, train_targets)
+            acc = acc_fcn(data_out_values, data_target_values)
             progress.set_description(f"Epoch {epoch}")
-            progress.set_postfix(loss=train_loss.item(), train_acc=acc)
-            wandb_log = {'Train Loss': train_loss.item(), 'Train Accuracy': acc}
-            if epoch % args.val_every == 0:
-                net.eval()
-                data_out_val = net(data, indices_identity, indices_transpose, data_target).squeeze()
-                data_out_val_values = data_out_val[val_indices]
-                val_loss = loss_fcn(data_out_val_values, val_targets)
-                val_acc = acc_fcn(data_out_val_values, val_targets)
-                val_micro, val_macro = f1_scores(data_out_val_values, val_targets)
-                print("\nVal Acc: {:.3f} Val Loss: {:.3f} Val Micro-F1: {:.3f} \
- Val Macro-F1: {:.3f}".format(val_acc, val_loss, val_micro, val_macro))
-                wandb_log.update({'Val Loss': val_loss.item(), 'Val Accuracy': val_acc,
-                                  'Val Micro-F1': val_micro, 'Val Macro-F1': val_macro})
-                if val_acc > val_acc_best:
-                    val_acc_best = val_acc
-                    print("New best, saving")
-                    torch.save({
-                        'epoch': epoch,
-                        'net_state_dict': net.state_dict(),
-                        'optimizer_state_dict': opt.state_dict(),
-                        'train_loss': train_loss.item(),
-                        'train_acc': acc,
-                        'val_loss': val_loss.item(),
-                        'val_acc': val_acc
-                        }, args.checkpoint_path)
-                    if args.wandb_log_run:
-                        wandb.save(args.checkpoint_path)
-                if not args.no_scheduler:
-                    sched.step(val_loss)
+            progress.set_postfix(loss=loss.item(), acc=acc)
+            loss_val = loss.cpu().item()
+            wandb_log = {'Loss': loss_val, 'Accuracy': acc}
             if epoch % args.wandb_log_loss_freq == 0:
                 if args.wandb_log_run:
                     wandb.log(wandb_log)
-    checkpoint = torch.load(args.checkpoint_path)
-    net.load_state_dict(checkpoint['net_state_dict'])
-    train_loss = checkpoint['train_loss']
-    val_loss = checkpoint['val_loss']
 
     if args.save_embeddings:
         net.eval()

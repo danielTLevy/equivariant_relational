@@ -107,7 +107,7 @@ def save_embeddings(args, embeddings, node_idx_to_id):
             name = node_idx_to_id[idx]
             file.write('{}\t{}\n'.format(name, ' '.join(embedding.astype(str))))
 
-def generate_target_matrix(true_matrix, n_samples, pos_rate):
+def generate_target_matrix(true_matrix, n_samples, pos_rate, device):
     '''
     Generate a target matrix with n_samples indices, of which pos_rate
     is the proportion are true positives, while 1-pos_rate is the proportion
@@ -123,13 +123,13 @@ def generate_target_matrix(true_matrix, n_samples, pos_rate):
     perm = torch.randperm(true_matrix.nnz())
     pos_sample_idx = perm[:n_pos_samples]
     pos_indices = true_matrix.indices[:, pos_sample_idx]
-    pos_values = torch.ones(n_pos_samples)
+    pos_values = torch.ones(n_pos_samples).to(device)
     
     n_neg_samples = n_samples - n_pos_samples
-    neg_indices_n = torch.randint(0, n_n, [n_neg_samples])
-    neg_indices_m = torch.randint(0, n_m, [n_neg_samples])
+    neg_indices_n = torch.randint(0, n_n, [n_neg_samples]).to(device)
+    neg_indices_m = torch.randint(0, n_m, [n_neg_samples]).to(device)
     neg_indices = torch.stack((neg_indices_n, neg_indices_m))
-    neg_values = torch.zeros(n_neg_samples)
+    neg_values = torch.zeros(n_neg_samples).to(device)
     
     return SparseMatrix(
             indices = torch.cat((pos_indices, neg_indices), 1),
@@ -203,7 +203,8 @@ if __name__ == '__main__':
     def generate_target():
         target_matrix = generate_target_matrix(data[TARGET_REL_ID],
                                                args.target_n_samples,
-                                               args.target_pos_rate)
+                                               args.target_pos_rate,
+                                               device)
         data_target = SparseMatrixData(target_schema)
         data_target[TARGET_REL_ID] = target_matrix
         data_target.to(device)

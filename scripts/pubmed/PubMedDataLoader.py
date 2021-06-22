@@ -49,7 +49,6 @@ class PubMedData(DataLoader):
         self.schema = DataSchema(entities, relations)
 
         self.node_id_to_idx = {ent_i: {} for ent_i in range(len(entities))}
-        self.target_node_idx_to_id = {}
         with open(NODE_FILE_STR, 'r') as node_file:
             lines = node_file.readlines()
             node_counter = {ent_i: 0 for ent_i in range(len(entities))}
@@ -60,10 +59,12 @@ class PubMedData(DataLoader):
                 node_idx = node_counter[node_type]
                 self.node_id_to_idx[node_type][node_id] = node_idx
                 node_counter[node_type] += 1
+        target_node_id_to_idx = self.node_id_to_idx[TARGET_NODE_TYPE]
+        self.target_node_idx_to_id = {idx: id for id, idx
+                                      in target_node_id_to_idx.items()}
 
         raw_data_indices = {rel_id: [] for rel_id in range(len(relations))}
         raw_data_values = {rel_id: [] for rel_id in range(len(relations))}
-
         if use_node_attrs:
             with open(NODE_FILE_STR, 'r') as node_file:
                 lines = node_file.readlines()
@@ -106,9 +107,7 @@ class PubMedData(DataLoader):
 
     def get_node_classification_data(self):
         entities = self.schema.entities
-        target_node_id_to_idx = self.node_id_to_idx[TARGET_NODE_TYPE]
-        self.target_node_idx_to_id = {idx: id for id, idx
-                                      in target_node_id_to_idx.items()}
+
 
         self.schema_out = DataSchema([entities[TARGET_NODE_TYPE]],
                                 [Relation(0, 

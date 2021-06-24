@@ -5,7 +5,7 @@ import sys
 from src.DataSchema import DataSchema, Entity, Relation, SparseMatrixData, Data
 from src.SparseMatrix import SparseMatrix
 from src.EquivariantNetwork import EquivariantNetwork
-from scripts.UWDataLoader import UWAdvisorData
+from scripts.uw.UWDataLoader import UWAdvisorData
 import torch
 import torch.optim as optim
 import torch.nn as nn

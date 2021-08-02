@@ -114,16 +114,16 @@ if __name__ == '__main__':
     schema = dataloader.schema
     data = dataloader.data.to(device)
     data_target = dataloader.data_target.to(device)
-    indices_identity, indices_transpose = data.calculate_indices()
     targets = dataloader.targets.to(device)
     schema_out = dataloader.schema_out
     n_targets = targets.shape[0]
     target_indices = dataloader.target_indices
     n_outputs = dataloader.n_outputs
-    targets = dataloader.targets
+    targets = dataloader.targets.to(device)
     target_node_idx_to_id = dataloader.target_node_idx_to_id
 
     #%%
+    indices_identity, indices_transpose = data.calculate_indices()
     input_channels = {rel.id: data[rel.id].n_channels for rel in schema.relations}
 
     shuffled_indices_idx = random.sample(range(n_targets), n_targets)
@@ -146,7 +146,7 @@ if __name__ == '__main__':
             indices = torch.arange(n_outputs, dtype=torch.int64).repeat(2,1),
             values=torch.zeros([n_outputs, n_output_classes]),
             shape=(n_outputs, n_outputs, n_output_classes),
-            is_set=True)
+            is_set=True).to(device)
 
 
     #%%

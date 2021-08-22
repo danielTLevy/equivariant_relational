@@ -58,17 +58,29 @@ def select_features(data, schema, feats_type, target_ent):
         in_dims[rel.id] = data[rel.id].n_channels
     return data, in_dims
 
-def loss_fcn(data_pred, data_true):
-    return F.nll_loss(data_pred, data_true)
+def regr_fcn(logits, multi_label=False):
+    if multi_label:
+        return F.log_softmax(logits, 1)
+    else:
+        return torch.sigmoid(logits)
 
-def acc_fcn(values, target):
-    return ((values.argmax(1) == target).sum() / len(target)).item()
-    
+def loss_fcn(data_pred, data_true, multi_label=False):
+    if multi_label:
+        return F.binary_cross_entropy(data_pred, data_true)
+    else:
+        return F.nll_loss(data_pred, data_true)
+
+
 def f1_scores(values, target):
     micro = f1_score(values.argmax(1).cpu(), target.cpu(), average='micro')
     macro = f1_score(values.argmax(1).cpu(), target.cpu(), average='macro')
     return micro, macro
     
+def pred_fcn(values, multi_label=False):
+    if multi_label:
+        pass
+    else:        
+        values.cpu().numpy().argmax(axis=1)
 #%%
 def run_model(args):
     feats_type = args.feats_type
@@ -121,45 +133,48 @@ def run_model(args):
         # training loop
         net.train()
         #early_stopping = EarlyStopping(patience=args.patience, verbose=True, save_path='checkpoint/checkpoint.pt')#'_{}_{}.pt'.format(args.dataset, args.num_layers))
-        val_acc_best = 0
+        val_micro_best = 0
         for epoch in progress:
             # training
             net.train()
             optimizer.zero_grad()
             logits = net(data, indices_identity, indices_transpose,
                          data_target).squeeze()
-            logp = F.log_softmax(logits, 1)
-            train_loss = F.nll_loss(logp[train_idx], labels[train_idx])
+            logp = regr_fcn(logits, args.multi_label)
+            train_loss = loss_fcn(logp[train_idx], labels[train_idx], args.multi_label)
             train_loss.backward()
             optimizer.step()
+            train_micro, train_macro = f1_scores(logp[train_idx], labels[train_idx])
             with torch.no_grad():
-                acc = acc_fcn(logp[train_idx], labels[train_idx])
                 progress.set_description(f"Epoch {epoch}")
-                progress.set_postfix(loss=train_loss.item(), train_acc=acc)
-                wandb_log = {'Train Loss': train_loss.item(), 'Train Accuracy': acc}
+                progress.set_postfix(loss=train_loss.item(), micr=train_micro)
+                wandb_log = {'Train Loss': train_loss.item(),
+                             'Train Micro': train_micro,
+                             'Train Macro': train_macro}
                 if epoch % args.val_every == 0:
                     # validation
                     net.eval()
                     logits = net(data, indices_identity, indices_transpose, data_target).squeeze()
-                    logp =  F.log_softmax(logits, 1)
-                    val_loss = loss_fcn(logp[val_idx], labels[val_idx])
-                    val_acc = acc_fcn(logp[val_idx], labels[val_idx])
+                    logp = regr_fcn(logits, args.multi_label)
+                    val_loss = loss_fcn(logp[val_idx], labels[val_idx], args.multi_label)
                     val_micro, val_macro = f1_scores(logp[val_idx], labels[val_idx])
-                    print("\nVal Acc: {:.3f} Val Loss: {:.3f} Val Micro-F1: {:.3f} \
-    Val Macro-F1: {:.3f}".format(val_acc, val_loss, val_micro, val_macro))
-                    wandb_log.update({'Val Loss': val_loss.item(), 'Val Accuracy': val_acc,
+                    print("\nVal Loss: {:.3f} Val Micro-F1: {:.3f} \
+    Val Macro-F1: {:.3f}".format(val_loss, val_micro, val_macro))
+                    wandb_log.update({'Val Loss': val_loss.item(),
                                       'Val Micro-F1': val_micro, 'Val Macro-F1': val_macro})
-                    if val_acc > val_acc_best:
-                        val_acc_best = val_acc
+                    if val_micro > val_micro_best:
+                        val_micro_best = val_micro
                         print("New best, saving")
                         torch.save({
                             'epoch': epoch,
                             'net_state_dict': net.state_dict(),
                             'optimizer_state_dict': optimizer.state_dict(),
                             'train_loss': train_loss.item(),
-                            'train_acc': acc,
+                            'train_micro': train_micro,
+                            'train_macro': train_macro,
                             'val_loss': val_loss.item(),
-                            'val_acc': val_acc
+                            'val_micro': val_micro,
+                            'val_macro': val_macro
                             }, args.checkpoint_path)
                         if args.wandb_log_run:
                             wandb.save(args.checkpoint_path)
@@ -178,10 +193,16 @@ def run_model(args):
             logits = net(data, indices_identity, indices_transpose,
                          data_target).squeeze()
             test_logits = logits[test_idx]
-            pred = test_logits.cpu().numpy().argmax(axis=1)
-            onehot = np.eye(num_classes, dtype=np.int32)
-            dl.gen_file_for_evaluate(test_idx=test_idx, label=pred, file_name=f"{args.dataset}_{args.run}.txt")
-            pred = onehot[pred]
+            if args.multi_label:
+                pred = (test_logits.cpu().numpy()>0).astype(int)
+            else:
+                pred = test_logits.cpu().numpy().argmax(axis=1)
+                onehot = np.eye(num_classes, dtype=np.int32)
+            dl.gen_file_for_evaluate(test_idx=test_idx, label=pred,
+                                     file_path=f"{args.dataset}_{args.run}.txt",
+                                     multi_label=args.multi_label)
+            if args.multi_label:
+                pred = onehot[pred]
             print(dl.evaluate(pred))
 #%%
 def get_hyperparams(argv):
@@ -231,11 +252,15 @@ def get_hyperparams(argv):
                         help='Do not log this run in wandb')
     ap.add_argument('--output', type=str)
     ap.add_argument('--run', type=int, default=1)
+    ap.add_argument('--multi_label', default=False, action='store_true',
+                    help='multi-label classification. Only valid for IMDb dataset')
     ap.set_defaults(wandb_log_run=False)
 
     args, argv = ap.parse_known_args(argv)
     if args.output == None:
         args.output = args.dataset + '_emb.dat'
+    if args.dataset == 'IMDb':
+        args.multi_label = True
     args.layers  = [int(x) for x in args.layers]
     args.fc_layers = [int(x) for x in args.fc_layers]
     return args

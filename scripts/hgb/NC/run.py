@@ -7,6 +7,7 @@ import argparse
 import wandb
 from tqdm import tqdm
 import pdb
+from sklearn.metrics import f1_score
 
 import torch
 import torch.nn as nn
@@ -63,6 +64,10 @@ def loss_fcn(data_pred, data_true):
 def acc_fcn(values, target):
     return ((values.argmax(1) == target).sum() / len(target)).item()
     
+def f1_scores(values, target):
+    micro = f1_score(values.argmax(1).cpu(), target.cpu(), average='micro')
+    macro = f1_score(values.argmax(1).cpu(), target.cpu(), average='macro')
+    return micro, macro
     
 #%%
 def run_model_DBLP(args):
@@ -107,6 +112,7 @@ def run_model_DBLP(args):
 
         if args.wandb_log_run:
             wandb.init(config=args,
+                settings=wandb.Settings(start_method='fork'),
                 project="EquivariantHGN",
                 entity='danieltlevy')
             wandb.watch(net, log='all', log_freq=args.wandb_log_param_freq)
@@ -138,8 +144,11 @@ def run_model_DBLP(args):
                     logp = torch.sigmoid(logits)
                     val_loss = loss_fcn(logp[val_idx], labels[val_idx])
                     val_acc = acc_fcn(logp[val_idx], labels[val_idx])
-                    print("\nVal Acc: {:.3f} Val Loss: {:.3f}".format(val_acc, val_loss))
-                    wandb_log.update({'Val Loss': val_loss.item(), 'Val Accuracy': val_acc})
+                    val_micro, val_macro = f1_scores(logp[val_idx], labels[val_idx])
+                    print("\nVal Acc: {:.3f} Val Loss: {:.3f} Val Micro-F1: {:.3f} \
+    Val Macro-F1: {:.3f}".format(val_acc, val_loss, val_micro, val_macro))
+                    wandb_log.update({'Val Loss': val_loss.item(), 'Val Accuracy': val_acc,
+                                      'Val Micro-F1': val_micro, 'Val Macro-F1': val_macro})
                     if val_acc > val_acc_best:
                         val_acc_best = val_acc
                         print("New best, saving")
@@ -223,7 +232,7 @@ def get_hyperparams(argv):
     ap.add_argument('--wandb_no_log_run', dest='wandb_log_run', action='store_false',
                         help='Do not log this run in wandb')
     ap.add_argument('--output', type=str)
-    ap.set_defaults(wandb_log_run=True)
+    ap.set_defaults(wandb_log_run=False)
 
     args, argv = ap.parse_known_args(argv)
     if args.output == None:

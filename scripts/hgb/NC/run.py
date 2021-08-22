@@ -70,7 +70,7 @@ def f1_scores(values, target):
     return micro, macro
     
 #%%
-def run_model_DBLP(args):
+def run_model(args):
     feats_type = args.feats_type
     loaded = load_data(args.dataset)
     schema, schema_out, data, data_target, labels, train_val_test_idx, dl = loaded
@@ -116,7 +116,7 @@ def run_model_DBLP(args):
                 project="EquivariantHGN",
                 entity='danieltlevy')
             wandb.watch(net, log='all', log_freq=args.wandb_log_param_freq)
-            
+        print(args)
         progress = tqdm(range(args.epoch), desc="Epoch 0", position=0, leave=True)
         # training loop
         net.train()
@@ -128,7 +128,7 @@ def run_model_DBLP(args):
             optimizer.zero_grad()
             logits = net(data, indices_identity, indices_transpose,
                          data_target).squeeze()
-            logp = torch.sigmoid(logits)
+            logp = F.log_softmax(logits, 1)
             train_loss = F.nll_loss(logp[train_idx], labels[train_idx])
             train_loss.backward()
             optimizer.step()
@@ -141,7 +141,7 @@ def run_model_DBLP(args):
                     # validation
                     net.eval()
                     logits = net(data, indices_identity, indices_transpose, data_target).squeeze()
-                    logp = torch.sigmoid(logits)
+                    logp =  F.log_softmax(logits, 1)
                     val_loss = loss_fcn(logp[val_idx], labels[val_idx])
                     val_acc = acc_fcn(logp[val_idx], labels[val_idx])
                     val_micro, val_macro = f1_scores(logp[val_idx], labels[val_idx])
@@ -200,12 +200,12 @@ def get_hyperparams(argv):
     ap.add_argument('--lr', type=float, default=1e-3)
     ap.add_argument('--dropout', type=float, default=0.5)
     ap.add_argument('--dataset', type=str, default='DBLP')
-    ap.add_argument('--checkpoint_path', type=str, default='pubmed_node.pt')
+    ap.add_argument('--checkpoint_path', type=str, default='checkpoint/checkpoint.pt')
     ap.add_argument('--layers', type=int, nargs='*', default=['64']*3,
                         help='Number of channels for equivariant layers')
     ap.add_argument('--fc_layers', type=str, nargs='*', default=[50],
                         help='Fully connected layers for target embeddings')
-    ap.add_argument('--weight_decay', type=float, default=0.1)
+    ap.add_argument('--weight_decay', type=float, default=1e-4)
     ap.add_argument('--act_fn', type=str, default='ReLU')
     ap.add_argument('--in_fc_layer',  dest='in_fc_layer', action='store_true', default=True)
     ap.add_argument('--no_in_fc_layer', dest='in_fc_layer', action='store_false', default=True)
@@ -246,4 +246,4 @@ def get_hyperparams(argv):
 if __name__ == '__main__':
     argv = sys.argv[1:]
     args = get_hyperparams(argv)
-    run_model_DBLP(args)
+    run_model(args)

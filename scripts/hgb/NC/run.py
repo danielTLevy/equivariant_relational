@@ -170,7 +170,8 @@ def run_model(args):
 
 
         # testing with evaluate_results_nc
-        net.load_state_dict(torch.load('checkpoint/checkpoint.pt'))#_{}_{}.pt'.format(args.dataset, args.num_layers)))
+        checkpoint = torch.load(args.checkpoint_path)
+        net.load_state_dict(checkpoint['net_state_dict'])
         net.eval()
         test_logits = []
         with torch.no_grad():
@@ -219,9 +220,6 @@ def get_hyperparams(argv):
     ap.add_argument('--norm_affine', action='store_true')
     ap.set_defaults(norm_affine=True)
     ap.add_argument('--pool_op', type=str, default='mean')
-    ap.add_argument('--node_labels', dest='node_labels', action='store_true')
-    ap.add_argument('--no_node_labels', dest='node_labels', action='store_false')
-    ap.set_defaults(node_labels=True)
     ap.add_argument('--save_embeddings', dest='save_embeddings', action='store_true', default=True)
     ap.add_argument('--no_save_embeddings', dest='save_embeddings', action='store_false', default=True)
     ap.set_defaults(save_embeddings=True)
@@ -232,6 +230,7 @@ def get_hyperparams(argv):
     ap.add_argument('--wandb_no_log_run', dest='wandb_log_run', action='store_false',
                         help='Do not log this run in wandb')
     ap.add_argument('--output', type=str)
+    ap.add_argument('--run', type=int, default=1)
     ap.set_defaults(wandb_log_run=False)
 
     args, argv = ap.parse_known_args(argv)

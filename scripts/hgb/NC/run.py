@@ -16,7 +16,9 @@ from utils import EarlyStopping
 from EquivHGNet import EquivHGNet
 #from utils.pytorchtools import EarlyStopping
 from data import load_data
-    
+import warnings
+warnings.filterwarnings("ignore", message="Setting attributes on ParameterDict is not supported.")
+
 def select_features(data, schema, feats_type, target_ent):
     '''
     TODO: IMPLEMENT THIS
@@ -84,8 +86,6 @@ def run_model_DBLP(args):
     indices_identity, indices_transpose = data.calculate_indices()
     data_target = data_target.to(device)
 
-    
-
     for _ in range(args.repeat):
         num_classes = dl.labels_train['num_classes']
         net = EquivHGNet(schema, in_dims,
@@ -107,16 +107,16 @@ def run_model_DBLP(args):
 
         if args.wandb_log_run:
             wandb.init(config=args,
-                project="EquivariantRelational",
+                project="EquivariantHGN",
                 entity='danieltlevy')
             wandb.watch(net, log='all', log_freq=args.wandb_log_param_freq)
             
-        progress = tqdm(range(args.num_epochs), desc="Epoch 0", position=0, leave=True)
+        progress = tqdm(range(args.epoch), desc="Epoch 0", position=0, leave=True)
         # training loop
         net.train()
         #early_stopping = EarlyStopping(patience=args.patience, verbose=True, save_path='checkpoint/checkpoint.pt')#'_{}_{}.pt'.format(args.dataset, args.num_layers))
         val_acc_best = 0
-        for epoch in range(args.epoch):
+        for epoch in progress:
             # training
             net.train()
             optimizer.zero_grad()
@@ -187,7 +187,7 @@ def get_hyperparams(argv):
                         '5 - only term features (zero vec for others).')
     ap.add_argument('--epoch', type=int, default=300, help='Number of epochs.')
     ap.add_argument('--patience', type=int, default=30, help='Patience.')
-    ap.add_argument('--repeat', type=int, default=1, help='Repeat the training and testing for N times. Default is 1.')
+    ap.add_argument('--repeat', type=int, defauplt=1, help='Repeat the training and testing for N times. Default is 1.')
     ap.add_argument('--lr', type=float, default=1e-3)
     ap.add_argument('--dropout', type=float, default=0.5)
     ap.add_argument('--dataset', type=str, default='DBLP')
@@ -202,7 +202,6 @@ def get_hyperparams(argv):
     ap.add_argument('--no_in_fc_layer', dest='in_fc_layer', action='store_false', default=True)
     ap.set_defaults(in_fc_layer=True)
     ap.add_argument('--optimizer', type=str, default='Adam')
-    ap.add_argument('--num_epochs', type=int, default=1000)
     ap.add_argument('--val_every', type=int, default=10)
     ap.add_argument('--seed', type=int, default=1)
     ap.add_argument('--norm',  dest='norm', action='store_true', default=True)

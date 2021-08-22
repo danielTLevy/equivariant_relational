@@ -8,9 +8,10 @@ Created on Sun Feb  7 23:25:39 2021
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from src.DataSchema import Data, DataSchema, Relation
+from src.DataSchema import Data, DataSchema, Relation, SparseMatrixData
 from src.utils import DENSE_PREFIX_DIMS
 from src.SparseTensor import SparseTensor
+from src.SparseMatrix import SparseMatrix
 import pdb
 
 
@@ -63,6 +64,45 @@ class SparseMatrixGroupNorm(nn.Module):
         out = sparse_matrix.clone()
         out.values = values_out
         return out
+
+class SparseMatrixLinear(nn.Module):
+    '''
+    Linear layer applied to a single sparse matrix
+    '''
+    def __init__(self, *args):
+        super(SparseMatrixLinear, self).__init__()
+        self.linear = nn.Linear(*args)
+
+    def forward(self, matrix):
+        values_out = self.linear(matrix.values)
+        shape_out = (matrix.n, matrix.m, values_out.shape[1])
+        return SparseMatrix(indices=matrix.indices, values=values_out,
+                            shape=shape_out, indices_diag=matrix.indices_diag,
+                            is_set=matrix.is_set)
+
+class SparseMatrixRelationLinear(nn.Module):
+    '''
+    Apply linear layer to sparse matrix for each relation.
+    Bring each attribute layer to the same vector space
+    Optionally, only apply to node attributes
+    '''
+    def __init__(self, schema, in_dims, out_dim, node_only=False):
+        super(SparseMatrixRelationLinear, self).__init__()
+        self.schema = schema
+        self.node_only = node_only
+        self.linear = nn.ModuleDict()
+        for rel in self.schema.relations:
+            linear = SparseMatrixLinear(in_dims[rel.id], out_dim)
+            self.linear[str(rel.id)] = linear
+
+    def forward(self, X):
+        X_out = SparseMatrixData(X.schema)
+        for rel in self.schema.relations:
+            if self.node_only and rel.is_set:
+                X_out[rel.id] = X[rel.id]
+            else:
+                X_out[rel.id] = self.linear[str(rel.id)](X[rel.id])
+        return X_out
 
 class RelationNorm(nn.Module):
     '''

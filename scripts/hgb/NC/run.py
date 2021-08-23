@@ -71,11 +71,18 @@ def loss_fcn(data_pred, data_true, multi_label=False):
         return F.nll_loss(data_pred, data_true)
 
 
-def f1_scores(values, target):
-    micro = f1_score(values.argmax(1).cpu(), target.cpu(), average='micro')
-    macro = f1_score(values.argmax(1).cpu(), target.cpu(), average='macro')
+def f1_scores(logits, target):
+    values = logits.argmax(1).detach().cpu()
+    micro = f1_score(target.cpu(), values, average='micro')
+    macro = f1_score(target.cpu(), values, average='macro')
     return micro, macro
-    
+
+def f1_scores_multi(logits, target):
+    values = (logits.detach().cpu().numpy()>0).astype(int)
+    micro = f1_score(target, values, average='micro')
+    macro = f1_score(target, values, average='macro')
+    return micro, macro
+
 def pred_fcn(values, multi_label=False):
     if multi_label:
         pass
@@ -147,7 +154,12 @@ def run_model(args):
             train_loss = loss_fcn(logp[train_idx], labels[train_idx], args.multi_label)
             train_loss.backward()
             optimizer.step()
-            train_micro, train_macro = f1_scores(logp[train_idx], labels[train_idx])
+            if args.multi_label:
+                train_micro, train_macro = f1_scores_multi(logits[train_idx],
+                                                     dl.labels_train['data'][train_idx])
+            else:
+                train_micro, train_macro = f1_scores(logits[train_idx],
+                                                     labels[train_idx])
             with torch.no_grad():
                 progress.set_description(f"Epoch {epoch}")
                 progress.set_postfix(loss=train_loss.item(), micr=train_micro)
@@ -160,7 +172,12 @@ def run_model(args):
                     logits = net(data, indices_identity, indices_transpose, data_target).squeeze()
                     logp = regr_fcn(logits, args.multi_label)
                     val_loss = loss_fcn(logp[val_idx], labels[val_idx], args.multi_label)
-                    val_micro, val_macro = f1_scores(logp[val_idx], labels[val_idx])
+                    if args.multi_label:
+                        val_micro, val_macro = f1_scores_multi(logits[val_idx],
+                                                             dl.labels_train['data'][val_idx])
+                    else:
+                        val_micro, val_macro = f1_scores(logits[val_idx],
+                                                             labels[val_idx])
                     print("\nVal Loss: {:.3f} Val Micro-F1: {:.3f} \
     Val Macro-F1: {:.3f}".format(val_loss, val_micro, val_macro))
                     wandb_log.update({'Val Loss': val_loss.item(),

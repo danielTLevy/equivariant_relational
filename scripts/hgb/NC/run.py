@@ -60,9 +60,9 @@ def select_features(data, schema, feats_type, target_ent):
 
 def regr_fcn(logits, multi_label=False):
     if multi_label:
-        return F.log_softmax(logits, 1)
-    else:
         return torch.sigmoid(logits)
+    else:
+        return F.log_softmax(logits, 1)
 
 def loss_fcn(data_pred, data_true, multi_label=False):
     if multi_label:
@@ -91,7 +91,10 @@ def run_model(args):
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
     data, in_dims = select_features(data, schema, args.feats_type, target_entity_id)
-    labels = torch.LongTensor(labels).to(device)
+    if args.multi_label:
+        labels = torch.FloatTensor(labels).to(device)
+    else:
+        labels = torch.LongTensor(labels).to(device)
     train_idx = train_val_test_idx['train_idx']
     train_idx = np.sort(train_idx)
     val_idx = train_val_test_idx['val_idx']
@@ -221,7 +224,7 @@ def get_hyperparams(argv):
     ap.add_argument('--repeat', type=int, default=1, help='Repeat the training and testing for N times. Default is 1.')
     ap.add_argument('--lr', type=float, default=1e-3)
     ap.add_argument('--dropout', type=float, default=0.5)
-    ap.add_argument('--dataset', type=str, default='DBLP')
+    ap.add_argument('--dataset', type=str, default='IMDB')
     ap.add_argument('--checkpoint_path', type=str, default='checkpoint/checkpoint.pt')
     ap.add_argument('--layers', type=int, nargs='*', default=['64']*3,
                         help='Number of channels for equivariant layers')
@@ -259,7 +262,7 @@ def get_hyperparams(argv):
     args, argv = ap.parse_known_args(argv)
     if args.output == None:
         args.output = args.dataset + '_emb.dat'
-    if args.dataset == 'IMDb':
+    if args.dataset == 'IMDB':
         args.multi_label = True
     args.layers  = [int(x) for x in args.layers]
     args.fc_layers = [int(x) for x in args.fc_layers]

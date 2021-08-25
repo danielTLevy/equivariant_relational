@@ -13,9 +13,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-from utils import EarlyStopping
+#from utils import EarlyStopping
 from EquivHGNet import EquivHGNet
-#from utils.pytorchtools import EarlyStopping
+
 from data import load_data
 import warnings
 warnings.filterwarnings("ignore", message="Setting attributes on ParameterDict is not supported.")
@@ -221,7 +221,7 @@ def run_model(args):
             dl.gen_file_for_evaluate(test_idx=test_idx, label=pred,
                                      file_path=f"{args.dataset}_{args.run}.txt",
                                      multi_label=args.multi_label)
-            if args.multi_label:
+            if not args.multi_label:
                 pred = onehot[pred]
             print(dl.evaluate(pred))
 #%%
@@ -251,7 +251,7 @@ def get_hyperparams(argv):
     ap.add_argument('--act_fn', type=str, default='ReLU')
     ap.add_argument('--in_fc_layer',  dest='in_fc_layer', action='store_true', default=True)
     ap.add_argument('--no_in_fc_layer', dest='in_fc_layer', action='store_false', default=True)
-    ap.set_defaults(in_fc_layer=True)
+    ap.set_defaults(in_fc_layer=False)
     ap.add_argument('--optimizer', type=str, default='Adam')
     ap.add_argument('--val_every', type=int, default=10)
     ap.add_argument('--seed', type=int, default=1)

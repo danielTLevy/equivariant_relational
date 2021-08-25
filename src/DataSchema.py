@@ -230,7 +230,7 @@ class SparseMatrixData(Data):
                         idx_id_ij = (torch.BoolTensor([True]*matrix_i.nnz()).to(matrix_i.values.device),
                                      torch.BoolTensor([True]*matrix_i.nnz()).to(matrix_i.values.device))
                     else:
-                        idx_trans_ij = matrix_i.calc_intersection_mask(matrix_j)
+                        idx_id_ij = matrix_i.calc_intersection_mask(matrix_j)
                 if entity_i_n == entity_j_m and entity_i_m == entity_j_n:
                     if r_i == r_j and self.schema.relations[r_i].is_set:
                         idx_trans_ij = (torch.BoolTensor([True]*matrix_i.nnz()).to(matrix_i.values.device),

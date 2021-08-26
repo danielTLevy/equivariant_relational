@@ -15,6 +15,7 @@ import torch.nn.functional as F
 import numpy as np
 #from utils import EarlyStopping
 from EquivHGNet import EquivHGNet
+from src.SparseMatrix import SparseMatrix
 
 from data import load_data
 import warnings
@@ -25,20 +26,24 @@ def select_features(data, schema, feats_type, target_ent):
     TODO: IMPLEMENT THIS
     '''
     # Select features for nodes
-    entities = schema
-    features_list = data
     in_dims = {}
     num_relations = len(schema.relations) - len(schema.entities)
-    '''
-    if feats_type == 1:
-        in_dims = []#[features_list[0].shape[1]] + [10] * (len(features_list) - 1)
-        for i in range(0, len(features_list)):
-            if i != target_ent:
-                in_dims.append(10)
-                features_list[i] = torch.zeros((features_list[i].shape[0], 10)).to(device)
 
+    if feats_type == 0:
+        # Keep all node attributes
+        pass
+    elif feats_type == 1:
+        # Set all non-target node attributes to zero
+        for ent_i in schema.entities:
+            if ent_i.id != target_ent:
+                # 10 dimensions for some reason
+                n_dim = 10
+                rel_id = num_relations + ent_i.id
+                data[rel_id] = SparseMatrix.from_other_sparse_matrix(data[rel_id], n_dim)
+
+    '''
     elif feats_type == 2:
-        in_dims = [features.shape[0] for features in features_list]
+        # Set all non-target node attributes to one-hot vector
         for i in range(0, len(features_list)):
             if i != target_ent:
                 dim = features_list[i].shape[0]
@@ -228,7 +233,7 @@ def run_model(args):
 def get_hyperparams(argv):
     ap = argparse.ArgumentParser(allow_abbrev=False, description='EquivHGN for Node Classification')
     ap.set_defaults(dataset='PubMed')
-    ap.add_argument('--feats-type', type=int, default=3,
+    ap.add_argument('--feats_type', type=int, default=0,
                     help='Type of the node features used. ' +
                          '0 - loaded features; ' +
                          '1 - only target node features (zero vec for others); ' +
@@ -245,26 +250,22 @@ def get_hyperparams(argv):
     ap.add_argument('--checkpoint_path', type=str, default='checkpoint/checkpoint.pt')
     ap.add_argument('--layers', type=int, nargs='*', default=['64']*3,
                         help='Number of channels for equivariant layers')
-    ap.add_argument('--fc_layers', type=str, nargs='*', default=[50],
+    ap.add_argument('--fc_layers', type=str, nargs='*', default=[64],
                         help='Fully connected layers for target embeddings')
     ap.add_argument('--weight_decay', type=float, default=1e-4)
-    ap.add_argument('--act_fn', type=str, default='ReLU')
-    ap.add_argument('--in_fc_layer',  dest='in_fc_layer', action='store_true', default=True)
-    ap.add_argument('--no_in_fc_layer', dest='in_fc_layer', action='store_false', default=True)
-    ap.set_defaults(in_fc_layer=False)
+    ap.add_argument('--act_fn', type=str, default='LeakyReLU')
+    ap.add_argument('--in_fc_layer', type=int, default=1)
     ap.add_argument('--optimizer', type=str, default='Adam')
-    ap.add_argument('--val_every', type=int, default=10)
+    ap.add_argument('--val_every', type=int, default=5)
     ap.add_argument('--seed', type=int, default=1)
-    ap.add_argument('--norm',  dest='norm', action='store_true', default=True)
-    ap.add_argument('--no_norm', dest='norm', action='store_false', default=True)
-    ap.set_defaults(norm=True)
+    ap.add_argument('--norm',  type=int, default=1)
     ap.add_argument('--norm_affine', action='store_true')
     ap.set_defaults(norm_affine=True)
     ap.add_argument('--pool_op', type=str, default='mean')
     ap.add_argument('--save_embeddings', dest='save_embeddings', action='store_true', default=True)
     ap.add_argument('--no_save_embeddings', dest='save_embeddings', action='store_false', default=True)
     ap.set_defaults(save_embeddings=True)
-    ap.add_argument('--wandb_log_param_freq', type=int, default=250)
+    ap.add_argument('--wandb_log_param_freq', type=int, default=100)
     ap.add_argument('--wandb_log_loss_freq', type=int, default=1)
     ap.add_argument('--wandb_log_run', dest='wandb_log_run', action='store_true',
                         help='Log this run in wandb')
@@ -281,6 +282,10 @@ def get_hyperparams(argv):
         args.output = args.dataset + '_emb.dat'
     if args.dataset == 'IMDB':
         args.multi_label = True
+    if args.in_fc_layer == 1:
+        args.in_fc_layer = True
+    else:
+        args.in_fc_layer = False
     args.layers  = [int(x) for x in args.layers]
     args.fc_layers = [int(x) for x in args.fc_layers]
     return args

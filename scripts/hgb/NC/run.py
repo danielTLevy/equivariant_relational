@@ -149,6 +149,8 @@ def run_model(args):
         net.train()
         #early_stopping = EarlyStopping(patience=args.patience, verbose=True, save_path='checkpoint/checkpoint.pt')#'_{}_{}.pt'.format(args.dataset, args.num_layers))
         val_micro_best = 0
+        val_macro_best = 0
+        val_loss_best = 1000
         for epoch in progress:
             # training
             net.train()
@@ -188,6 +190,13 @@ def run_model(args):
                     wandb_log.update({'Val Loss': val_loss.item(),
                                       'Val Micro-F1': val_micro, 'Val Macro-F1': val_macro})
                     if val_micro > val_micro_best:
+                        wandb.run.summary["val_micro_best"] = val_micro
+                        wandb.run.summary["val_macro_best"] = val_macro
+                        wandb.run.summary["val_loss_best"] = val_loss.item()
+                        wandb.run.summary["epoch_best"] = epoch
+                        wandb.run.summary["train_loss_best"] = train_loss.item()
+                        wandb.run.summary['train_micro_best'] = train_micro,
+                        wandb.run.summary['train_macro_best'] = train_macro,
                         val_micro_best = val_micro
                         print("New best, saving")
                         torch.save({
@@ -206,7 +215,7 @@ def run_model(args):
 
                 if epoch % args.wandb_log_loss_freq == 0:
                     if args.wandb_log_run:
-                        wandb.log(wandb_log)
+                        wandb.log(wandb_log, step=epoch)
 
 
         # testing with evaluate_results_nc

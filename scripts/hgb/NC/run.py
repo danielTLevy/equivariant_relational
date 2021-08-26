@@ -190,13 +190,13 @@ def run_model(args):
                     wandb_log.update({'Val Loss': val_loss.item(),
                                       'Val Micro-F1': val_micro, 'Val Macro-F1': val_macro})
                     if val_micro > val_micro_best:
-                        wandb.run.summary["val_micro_best"] = val_micro
-                        wandb.run.summary["val_macro_best"] = val_macro
-                        wandb.run.summary["val_loss_best"] = val_loss.item()
-                        wandb.run.summary["epoch_best"] = epoch
-                        wandb.run.summary["train_loss_best"] = train_loss.item()
-                        wandb.run.summary['train_micro_best'] = train_micro,
-                        wandb.run.summary['train_macro_best'] = train_macro,
+                        wandb.summary["val_micro_best"] = val_micro
+                        wandb.summary["val_macro_best"] = val_macro
+                        wandb.summary["val_loss_best"] = val_loss.item()
+                        wandb.summary["epoch_best"] = epoch
+                        wandb.summary["train_loss_best"] = train_loss.item()
+                        wandb.summary['train_micro_best'] = train_micro,
+                        wandb.summary['train_macro_best'] = train_macro,
                         val_micro_best = val_micro
                         print("New best, saving")
                         torch.save({

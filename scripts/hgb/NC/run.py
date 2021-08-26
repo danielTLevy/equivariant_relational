@@ -210,25 +210,26 @@ def run_model(args):
 
 
         # testing with evaluate_results_nc
-        checkpoint = torch.load(args.checkpoint_path)
-        net.load_state_dict(checkpoint['net_state_dict'])
-        net.eval()
-        test_logits = []
-        with torch.no_grad():
-            logits = net(data, indices_identity, indices_transpose,
-                         data_target).squeeze()
-            test_logits = logits[test_idx]
-            if args.multi_label:
-                pred = (test_logits.cpu().numpy()>0).astype(int)
-            else:
-                pred = test_logits.cpu().numpy().argmax(axis=1)
-                onehot = np.eye(num_classes, dtype=np.int32)
-            dl.gen_file_for_evaluate(test_idx=test_idx, label=pred,
-                                     file_path=f"{args.dataset}_{args.run}.txt",
-                                     multi_label=args.multi_label)
-            if not args.multi_label:
-                pred = onehot[pred]
-            print(dl.evaluate(pred))
+        if args.evaluate:
+            checkpoint = torch.load(args.checkpoint_path)
+            net.load_state_dict(checkpoint['net_state_dict'])
+            net.eval()
+            test_logits = []
+            with torch.no_grad():
+                logits = net(data, indices_identity, indices_transpose,
+                             data_target).squeeze()
+                test_logits = logits[test_idx]
+                if args.multi_label:
+                    pred = (test_logits.cpu().numpy()>0).astype(int)
+                else:
+                    pred = test_logits.cpu().numpy().argmax(axis=1)
+                    onehot = np.eye(num_classes, dtype=np.int32)
+                dl.gen_file_for_evaluate(test_idx=test_idx, label=pred,
+                                         file_path=f"{args.dataset}_{args.run}.txt",
+                                         multi_label=args.multi_label)
+                if not args.multi_label:
+                    pred = onehot[pred]
+                print(dl.evaluate(pred))
 #%%
 def get_hyperparams(argv):
     ap = argparse.ArgumentParser(allow_abbrev=False, description='EquivHGN for Node Classification')
@@ -278,6 +279,7 @@ def get_hyperparams(argv):
     ap.add_argument('--run', type=int, default=1)
     ap.add_argument('--multi_label', default=False, action='store_true',
                     help='multi-label classification. Only valid for IMDb dataset')
+    ap.add_argument('--evaluate', type=int, default=1)
     ap.set_defaults(wandb_log_run=False)
 
     args, argv = ap.parse_known_args(argv)
@@ -289,7 +291,10 @@ def get_hyperparams(argv):
         args.in_fc_layer = True
     else:
         args.in_fc_layer = False
-
+    if args.evaluate == 1:
+        args.evaluate = True
+    else:
+        args.evaluate = False
     #args.layers  = [int(x) for x in args.layers]
     args.layers = [args.width]*args.depth
     #args.fc_layers = [int(x) for x in args.fc_layers]

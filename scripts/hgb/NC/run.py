@@ -307,7 +307,10 @@ def get_hyperparams(argv):
     #args.layers  = [int(x) for x in args.layers]
     args.layers = [args.width]*args.depth
     #args.fc_layers = [int(x) for x in args.fc_layers]
-    args.fc_layers = [args.fc_layer]
+    if args.fc_layer == 0:
+        args.fc_layers = []
+    else:
+        args.fc_layers = [args.fc_layer]
     return args
 
 

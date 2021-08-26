@@ -248,10 +248,13 @@ def get_hyperparams(argv):
     ap.add_argument('--dropout', type=float, default=0.5)
     ap.add_argument('--dataset', type=str, default='IMDB')
     ap.add_argument('--checkpoint_path', type=str, default='checkpoint/checkpoint.pt')
+    ap.add_argument('--width', type=int, default=64)
+    ap.add_argument('--depth', type=int, default=3)
     ap.add_argument('--layers', type=int, nargs='*', default=['64']*3,
                         help='Number of channels for equivariant layers')
-    ap.add_argument('--fc_layers', type=str, nargs='*', default=[64],
-                        help='Fully connected layers for target embeddings')
+    ap.add_argument('--fc_layer', type=int, default=64)
+    #ap.add_argument('--fc_layers', type=str, nargs='*', default=[64],
+    #                    help='Fully connected layers for target embeddings')
     ap.add_argument('--weight_decay', type=float, default=1e-4)
     ap.add_argument('--act_fn', type=str, default='LeakyReLU')
     ap.add_argument('--in_fc_layer', type=int, default=1)
@@ -286,8 +289,11 @@ def get_hyperparams(argv):
         args.in_fc_layer = True
     else:
         args.in_fc_layer = False
-    args.layers  = [int(x) for x in args.layers]
-    args.fc_layers = [int(x) for x in args.fc_layers]
+
+    #args.layers  = [int(x) for x in args.layers]
+    args.layers = [args.width]*args.depth
+    #args.fc_layers = [int(x) for x in args.fc_layers]
+    args.fc_layers = [args.fc_layer]
     return args
 
 

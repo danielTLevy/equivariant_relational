@@ -156,7 +156,6 @@ def run_model(args):
         progress = tqdm(range(args.epoch), desc="Epoch 0", position=0, leave=True)
         # training loop
         net.train()
-        #early_stopping = EarlyStopping(patience=args.patience, verbose=True, save_path='checkpoint/checkpoint.pt')#'_{}_{}.pt'.format(args.dataset, args.num_layers))
         val_micro_best = 0
         val_macro_best = 0
         val_loss_best = 1000
@@ -229,6 +228,7 @@ def run_model(args):
 
         # testing with evaluate_results_nc
         if args.evaluate:
+            run_name = wandb.run.name
             checkpoint = torch.load(args.checkpoint_path)
             net.load_state_dict(checkpoint['net_state_dict'])
             net.eval()
@@ -242,8 +242,13 @@ def run_model(args):
                 else:
                     pred = test_logits.cpu().numpy().argmax(axis=1)
                     onehot = np.eye(num_classes, dtype=np.int32)
+                    if args.wandb_log_run:
+                        file_path = f"{args.dataset}_{wandb.run.name}.txt"
+                    else:
+                        file_path = f"{args.dataset}_{wandb.run.name}.txt"
+
                 dl.gen_file_for_evaluate(test_idx=test_idx, label=pred,
-                                         file_path=f"{args.dataset}_{args.run}.txt",
+                                         file_path=file_path,
                                          multi_label=args.multi_label)
                 if not args.multi_label:
                     pred = onehot[pred]
@@ -266,7 +271,7 @@ def get_hyperparams(argv):
     ap.add_argument('--lr', type=float, default=1e-3)
     ap.add_argument('--dropout', type=float, default=0.5)
     ap.add_argument('--dataset', type=str, default='IMDB')
-    ap.add_argument('--checkpoint_path', type=str, default='checkpoint/checkpoint.pt')
+    ap.add_argument('--checkpoint_path', type=str, default='')
     ap.add_argument('--width', type=int, default=64)
     ap.add_argument('--depth', type=int, default=3)
     ap.add_argument('--layers', type=int, nargs='*', default=['64']*3,
@@ -313,13 +318,15 @@ def get_hyperparams(argv):
         args.evaluate = True
     else:
         args.evaluate = False
-    #args.layers  = [int(x) for x in args.layers]
+
     args.layers = [args.width]*args.depth
-    #args.fc_layers = [int(x) for x in args.fc_layers]
     if args.fc_layer == 0:
         args.fc_layers = []
     else:
         args.fc_layers = [args.fc_layer]
+
+    if args.checkpoint_path == "":
+        args.checkpoint_path = "checkpoint/checkpoint_" + args.dataset + ".pt"
     return args
 
 

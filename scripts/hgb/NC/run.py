@@ -243,9 +243,9 @@ def run_model(args):
                     pred = test_logits.cpu().numpy().argmax(axis=1)
                     onehot = np.eye(num_classes, dtype=np.int32)
                     if args.wandb_log_run:
-                        file_path = f"{args.dataset}_{wandb.run.name}.txt"
+                        file_path = f"test_out/{args.dataset}_{wandb.run.name}.txt"
                     else:
-                        file_path = f"{args.dataset}_{wandb.run.name}.txt"
+                        file_path = f"test_out/{args.dataset}_{wandb.run.name}.txt"
 
                 dl.gen_file_for_evaluate(test_idx=test_idx, label=pred,
                                          file_path=file_path,
@@ -326,7 +326,8 @@ def get_hyperparams(argv):
         args.fc_layers = [args.fc_layer]
 
     if args.checkpoint_path == "":
-        args.checkpoint_path = "checkpoint/checkpoint_" + args.dataset + ".pt"
+        args.checkpoint_path = "checkpoint/checkpoint_" + args.dataset + \
+            str(args.run) + ".pt"
     return args
 
 

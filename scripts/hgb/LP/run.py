@@ -17,6 +17,8 @@ from data import load_data, get_train_valid_pos, get_train_neg, get_valid_neg
 from EquivHGAE import EquivHGAE
 from src.SparseMatrix import SparseMatrix
 from src.DataSchema import DataSchema, SparseMatrixData, Relation
+import warnings
+warnings.filterwarnings("ignore", message="Setting attributes on ParameterDict is not supported.")
 
 #%%
 def set_seed(seed):

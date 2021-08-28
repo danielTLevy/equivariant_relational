@@ -121,8 +121,8 @@ def run_model(args):
     res_random = defaultdict(float)
     total = len(list(dl.links_test['data'].keys()))
 
-    for test_edge_type in dl.links_test['data'].keys():
-        target_rel = schema.relations[test_edge_type]
+    for target_rel_id in dl.links_test['data'].keys():
+        target_rel = schema.relations[target_rel_id]
         ent_i = target_rel.entities[0]
         n_i = ent_i.n_instances
         ent_j = target_rel.entities[1]
@@ -149,8 +149,8 @@ def run_model(args):
         data_embedding.to(device)
         target_schema = DataSchema(schema.entities, [target_rel])
         data_target = SparseMatrixData(target_schema)
-        train_pos, valid_pos = dl.get_train_valid_pos()#edge_types=[test_edge_type])
-        train_val_pos = get_train_valid_pos(dl, test_edge_type)
+        train_pos, valid_pos = dl.get_train_valid_pos()#edge_types=[target_rel_id])
+        train_val_pos = get_train_valid_pos(dl, target_rel_id)
         train_pos_head_full, train_pos_tail_full, \
             valid_pos_head, valid_pos_tail = train_val_pos
         net = EquivHGAE(schema, in_dims,
@@ -181,7 +181,7 @@ def run_model(args):
         #early_stopping = EarlyStopping(patience=args.patience, verbose=True, save_path='checkpoint/checkpoint_{}_{}.pt'.format(args.dataset, args.num_layers))
         loss_func = nn.BCELoss()
         for epoch in progress:
-          train_neg_head_full, train_neg_tail_full = get_train_neg(dl, test_edge_type)
+          train_neg_head_full, train_neg_tail_full = get_train_neg(dl, target_rel_id)
           train_idx = np.arange(len(train_pos_head_full))
           np.random.shuffle(train_idx)
           batch_size = args.batch_size
@@ -193,15 +193,15 @@ def run_model(args):
             train_neg_head = train_neg_head_full[train_idx[start:start+batch_size]]
             train_pos_tail = train_pos_tail_full[train_idx[start:start+batch_size]]
             train_neg_tail = train_neg_tail_full[train_idx[start:start+batch_size]]
-            data_target[0] =  make_target_matrix(target_rel, 
+            data_target[target_rel_id] =  make_target_matrix(target_rel,
                                               train_pos_head, train_pos_tail,
                                               train_neg_head, train_neg_tail,
                                               device)
 
             logits = net(data, indices_identity, indices_transpose,
-                         data_target, data_embedding)[test_edge_type].values.squeeze()
+                         data_target, data_embedding)[target_rel_id].values.squeeze()
             logp = torch.sigmoid(logits)
-            labels_train = data_target[0].values[:,0]
+            labels_train = data_target[target_rel_id].values[:,0]
             train_loss = loss_func(logp, labels_train)
 
             # autograd
@@ -220,19 +220,19 @@ def run_model(args):
 
                 with torch.no_grad():
                     net.eval()
-                    valid_neg_head, valid_neg_tail = get_valid_neg(dl, test_edge_type)
-                    data_target[0] = make_target_matrix(target_rel,
+                    valid_neg_head, valid_neg_tail = get_valid_neg(dl, target_rel_id)
+                    data_target[target_rel_id] = make_target_matrix(target_rel,
                                                          valid_pos_head, valid_pos_tail,
                                                          valid_neg_head, valid_neg_tail,
                                                          device)
     
                     logits = net(data, indices_identity, indices_transpose,
-                                 data_target, data_embedding)[test_edge_type].values.squeeze()
+                                 data_target, data_embedding)[target_rel_id].values.squeeze()
                     logp = torch.sigmoid(logits)
-                    labels_val = data_target[0].values[:,0]
+                    labels_val = data_target[target_rel_id].values[:,0]
                     val_loss = loss_func(logp, labels_val)
-                    left = data_target[0].indices[0].cpu().numpy()
-                    right = data_target[0].indices[1].cpu().numpy()
+                    left = data_target[target_rel_id].indices[0].cpu().numpy()
+                    right = data_target[target_rel_id].indices[1].cpu().numpy()
                     edge_list = np.concatenate([left.reshape((1,-1)), right.reshape((1,-1))], axis=0)
                     wandb_log.update({'val_loss': val_loss.item()})
                     res = dl.evaluate(edge_list, logp.cpu().numpy(), labels_val.cpu().numpy())
@@ -255,8 +255,8 @@ def run_model(args):
         test_logits = []
         with torch.no_grad():
             test_neigh, test_label = dl.get_test_neigh()
-            test_neigh = test_neigh[test_edge_type]
-            test_label = test_label[test_edge_type]
+            test_neigh = test_neigh[target_rel_id]
+            test_label = test_label[target_rel_id]
             left = np.array(test_neigh[0])
             right = np.array(test_neigh[1])
             mid = np.zeros(left.shape[0], dtype=np.int32)
@@ -265,15 +265,15 @@ def run_model(args):
             pred = F.sigmoid(logits).cpu().numpy()
             edge_list = np.concatenate([left.reshape((1,-1)), right.reshape((1,-1))], axis=0)
             labels = labels.cpu().numpy()
-            dl.gen_file_for_evaluate(test_neigh, pred, test_edge_type, file_path=f"{args.dataset}_{args.run}.txt")
+            dl.gen_file_for_evaluate(test_neigh, pred, target_rel_id, file_path=f"{args.dataset}_{args.run}.txt")
             res = dl.evaluate(edge_list, pred, labels)
             print(res)
             for k in res:
                 res_2hop[k] += res[k]
         with torch.no_grad():
             test_neigh, test_label = dl.get_test_neigh_w_random()
-            test_neigh = test_neigh[test_edge_type]
-            test_label = test_label[test_edge_type]
+            test_neigh = test_neigh[target_rel_id]
+            test_label = test_label[target_rel_id]
             left = np.array(test_neigh[0])
             right = np.array(test_neigh[1])
             mid = np.zeros(left.shape[0], dtype=np.int32)

@@ -229,8 +229,8 @@ def run_model(args):
                     logp = torch.sigmoid(logits)
                     labels_val = data_target[0].values[:,0]
                     val_loss = loss_func(logp, labels_val)
-                    left = data_target[0].indices[0]
-                    right = data_target[0].indices[1]
+                    left = data_target[0].indices[0].cpu().numpy()
+                    right = data_target[0].indices[1].cpu().numpy()
                     edge_list = np.concatenate([left.reshape((1,-1)), right.reshape((1,-1))], axis=0)
                     wandb_log.update({'val_loss': val_loss.item()})
                     res = dl.evaluate(edge_list, logp.cpu().numpy(), labels_val.cpu().numpy())

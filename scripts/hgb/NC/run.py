@@ -8,7 +8,7 @@ import wandb
 from tqdm import tqdm
 import pdb
 from sklearn.metrics import f1_score
-
+import random
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -20,6 +20,15 @@ from src.SparseMatrix import SparseMatrix
 from data import load_data
 import warnings
 warnings.filterwarnings("ignore", message="Setting attributes on ParameterDict is not supported.")
+
+
+def set_seed(seed):
+    random.seed(seed, version=2)
+    np.random.seed(random.randint(0, 2**32))
+    torch.manual_seed(random.randint(0, 2**32))
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
 
 def select_features(data, schema, feats_type, target_ent):
     '''
@@ -318,4 +327,5 @@ def get_hyperparams(argv):
 if __name__ == '__main__':
     argv = sys.argv[1:]
     args = get_hyperparams(argv)
+    set_seed(args.seed)
     run_model(args)

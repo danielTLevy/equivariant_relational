@@ -198,13 +198,7 @@ def run_model(args):
                     wandb_log.update({'Val Loss': val_loss.item(),
                                       'Val Micro-F1': val_micro, 'Val Macro-F1': val_macro})
                     if val_micro > val_micro_best:
-                        wandb.summary["val_micro_best"] = val_micro
-                        wandb.summary["val_macro_best"] = val_macro
-                        wandb.summary["val_loss_best"] = val_loss.item()
-                        wandb.summary["epoch_best"] = epoch
-                        wandb.summary["train_loss_best"] = train_loss.item()
-                        wandb.summary['train_micro_best'] = train_micro,
-                        wandb.summary['train_macro_best'] = train_macro,
+
                         val_micro_best = val_micro
                         print("New best, saving")
                         torch.save({
@@ -219,6 +213,13 @@ def run_model(args):
                             'val_macro': val_macro
                             }, args.checkpoint_path)
                         if args.wandb_log_run:
+                            wandb.summary["val_micro_best"] = val_micro
+                            wandb.summary["val_macro_best"] = val_macro
+                            wandb.summary["val_loss_best"] = val_loss.item()
+                            wandb.summary["epoch_best"] = epoch
+                            wandb.summary["train_loss_best"] = train_loss.item()
+                            wandb.summary['train_micro_best'] = train_micro,
+                            wandb.summary['train_macro_best'] = train_macro,
                             wandb.save(args.checkpoint_path)
 
                 if epoch % args.wandb_log_loss_freq == 0:
@@ -243,9 +244,9 @@ def run_model(args):
                     pred = test_logits.cpu().numpy().argmax(axis=1)
                     onehot = np.eye(num_classes, dtype=np.int32)
                     if args.wandb_log_run:
-                        file_path = f"test_out/{args.dataset}_{wandb.run.name}.txt"
+                        file_path = f"test_out/{args.dataset}_{run_name}.txt"
                     else:
-                        file_path = f"test_out/{args.dataset}_{wandb.run.name}.txt"
+                        file_path = f"test_out/{args.dataset}_{run_name}.txt"
 
                 dl.gen_file_for_evaluate(test_idx=test_idx, label=pred,
                                          file_path=file_path,

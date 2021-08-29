@@ -18,7 +18,8 @@ class EquivHGAE(nn.Module):
                  dropout=0, norm=True, pool_op='mean', norm_affine=False,
                  final_activation=nn.Identity(),
                  embedding_entities = None,
-                 output_relations = None):
+                 output_relations = None,
+                 in_fc_layer=True):
         super(EquivHGAE, self).__init__()
         self.schema = schema
         if output_relations == None:
@@ -33,10 +34,19 @@ class EquivHGAE(nn.Module):
         self.dropout = Dropout(p=dropout)
         self.rel_dropout  = Activation(schema, self.dropout, is_sparse=True)
 
-        self.n_equiv_layers = len(layers)
+        self.use_in_fc_layer = in_fc_layer
+        # Equivariant Layeres
         self.equiv_layers = nn.ModuleList([])
-        self.equiv_layers.append(SparseMatrixEquivariantLayer(
+        if self.use_in_fc_layer:
+            # Simple fully connected layers for input attributes
+            self.fc_in_layer = SparseMatrixRelationLinear(schema, self.input_channels,
+                                                          layers[0])
+            self.n_equiv_layers = len(layers) - 1
+        else:
+            # Alternatively, use an equivariant layer
+            self.equiv_layers.append(SparseMatrixEquivariantLayer(
                 schema, input_channels, layers[0], pool_op=pool_op))
+            self.n_equiv_layers = len(layers)
         self.equiv_layers.extend([
                 SparseMatrixEquivariantLayer(schema, layers[i-1], layers[i], pool_op=pool_op)
                 for i in range(1, len(layers))])
@@ -72,6 +82,8 @@ class EquivHGAE(nn.Module):
         if idx_identity is None or idx_transpose is None:
             print("Calculating idx_identity and idx_transpose. This can be precomputed.")
             idx_identity, idx_transpose = data.calculate_indices()
+        if self.use_in_fc_layer:
+            data = self.fc_in_layer(data)
         for i in range(self.n_equiv_layers):
             data = self.rel_dropout(self.rel_activation(self.norms[i](
                     self.equiv_layers[i](data, idx_identity, idx_transpose))))

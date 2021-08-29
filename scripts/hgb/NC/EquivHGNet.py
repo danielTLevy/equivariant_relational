@@ -20,8 +20,7 @@ class EquivHGNet(nn.Module):
                  output_dim=1,  dropout=0, norm=True, pool_op='mean',
                  in_fc_layer=True, norm_affine=False):
         super(EquivHGNet, self).__init__()
-        
-        
+
         self.schema = schema
         self.input_channels = input_channels
 

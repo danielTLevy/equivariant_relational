@@ -13,7 +13,8 @@ import dgl
 import wandb
 from tqdm import tqdm
 from sklearn.metrics import f1_score, auc, roc_auc_score, precision_recall_curve
-from data import load_data, get_train_valid_pos, get_train_neg, get_valid_neg
+from data import load_data, get_train_valid_pos, get_train_neg, \
+    get_valid_neg, get_test_neigh
 from EquivHGAE import EquivHGAE
 from src.SparseMatrix import SparseMatrix
 from src.DataSchema import DataSchema, SparseMatrixData, Relation
@@ -102,26 +103,36 @@ def make_target_matrix(relation, pos_head, pos_tail, neg_head, neg_tail, device)
     values = torch.FloatTensor(np.concatenate((pos_values, neg_values), 0))
     shape = (relation.entities[0].n_instances,
              relation.entities[1].n_instances, 1)
-    data_target = SparseMatrix(indices=indices, values=values,
-                               shape=shape)
+    data_target = SparseMatrix(indices=indices, values=values, shape=shape)
     data_target = data_target.to(device)
     
     return data_target
 
+def make_target_matrix_test(relation, left, right, labels, device):
+    indices = torch.LongTensor(np.vstack((left, right)))
+    values = torch.FloatTensor(labels).unsqueeze(1)
+    shape = (relation.entities[0].n_instances,
+             relation.entities[1].n_instances, 1)
+    return SparseMatrix(indices=indices, values=values, shape=shape)
+
 #%%
 def run_model(args):
-    schema, schema_out, data, dl = load_data(args.dataset)
+    schema, schema_out, data_original, dl = load_data(args.dataset)
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-    data, in_dims = select_features(data, schema, args.feats_type)
-    data = data.to(device)
-    indices_identity, indices_transpose = data.calculate_indices()
 
 
     res_2hop = defaultdict(float)
     res_random = defaultdict(float)
     total = len(list(dl.links_test['data'].keys()))
 
+    target_rel_id = next(iter(dl.links_test['data'].keys()))
     for target_rel_id in dl.links_test['data'].keys():
+        print("TESTING TARGET RELATION " + str(target_rel_id))
+
+        data, in_dims = select_features(data_original, schema, args.feats_type)
+        data = data.to(device)
+        indices_identity, indices_transpose = data.calculate_indices()
+
         target_rel = schema.relations[target_rel_id]
         ent_i = target_rel.entities[0]
         n_i = ent_i.n_instances
@@ -163,7 +174,8 @@ def run_model(args):
                         norm=args.norm,
                         pool_op=args.pool_op,
                         norm_affine=args.norm_affine,
-                        output_relations=target_schema.relations)
+                        output_relations=target_schema.relations,
+                        in_fc_layer=args.in_fc_layer)
         net.to(device)
         optimizer = torch.optim.Adam(net.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
@@ -178,8 +190,8 @@ def run_model(args):
         progress = tqdm(range(args.epoch), desc="Epoch 0", position=0, leave=True)
         # training loop
         net.train()
-        #early_stopping = EarlyStopping(patience=args.patience, verbose=True, save_path='checkpoint/checkpoint_{}_{}.pt'.format(args.dataset, args.num_layers))
         loss_func = nn.BCELoss()
+        val_roc_auc_best = 0
         for epoch in progress:
           train_neg_head_full, train_neg_tail_full = get_train_neg(dl, target_rel_id)
           train_idx = np.arange(len(train_pos_head_full))
@@ -217,7 +229,6 @@ def run_model(args):
             # validation
             net.eval()
             if step % args.val_every == 0:
-
                 with torch.no_grad():
                     net.eval()
                     valid_neg_head, valid_neg_tail = get_valid_neg(dl, target_rel_id)
@@ -226,8 +237,9 @@ def run_model(args):
                                                          valid_neg_head, valid_neg_tail,
                                                          device)
     
-                    logits = net(data, indices_identity, indices_transpose,
-                                 data_target, data_embedding)[target_rel_id].values.squeeze()
+                    data_out = net(data, indices_identity, indices_transpose,
+                                   data_target, data_embedding)
+                    logits = data_out[target_rel_id].values.squeeze()
                     logp = torch.sigmoid(logits)
                     labels_val = data_target[target_rel_id].values[:,0]
                     val_loss = loss_func(logp, labels_val)
@@ -236,57 +248,77 @@ def run_model(args):
                     edge_list = np.concatenate([left.reshape((1,-1)), right.reshape((1,-1))], axis=0)
                     wandb_log.update({'val_loss': val_loss.item()})
                     res = dl.evaluate(edge_list, logp.cpu().numpy(), labels_val.cpu().numpy())
+                    val_roc_auc = res['roc_auc']
+                    val_mrr = res['MRR']
                     wandb_log.update(res)
-            if args.wandb_log_run:
+                    if val_roc_auc > val_roc_auc_best:
+                        val_roc_auc_best = val_roc_auc
+                        print("New best, saving")
+                        torch.save({
+                            'epoch': epoch,
+                            'net_state_dict': net.state_dict(),
+                            'optimizer_state_dict': optimizer.state_dict(),
+                            'train_loss': train_loss.item(),
+                            'val_loss': val_loss.item(),
+                            'val_roc_auc': val_roc_auc,
+                            'val_mrr': val_mrr
+                            }, args.checkpoint_path)
+                        if args.wandb_log_run:
+                            wandb.summary["val_roc_auc_best"] = val_roc_auc
+                            wandb.summary["val_mrr_best"] = val_mrr
+                            wandb.summary["val_loss_best"] = val_loss.item()
+                            wandb.summary["epoch_best"] = epoch
+                            wandb.summary["train_loss_best"] = train_loss.item()
+                            wandb.save(args.checkpoint_path)
+            if args.wandb_log_run and args.wandb_log_run:
                 wandb.log(wandb_log)
-            # early stopping
-            #early_stopping(val_loss, net)
-            #if early_stopping.early_stop:
-            #    print('Early stopping!')
-            #    break
-          #if early_stopping.early_stop:
-          #    print('Early stopping!')
-          #    break
 
         # testing with evaluate_results_nc
-        '''
-        net.load_state_dict(torch.load('checkpoint/checkpoint_{}_{}.pt'.format(args.dataset, args.num_layers)))
-        net.eval()
-        test_logits = []
-        with torch.no_grad():
-            test_neigh, test_label = dl.get_test_neigh()
-            test_neigh = test_neigh[target_rel_id]
-            test_label = test_label[target_rel_id]
-            left = np.array(test_neigh[0])
-            right = np.array(test_neigh[1])
-            mid = np.zeros(left.shape[0], dtype=np.int32)
-            labels = torch.FloatTensor(test_label).to(device)
-            logits = net(features_list, e_feat, left, right, mid)
-            pred = F.sigmoid(logits).cpu().numpy()
-            edge_list = np.concatenate([left.reshape((1,-1)), right.reshape((1,-1))], axis=0)
-            labels = labels.cpu().numpy()
-            dl.gen_file_for_evaluate(test_neigh, pred, target_rel_id, file_path=f"{args.dataset}_{args.run}.txt")
-            res = dl.evaluate(edge_list, pred, labels)
-            print(res)
-            for k in res:
-                res_2hop[k] += res[k]
-        with torch.no_grad():
-            test_neigh, test_label = dl.get_test_neigh_w_random()
-            test_neigh = test_neigh[target_rel_id]
-            test_label = test_label[target_rel_id]
-            left = np.array(test_neigh[0])
-            right = np.array(test_neigh[1])
-            mid = np.zeros(left.shape[0], dtype=np.int32)
-            labels = torch.FloatTensor(test_label).to(device)
-            logits = net(features_list, e_feat, left, right, mid)
-            pred = F.sigmoid(logits).cpu().numpy()
-            edge_list = np.concatenate([left.reshape((1,-1)), right.reshape((1,-1))], axis=0)
-            labels = labels.cpu().numpy()
-            res = dl.evaluate(edge_list, pred, labels)
-            print(res)
-            for k in res:
-                res_random[k] += res[k]
-        '''
+        if args.evaluate:
+            run_name = wandb.run.name
+            checkpoint = torch.load(args.checkpoint_path)
+            net.load_state_dict(checkpoint['net_state_dict'])
+            net.eval()
+            with torch.no_grad():
+                left, right, test_labels = get_test_neigh(dl, target_rel_id)
+                test_labels = torch.FloatTensor(test_labels).to(device)
+                target_matrix =  make_target_matrix_test(target_rel, left, right,
+                                                      test_labels, device)
+                data_target[target_rel_id] = target_matrix
+                data_out = net(data, indices_identity, indices_transpose,
+                             data_target, data_embedding)
+                logits = data_out[target_rel_id].values.squeeze()
+                pred = F.sigmoid(logits).cpu().numpy()
+                edge_list = np.concatenate([left.reshape((1,-1)), right.reshape((1,-1))], axis=0)
+                test_labels = test_labels.cpu().numpy()
+                test_neigh = np.vstack((left,right)).tolist()
+                if args.wandb_log_run:
+                    file_path = f"test_out/{args.dataset}_{run_name}.txt"
+                else:
+                    file_path = f"test_out/{args.dataset}_{run_name}.txt"
+                dl.gen_file_for_evaluate(test_neigh, pred, target_rel_id,
+                                         file_path=file_path)
+                res = dl.evaluate(edge_list, pred, test_labels)
+                print(res)
+                for k in res:
+                    res_2hop[k] += res[k]
+            with torch.no_grad():
+                left, right, test_labels = get_test_neigh(dl, target_rel_id, 'w_random')
+                test_labels = torch.FloatTensor(test_labels).to(device)
+                target_matrix =  make_target_matrix_test(target_rel, left, right,
+                                                      test_labels, device)
+                data_target[target_rel_id] = target_matrix
+                data_out = net(data, indices_identity, indices_transpose,
+                             data_target, data_embedding)
+                logits = data_out[target_rel_id].values.squeeze()
+                pred = F.sigmoid(logits).cpu().numpy()
+                edge_list = np.concatenate([left.reshape((1,-1)), right.reshape((1,-1))], axis=0)
+                test_labels = test_labels.cpu().numpy()
+                res = dl.evaluate(edge_list, pred, test_labels)
+                print(res)
+                for k in res:
+                    res_random[k] += res[k]
+
     for k in res_2hop:
         res_2hop[k] /= total
     for k in res_random:
@@ -308,7 +340,8 @@ def get_hyperparams(argv):
     ap.add_argument('--epoch', type=int, default=300, help='Number of epochs.')
     ap.add_argument('--batch_size', type=int, default=8192)
     ap.add_argument('--patience', type=int, default=30, help='Patience.')
-    ap.add_argument('--repeat', type=int, default=1, help='Repeat the training and testing for N times. Default is 1.')
+    ap.add_argument('--repeat', type=int, default=1, help='Repeat the training \
+                    and testing for N times. Default is 1.')
     ap.add_argument('--lr', type=float, default=1e-3)
     ap.add_argument('--dropout', type=float, default=0.5)
     ap.add_argument('--dataset', type=str, default='LastFM')
@@ -358,6 +391,9 @@ def get_hyperparams(argv):
         args.fc_layers = []
     else:
         args.fc_layers = [args.fc_layer]
+    if args.checkpoint_path == "":
+        args.checkpoint_path = "checkpoint/checkpoint_" + args.dataset + \
+            str(args.run) + ".pt"
     return args
 
     

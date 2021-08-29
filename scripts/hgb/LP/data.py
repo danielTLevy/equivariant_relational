@@ -108,4 +108,19 @@ def get_valid_neg(dl, edge_type=None, edge_types=None):
     valid_neg_head = train_neg_arr[0] - shift_i
     valid_neg_tail = train_neg_arr[1] - shift_j
     return valid_neg_head, valid_neg_tail
-    
+
+
+def get_test_neigh(dl, edge_type=None, neigh_type=None):
+    if neigh_type == 'w_random':
+        get_test_neigh = dl.get_test_neigh_w_random
+    elif neigh_type == 'full_random':
+        get_test_neigh = dl.get_test_neigh_full_random
+    else:
+        get_test_neigh = dl.get_test_neigh
+    test_neigh, test_label = get_test_neigh()
+    test_neigh_arr = np.array(test_neigh[edge_type])
+    test_label_arr = np.array(test_label[edge_type])
+    shift_i, shift_j = get_shifts(dl, edge_type)
+    test_neigh_head = test_neigh_arr[0] - shift_i
+    test_neigh_tail = test_neigh_arr[1] - shift_j
+    return test_neigh_head, test_neigh_tail, test_label_arr

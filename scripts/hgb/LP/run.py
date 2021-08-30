@@ -9,7 +9,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 import random
-import dgl
 import wandb
 from tqdm import tqdm
 from sklearn.metrics import f1_score, auc, roc_auc_score, precision_recall_curve

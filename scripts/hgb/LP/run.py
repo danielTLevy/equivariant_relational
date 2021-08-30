@@ -250,6 +250,8 @@ def run_model(args):
                     val_roc_auc = res['roc_auc']
                     val_mrr = res['MRR']
                     wandb_log.update(res)
+                    print("\nVal Loss: {:.3f} Val ROC AUC: {:.3f} Val MRR: {:.3f}".format(
+                        val_loss.item(), val_roc_auc, val_mrr))
                     if val_roc_auc > val_roc_auc_best:
                         val_roc_auc_best = val_roc_auc
                         print("New best, saving")
@@ -274,7 +276,6 @@ def run_model(args):
 
         # testing with evaluate_results_nc
         if args.evaluate:
-            run_name = wandb.run.name
             checkpoint = torch.load(args.checkpoint_path)
             net.load_state_dict(checkpoint['net_state_dict'])
             net.eval()
@@ -292,9 +293,10 @@ def run_model(args):
                 test_labels = test_labels.cpu().numpy()
                 test_neigh = np.vstack((left,right)).tolist()
                 if args.wandb_log_run:
+                    run_name = wandb.run.name
                     file_path = f"test_out/{args.dataset}_{run_name}.txt"
                 else:
-                    file_path = f"test_out/{args.dataset}_{run_name}.txt"
+                    file_path = f"test_out/{args.dataset}_{args.run}.txt"
                 dl.gen_file_for_evaluate(test_neigh, pred, target_rel_id,
                                          file_path=file_path)
                 res = dl.evaluate(edge_list, pred, test_labels)

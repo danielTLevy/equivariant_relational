@@ -322,7 +322,7 @@ def get_hyperparams(argv):
     if args.norm_affine == 1:
         args.norm_affine = True
     else:
-        args.evaluate = False
+        args.norm_affine = False
     if args.norm == 1:
         args.norm = True
     else:

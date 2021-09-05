@@ -112,7 +112,7 @@ def make_target_matrix_test(relation, left, right, labels, device):
     values = torch.FloatTensor(labels).unsqueeze(1)
     shape = (relation.entities[0].n_instances,
              relation.entities[1].n_instances, 1)
-    return SparseMatrix(indices=indices, values=values, shape=shape)
+    return SparseMatrix(indices=indices, values=values, shape=shape).to(device)
 
 #%%
 def run_model(args):
@@ -360,8 +360,7 @@ def get_hyperparams(argv):
     ap.add_argument('--val_every', type=int, default=5)
     ap.add_argument('--seed', type=int, default=1)
     ap.add_argument('--norm',  type=int, default=1)
-    ap.add_argument('--norm_affine', action='store_true')
-    ap.set_defaults(norm_affine=True)
+    ap.add_argument('--norm_affine', typ=int, default=1)
     ap.add_argument('--pool_op', type=str, default='mean')
     ap.add_argument('--save_embeddings', dest='save_embeddings', action='store_true', default=True)
     ap.add_argument('--no_save_embeddings', dest='save_embeddings', action='store_false', default=True)
@@ -387,6 +386,14 @@ def get_hyperparams(argv):
         args.evaluate = True
     else:
         args.evaluate = False
+    if args.norm_affine == 1:
+        args.norm_affine = True
+    else:
+        args.evaluate = False
+    if args.norm == 1:
+        args.norm = True
+    else:
+        args.norm = False
     args.layers = [args.width]*args.depth
     if args.fc_layer == 0:
         args.fc_layers = []

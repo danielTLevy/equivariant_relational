@@ -12,7 +12,7 @@ import random
 import wandb
 from tqdm import tqdm
 from sklearn.metrics import f1_score, auc, roc_auc_score, precision_recall_curve
-from data import load_data, get_train_valid_pos, get_train_neg, \
+from data_lp import load_data, get_train_valid_pos, get_train_neg, \
     get_valid_neg, get_test_neigh
 from EquivHGAE import EquivHGAE
 from src.SparseMatrix import SparseMatrix
@@ -360,7 +360,7 @@ def get_hyperparams(argv):
     ap.add_argument('--val_every', type=int, default=5)
     ap.add_argument('--seed', type=int, default=1)
     ap.add_argument('--norm',  type=int, default=1)
-    ap.add_argument('--norm_affine', typ=int, default=1)
+    ap.add_argument('--norm_affine', type=int, default=1)
     ap.add_argument('--pool_op', type=str, default='mean')
     ap.add_argument('--save_embeddings', dest='save_embeddings', action='store_true', default=True)
     ap.add_argument('--no_save_embeddings', dest='save_embeddings', action='store_false', default=True)

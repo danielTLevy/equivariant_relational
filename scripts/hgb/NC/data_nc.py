@@ -6,7 +6,7 @@ import scipy.sparse as sp
 import torch
 from src.SparseMatrix import SparseMatrix
 from src.DataSchema import DataSchema, Entity, Relation, SparseMatrixData
-from data_loader import data_loader
+from data_loader_nc import data_loader
 
 
 DATA_FILE_DIR = '../../../data/hgb/NC/'

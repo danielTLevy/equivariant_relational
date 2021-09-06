@@ -4,7 +4,7 @@ import scipy
 import pickle
 import torch
 import scipy.sparse as sp
-from data_loader import data_loader
+from data_loader_lp import data_loader
 from src.DataSchema import DataSchema, Entity, Relation, SparseMatrixData
 from src.SparseMatrix import SparseMatrix
 

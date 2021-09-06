@@ -328,6 +328,7 @@ class data_loader:
         neg_neigh, pos_neigh, test_neigh, test_label = dict(), dict(), dict(), dict()
         edge_types = self.test_types
         '''get sec_neigh'''
+        # Get full adjacency matrix
         pos_links = 0
         for r_id in self.links['data'].keys():
             pos_links += self.links['data'][r_id] + self.links['data'][r_id].T
@@ -337,10 +338,11 @@ class data_loader:
             values = [1] * len(self.valid_pos[r_id][0])
             valid_of_rel = sp.coo_matrix((values, self.valid_pos[r_id]), shape=pos_links.shape)
             pos_links += valid_of_rel
-
+        # Square of adjacency matrix
         r_double_neighs = np.dot(pos_links, pos_links)
         data = r_double_neighs.data
         data[:] = 1
+        # 2-hop-nieghs = (A^2 - A - I)
         r_double_neighs = \
             sp.coo_matrix((data, r_double_neighs.nonzero()), shape=np.shape(pos_links), dtype=int) \
             - sp.coo_matrix(pos_links, dtype=int) \
@@ -360,6 +362,7 @@ class data_loader:
         for r_id in self.links_test['data'].keys():
             neg_neigh[r_id] = defaultdict(list)
             h_type, t_type = self.links_test['meta'][r_id]
+            # Get all examples of this relation by checking row and col ranges
             r_id_index = np.where((row >= relation_range[h_type]) & (row < relation_range[h_type + 1])
                                   & (col >= relation_range[t_type]) & (col < relation_range[t_type + 1]))[0]
             # r_num = np.zeros((3, 3))

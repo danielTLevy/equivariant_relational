@@ -17,7 +17,7 @@ import numpy as np
 from EquivHGNet import EquivHGNet
 from src.SparseMatrix import SparseMatrix
 
-from data import load_data
+from data_nc import load_data
 import warnings
 warnings.filterwarnings("ignore", message="Setting attributes on ParameterDict is not supported.")
 

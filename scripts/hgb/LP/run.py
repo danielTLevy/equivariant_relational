@@ -209,7 +209,7 @@ def run_model(args):
                                               device)
 
             logits = net(data, indices_identity, indices_transpose,
-                         data_target, data_embedding)[target_rel_id].values.squeeze()
+                         data_target, data_embedding)
             logp = torch.sigmoid(logits)
             labels_train = data_target[target_rel_id].values[:,0]
             train_loss = loss_func(logp, labels_train)
@@ -235,9 +235,8 @@ def run_model(args):
                                                          valid_neg_head, valid_neg_tail,
                                                          device)
     
-                    data_out = net(data, indices_identity, indices_transpose,
+                    logits = net(data, indices_identity, indices_transpose,
                                    data_target, data_embedding)
-                    logits = data_out[target_rel_id].values.squeeze()
                     logp = torch.sigmoid(logits)
                     labels_val = data_target[target_rel_id].values[:,0]
                     val_loss = loss_func(logp, labels_val)
@@ -284,9 +283,8 @@ def run_model(args):
                 target_matrix =  make_target_matrix_test(target_rel, left, right,
                                                       test_labels, device)
                 data_target[target_rel_id] = target_matrix
-                data_out = net(data, indices_identity, indices_transpose,
+                logits = net(data, indices_identity, indices_transpose,
                              data_target, data_embedding)
-                logits = data_out[target_rel_id].values.squeeze()
                 pred = F.sigmoid(logits).cpu().numpy()
                 edge_list = np.concatenate([left.reshape((1,-1)), right.reshape((1,-1))], axis=0)
                 test_labels = test_labels.cpu().numpy()
@@ -308,9 +306,8 @@ def run_model(args):
                 target_matrix =  make_target_matrix_test(target_rel, left, right,
                                                       test_labels, device)
                 data_target[target_rel_id] = target_matrix
-                data_out = net(data, indices_identity, indices_transpose,
+                logits = net(data, indices_identity, indices_transpose,
                              data_target, data_embedding)
-                logits = data_out[target_rel_id].values.squeeze()
                 pred = F.sigmoid(logits).cpu().numpy()
                 edge_list = np.concatenate([left.reshape((1,-1)), right.reshape((1,-1))], axis=0)
                 test_labels = test_labels.cpu().numpy()

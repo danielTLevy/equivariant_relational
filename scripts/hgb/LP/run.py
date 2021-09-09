@@ -14,7 +14,7 @@ from tqdm import tqdm
 from sklearn.metrics import f1_score, auc, roc_auc_score, precision_recall_curve
 from data_lp import load_data, get_train_valid_pos, get_train_neg, \
     get_valid_neg, get_test_neigh
-from EquivHGAE import EquivHGAE
+from EquivHGAE import EquivHGAE, EquivLinkPredictor
 from src.SparseMatrix import SparseMatrix
 from src.DataSchema import DataSchema, SparseMatrixData, Relation
 import warnings
@@ -107,6 +107,18 @@ def make_target_matrix(relation, pos_head, pos_tail, neg_head, neg_tail, device)
     
     return data_target
 
+def make_combined_data(schema, input_data, target_rel_id, target_matrix):
+    '''
+    given dataset and a single target matrix for predictions, produce new dataset
+    with indices combining original dataset with new target matrix's indices
+    '''
+    combined_data = SparseMatrixData(schema)
+    for rel in schema.relatoins:
+        combined_data[rel.id] = input_data[rel.id].clone()
+    combined_data[target_rel_id] += target_matrix
+    return combined_data
+
+
 def make_target_matrix_test(relation, left, right, labels, device):
     indices = torch.LongTensor(np.vstack((left, right)))
     values = torch.FloatTensor(labels).unsqueeze(1)
@@ -124,7 +136,6 @@ def run_model(args):
     res_random = defaultdict(float)
     total = len(list(dl.links_test['data'].keys()))
 
-    target_rel_id = next(iter(dl.links_test['data'].keys()))
     for target_rel_id in dl.links_test['data'].keys():
         print("TESTING TARGET RELATION " + str(target_rel_id))
 
@@ -133,48 +144,36 @@ def run_model(args):
         indices_identity, indices_transpose = data.calculate_indices()
 
         target_rel = schema.relations[target_rel_id]
-        ent_i = target_rel.entities[0]
-        n_i = ent_i.n_instances
-        ent_j = target_rel.entities[1]
-        n_j = ent_j.n_instances
-        embedding_schema = DataSchema(schema.entities,
-                              [Relation(0,
-                                       [ent_i, ent_i],
-                                       is_set=True),
-                              Relation(1,
-                                       [ent_j, ent_j],
-                                       is_set=True
-                                       )])
-        data_embedding = SparseMatrixData(embedding_schema)
-        data_embedding[0] = SparseMatrix(
-                indices = torch.arange(n_i, dtype=torch.int64).repeat(2,1),
-                values=torch.zeros([n_i, args.embedding_dim]),
-                shape=(n_i, n_i, args.embedding_dim),
-                is_set=True)
-        data_embedding[1] = SparseMatrix(
-                indices = torch.arange(n_j, dtype=torch.int64).repeat(2,1),
-                values=torch.zeros([n_j, args.embedding_dim]),
-                shape=(n_j, n_j, args.embedding_dim),
-                is_set=True)
+        target_ents = schema.entities #target_rel.entities
+        data_embedding = SparseMatrixData.make_entity_embeddings(target_ents,
+                                                                 args.embedding_dim)
         data_embedding.to(device)
-        target_schema = DataSchema(schema.entities, [target_rel])
-        data_target = SparseMatrixData(target_schema)
+        if args.decoder == 'equiv':
+            # Target is same as input
+            target_schema = schema
+            data_target = data.clone()
+        else:
+            # Target is just target relation
+            target_schema = DataSchema(schema.entities, [target_rel])
+            data_target = SparseMatrixData(target_schema)
+
         train_pos, valid_pos = dl.get_train_valid_pos()#edge_types=[target_rel_id])
         train_val_pos = get_train_valid_pos(dl, target_rel_id)
         train_pos_head_full, train_pos_tail_full, \
             valid_pos_head, valid_pos_tail = train_val_pos
-        net = EquivHGAE(schema, in_dims,
-                        layers = args.layers,
+        net = EquivLinkPredictor(schema, in_dims,
+                        layers=args.layers,
                         embedding_dim=args.embedding_dim,
-                        embedding_entities=[ent_i, ent_j],
+                        embedding_entities=target_ents,
+                        output_rel=target_rel,
                         activation=eval('nn.%s()' % args.act_fn),
                         final_activation = nn.Identity(),
                         dropout=args.dropout,
                         norm=args.norm,
                         pool_op=args.pool_op,
                         norm_affine=args.norm_affine,
-                        output_relations=target_schema.relations,
-                        in_fc_layer=args.in_fc_layer)
+                        in_fc_layer=args.in_fc_layer,
+                        decode = args.decoder)
         net.to(device)
         optimizer = torch.optim.Adam(net.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
@@ -374,6 +373,7 @@ def get_hyperparams(argv):
     ap.add_argument('--output', type=str)
     ap.add_argument('--run', type=int, default=1)
     ap.add_argument('--evaluate', type=int, default=1)
+    ap.add_argument('--decoder', type=str, default='broadcast')
     ap.set_defaults(wandb_log_run=False)
     args, argv = ap.parse_known_args(argv)
     if args.output == None:

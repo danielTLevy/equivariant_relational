@@ -200,10 +200,38 @@ class Data:
             tensor[relation.id] = rel_data.expand(output_size)
         return tensor
 
+    def clone(self):
+        cloned_data = {}
+        for rel_id, data in self.rel_tensors.items():
+            cloned_data[rel_id] = data.clone()
+        return Data(self.schema, cloned_data, self.batch_size)
+
+
 class SparseTensorData(Data):
     pass
 
 class SparseMatrixData(Data):
+
+    @classmethod
+    def make_entity_embeddings(cls, entities, embedding_dim):
+        '''
+        Initialize from pytorch's built-in sparse tensor
+        '''
+        data = {}
+        relations = []
+        for ent in entities:
+            n_ent = ent.n_instances
+            data[ent.id] = SparseMatrix(
+                    indices = torch.arange(n_ent, dtype=torch.int64).repeat(2,1),
+                    values=torch.zeros([n_ent, embedding_dim]),
+                    shape=(n_ent, n_ent, embedding_dim),
+                    is_set=True)
+            relations.append(Relation(ent.id, [ent, ent], is_set=True))
+
+        embedding_schema = DataSchema(entities, relations)
+
+        return cls(embedding_schema, data)
+
     def mask_data(self, observed):
         pass
 

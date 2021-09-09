@@ -84,12 +84,12 @@ class SparseMatrix:
         return out
 
     @classmethod
-    def from_embed_diag(cls, values):
+    def from_embed_diag(cls, values, is_set=False):
         n_instances = values.shape[0]
         n_channels = values.shape[1]
         shape = np.array([n_instances, n_instances, n_channels])
         indices = torch.arange(n_instances).repeat(2,1)
-        return SparseMatrix(indices=indices, values=values, shape=shape)
+        return SparseMatrix(indices=indices, values=values, shape=shape, is_set=is_set)
 
     def ndimension(self):
         return self.indices.shape[0]
@@ -118,7 +118,7 @@ class SparseMatrix:
         indices_out = indices_and_values_sorted[[0,1],:]
         values_out = indices_and_values_sorted[2:, :]
         shape_out = (self.m, self.n, self.n_channels)
-        return SparseMatrix(indices_out, values_out, shape_out)
+        return SparseMatrix(indices_out, values_out, shape_out, indices_diag=self.indices_diag, is_set=self.is_set)
 
     def calc_indices_diag(self):
         '''
@@ -155,7 +155,7 @@ class SparseMatrix:
         values_intersection = self.values[:, indices_in_intersection]
 
         # Can take these values then add them to target sparse matrix and coalesce
-        return SparseMatrix(values_intersection, indices_in_intersection, self.shape(), self.indices_diag)
+        return SparseMatrix(values_intersection, indices_in_intersection, self.shape(), self.indices_diag, self.is_set)
 
     def to(self, *args, **kwargs):
         self.indices = self.indices.to(*args, **kwargs)
@@ -169,20 +169,16 @@ class SparseMatrix:
             "Mismatching shapes, self: {} and other: {}".format(self.shape(), other.shape())
         assert self.n_channels == other.n_channels, \
             "Mismatching number of channels, self: {} and other: {}".format(self.n_channels, other.n_channels)
-        if (self.indices == other.indices).all():
-            return SparseMatrix(self.indices, self.values + other.values, self.shape(), self.indices_diag)
+        if (self.nnz() == other.nnz()) and (self.indices == other.indices).all():
+            return SparseMatrix(self.indices, self.values + other.values, self.shape(), self.indices_diag, self.is_set)
         else:
-            pdb.set_trace()
-            print("Indices Mismatch")
-            print(self.nnz())
-            print(other.nnz())
             combined_indices = torch.cat((self.indices, other.indices), dim=1)
             combined_values = torch.cat((self.values, other.values), dim=0)
-            return SparseMatrix(combined_indices, combined_values, self.shape()).coalesce()
+            return SparseMatrix(combined_indices, combined_values, self.shape(), is_set=self.is_set).coalesce()
 
     def add_tensor(self, other):
         values_out = self.values + other
-        return SparseMatrix(self.indices, values_out, self.shape())
+        return SparseMatrix(self.indices, values_out, self.shape(), self.indices_diag, self.is_set)
 
     def equal(self, other):
         indices_equal = torch.equal(self.indices, other.indices)
@@ -225,12 +221,12 @@ class SparseMatrix:
     def __matmul__(self, other):
         values_out = self.values @ other
         new_shape = (self.n, self.m, values_out.shape[1])
-        return SparseMatrix(self.indices, values_out, new_shape)
+        return SparseMatrix(self.indices, values_out, new_shape, self.indices_diag, self.is_set)
 
     def __rmatmul__(self, other):
         values_out = other @ self.values
         new_shape = (self.n, self.m, values_out.shape[1])
-        return SparseMatrix(self.indices, values_out, new_shape)
+        return SparseMatrix(self.indices, values_out, new_shape, self.indices_diag, self.is_set)
 
     def identity(self, mask=None):
         out = self.clone()
@@ -257,7 +253,7 @@ class SparseMatrix:
         out_values = torch.zeros(self.nnz(), n_channels).to(device)        
         out_values.scatter_(0, idx_overlap.expand(n_channels, -1).T, data)
         out_shape = (self.n, self.m, n_channels)
-        return SparseMatrix(self.indices.clone(), out_values, out_shape, self.indices_diag)
+        return SparseMatrix(self.indices.clone(), out_values, out_shape, self.indices_diag, self.is_set)
 
     def transpose(self, transpose_mask=None):
         indices_out, values_out = torch_sparse.transpose(self.indices, self.values,
@@ -267,7 +263,7 @@ class SparseMatrix:
             values_out = (transpose_mask.float() * values_out.T).T
         shape_out = (self.m, self.n, self.n_channels)
 
-        return SparseMatrix(indices_out, values_out, shape_out, indices_diag=self.indices_diag)
+        return SparseMatrix(indices_out, values_out, shape_out, self.indices_diag, self.is_set)
 
     
     def coalesce_(self):
@@ -275,7 +271,7 @@ class SparseMatrix:
         Add all duplicated entries together
         '''
         self.indices, self.values = torch_sparse.coalesce(self.indices, self.values,
-                                                          self.m, self.n)
+                                                          self.n, self.m)
         return self
         
     def coalesce(self):
@@ -283,8 +279,8 @@ class SparseMatrix:
         Add all duplicated entries together
         '''
         indices, values = torch_sparse.coalesce(self.indices, self.values,
-                                                          self.m, self.n)
-        return SparseMatrix(indices, values, self.shape())
+                                                          self.n, self.m)
+        return SparseMatrix(indices, values, self.shape(), is_set=self.is_set)
 
 
     def pool(self, index_str, device=None, op='add'):
@@ -360,7 +356,7 @@ class SparseMatrix:
         out_values = torch.gather(data, 0, idx_tensor_expanded)
         
         out_shape = (self.n, self.m, out_values.shape[1])
-        return SparseMatrix(self.indices.clone(), out_values, out_shape, self.indices_diag)
+        return SparseMatrix(self.indices.clone(), out_values, out_shape, self.indices_diag, self.is_set)
     
     def embed_diag(self, data, device=None):
         '''
@@ -375,7 +371,7 @@ class SparseMatrix:
         
         out_values.scatter_(0, self.indices_diag.expand(n_channels, -1).T, data_out)
         out_shape = (self.n, self.m, n_channels)
-        return SparseMatrix(self.indices.clone(), out_values, out_shape, self.indices_diag)
+        return SparseMatrix(self.indices.clone(), out_values, out_shape, self.indices_diag, self.is_set)
 
 
     def index_sort(self):
@@ -400,7 +396,7 @@ class SparseMatrix:
         else:
             indices_diag = None
         return SparseMatrix(self.indices.clone(), self.values.clone(),
-                            self.shape(), indices_diag)
+                            self.shape(), indices_diag, self.is_set)
 
     def zero_(self):
         self.values = self.values.zero_()

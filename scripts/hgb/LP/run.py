@@ -292,7 +292,6 @@ def run_model(args):
                     res_2hop[k] += res[k]
             with torch.no_grad():
                 left, right, test_labels = get_test_neigh(dl, target_rel_id, 'w_random')
-                test_labels = torch.FloatTensor(test_labels).to(device)
                 target_matrix =  make_target_matrix_test(target_rel, left, right,
                                                       test_labels, device)
                 data_target[target_rel_id] = target_matrix
@@ -300,7 +299,6 @@ def run_model(args):
                              data_target, data_embedding)
                 pred = torch.sigmoid(logits).cpu().numpy()
                 edge_list = np.concatenate([left.reshape((1,-1)), right.reshape((1,-1))], axis=0)
-                test_labels = test_labels.cpu().numpy()
                 res = dl.evaluate(edge_list, pred, test_labels)
                 print(res)
                 for k in res:

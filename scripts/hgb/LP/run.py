@@ -301,6 +301,7 @@ def run_model(args):
                 edge_list = np.concatenate([left.reshape((1,-1)), right.reshape((1,-1))], axis=0)
                 res = dl.evaluate(edge_list, pred, test_labels)
                 print(res)
+
                 for k in res:
                     res_random[k] += res[k]
 
@@ -310,6 +311,10 @@ def run_model(args):
         res_random[k] /= total
     print(res_2hop)
     print(res_random)
+    wandb.summary["2hop_test_roc_auc"] = res_2hop['roc_auc']
+    wandb.summary["2hop_test_mrr"] = res_2hop['MRR']
+    wandb.summary["rand_test_roc_auc"] = res_random['roc_auc']
+    wandb.summary["rand_test_mrr"] = res_random['MRR']
 
 #%%
 def get_hyperparams(argv):

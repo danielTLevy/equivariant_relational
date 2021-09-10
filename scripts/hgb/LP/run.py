@@ -159,7 +159,7 @@ def run_model(args):
 
         train_pos, valid_pos = dl.get_train_valid_pos()#edge_types=[target_rel_id])
         train_val_pos = get_train_valid_pos(dl, target_rel_id)
-        train_pos_head_full, train_pos_tail_full, \
+        train_pos_head, train_pos_tail, \
             valid_pos_head, valid_pos_tail = train_val_pos
         net = EquivLinkPredictor(schema, in_dims,
                         layers=args.layers,
@@ -169,7 +169,6 @@ def run_model(args):
                         activation=eval('nn.%s()' % args.act_fn),
                         final_activation = nn.Identity(),
                         dropout=args.dropout,
-                        norm=args.norm,
                         pool_op=args.pool_op,
                         norm_affine=args.norm_affine,
                         in_fc_layer=args.in_fc_layer,
@@ -191,18 +190,12 @@ def run_model(args):
         loss_func = nn.BCELoss()
         val_roc_auc_best = 0
         for epoch in progress:
-          train_neg_head_full, train_neg_tail_full = get_train_neg(dl, target_rel_id)
-          train_idx = np.arange(len(train_pos_head_full))
-          np.random.shuffle(train_idx)
-          batch_size = args.batch_size
+            train_neg_head, train_neg_tail = get_train_neg(dl, target_rel_id)
+            train_idx = np.arange(len(train_pos_head))
+            np.random.shuffle(train_idx)
 
-          for step, start in enumerate(range(0, len(train_pos_head_full), batch_size)):
             # training
             net.train()
-            train_pos_head = train_pos_head_full[train_idx[start:start+batch_size]]
-            train_neg_head = train_neg_head_full[train_idx[start:start+batch_size]]
-            train_pos_tail = train_pos_tail_full[train_idx[start:start+batch_size]]
-            train_neg_tail = train_neg_tail_full[train_idx[start:start+batch_size]]
             data_target[target_rel_id] =  make_target_matrix(target_rel,
                                               train_pos_head, train_pos_tail,
                                               train_neg_head, train_neg_tail,
@@ -219,14 +212,13 @@ def run_model(args):
             train_loss.backward()
             optimizer.step()
 
-
             progress.set_description(f"Epoch {epoch}")
             progress.set_postfix(loss=train_loss.item())
             wandb_log = {'Train Loss': train_loss.item(), 'epoch':epoch}
     
             # validation
             net.eval()
-            if step % args.val_every == 0:
+            if epoch % args.val_every == 0:
                 with torch.no_grad():
                     net.eval()
                     valid_neg_head, valid_neg_tail = get_valid_neg(dl, target_rel_id)
@@ -269,7 +261,7 @@ def run_model(args):
                             wandb.summary["epoch_best"] = epoch
                             wandb.summary["train_loss_best"] = train_loss.item()
                             wandb.save(args.checkpoint_path)
-            if args.wandb_log_run and args.wandb_log_run:
+            if args.wandb_log_run:
                 wandb.log(wandb_log)
 
         # testing with evaluate_results_nc
@@ -279,15 +271,13 @@ def run_model(args):
             net.eval()
             with torch.no_grad():
                 left, right, test_labels = get_test_neigh(dl, target_rel_id)
-                test_labels = torch.FloatTensor(test_labels).to(device)
                 target_matrix =  make_target_matrix_test(target_rel, left, right,
                                                       test_labels, device)
                 data_target[target_rel_id] = target_matrix
                 logits = net(data, indices_identity, indices_transpose,
                              data_target, data_embedding)
-                pred = F.sigmoid(logits).cpu().numpy()
+                pred = torch.sigmoid(logits).cpu().numpy()
                 edge_list = np.concatenate([left.reshape((1,-1)), right.reshape((1,-1))], axis=0)
-                test_labels = test_labels.cpu().numpy()
                 test_neigh = np.vstack((left,right)).tolist()
                 if args.wandb_log_run:
                     run_name = wandb.run.name
@@ -308,7 +298,7 @@ def run_model(args):
                 data_target[target_rel_id] = target_matrix
                 logits = net(data, indices_identity, indices_transpose,
                              data_target, data_embedding)
-                pred = F.sigmoid(logits).cpu().numpy()
+                pred = torch.sigmoid(logits).cpu().numpy()
                 edge_list = np.concatenate([left.reshape((1,-1)), right.reshape((1,-1))], axis=0)
                 test_labels = test_labels.cpu().numpy()
                 res = dl.evaluate(edge_list, pred, test_labels)
@@ -355,7 +345,6 @@ def get_hyperparams(argv):
     ap.add_argument('--optimizer', type=str, default='Adam')
     ap.add_argument('--val_every', type=int, default=5)
     ap.add_argument('--seed', type=int, default=1)
-    ap.add_argument('--norm',  type=int, default=1)
     ap.add_argument('--norm_affine', type=int, default=1)
     ap.add_argument('--pool_op', type=str, default='mean')
     ap.add_argument('--save_embeddings', dest='save_embeddings', action='store_true', default=True)
@@ -387,10 +376,6 @@ def get_hyperparams(argv):
         args.norm_affine = True
     else:
         args.norm_affine = False
-    if args.norm == 1:
-        args.norm = True
-    else:
-        args.norm = False
     args.layers = [args.width]*args.depth
     if args.fc_layer == 0:
         args.fc_layers = []

@@ -126,15 +126,14 @@ class EquivDecoder(nn.Module):
         self.equiv_layers.extend([
                 SparseMatrixEquivariantLayer(schema, layers[i-1], layers[i], pool_op=pool_op)
                 for i in range(1, len(layers))])
+        self.n_layers = len(layers) - 1
         if self.use_out_fc_layer:
             # Add fully connected layer to output
             self.fc_out_layer = SparseMatrixRelationLinear(schema, layers[-1], 1)
-            self.n_equiv_layers = len(layers) - 1
         else:
             # Alternatively, use an equivariant layer
             self.equiv_layers.append(SparseMatrixEquivariantLayer(
                 schema, layers[-1], 1, pool_op=pool_op))
-            self.n_equiv_layers = len(layers)
 
         self.norms = nn.ModuleList()
         for channels in layers:
@@ -152,11 +151,13 @@ class EquivDecoder(nn.Module):
             idx_identity, idx_transpose = data_target.calculate_indices()
 
         data = self.broadcasting(data_embedding, data_target)
-        for i in range(self.n_equiv_layers):
+        for i in range(self.n_layers):
             data = self.rel_dropout(self.rel_activation(self.norms[i](
                     self.equiv_layers[i](data, idx_identity, idx_transpose))))
         if self.use_out_fc_layer:
             data = self.fc_out_layer(data)
+        else:
+            data = self.equiv_layers[-1](data, idx_identity, idx_transpose)
         return data
 
 

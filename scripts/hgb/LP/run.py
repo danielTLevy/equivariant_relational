@@ -103,7 +103,7 @@ def make_target_matrix(relation, pos_head, pos_tail, neg_head, neg_tail, device)
     shape = (relation.entities[0].n_instances,
              relation.entities[1].n_instances, 1)
     data_target = SparseMatrix(indices=indices, values=values, shape=shape)
-    data_target = data_target.to(device)
+    data_target = data_target.to(device).coalesce_()
     
     return data_target
 
@@ -124,7 +124,7 @@ def make_target_matrix_test(relation, left, right, labels, device):
     values = torch.FloatTensor(labels).unsqueeze(1)
     shape = (relation.entities[0].n_instances,
              relation.entities[1].n_instances, 1)
-    return SparseMatrix(indices=indices, values=values, shape=shape).to(device)
+    return SparseMatrix(indices=indices, values=values, shape=shape).to(device).coalesce_()
 
 #%%
 def run_model(args):
@@ -136,6 +136,7 @@ def run_model(args):
     res_random = defaultdict(float)
     total = len(list(dl.links_test['data'].keys()))
 
+    use_equiv = args.decoder == 'equiv'
     for target_rel_id in dl.links_test['data'].keys():
         print("TESTING TARGET RELATION " + str(target_rel_id))
 
@@ -148,7 +149,7 @@ def run_model(args):
         data_embedding = SparseMatrixData.make_entity_embeddings(target_ents,
                                                                  args.embedding_dim)
         data_embedding.to(device)
-        if args.decoder == 'equiv':
+        if use_equiv:
             # Target is same as input
             target_schema = schema
             data_target = data.clone()
@@ -201,8 +202,13 @@ def run_model(args):
                                               train_neg_head, train_neg_tail,
                                               device)
 
-            logits = net(data, indices_identity, indices_transpose,
-                         data_target, data_embedding)
+            if use_equiv:
+                idx_id_tgt, idx_trans_tgt = data_target.calculate_indices()
+                logits = net(data, indices_identity, indices_transpose,
+                             data_embedding, data_target, idx_id_tgt, idx_trans_tgt)
+            else:
+                logits = net(data, indices_identity, indices_transpose,
+                             data_embedding, data_target)
             logp = torch.sigmoid(logits)
             labels_train = data_target[target_rel_id].values[:,0]
             train_loss = loss_func(logp, labels_train)
@@ -226,9 +232,13 @@ def run_model(args):
                                                          valid_pos_head, valid_pos_tail,
                                                          valid_neg_head, valid_neg_tail,
                                                          device)
-    
-                    logits = net(data, indices_identity, indices_transpose,
-                                   data_target, data_embedding)
+                    if use_equiv:
+                        idx_id_val, idx_trans_val = data_target.calculate_indices()
+                        logits = net(data, indices_identity, indices_transpose,
+                                   data_embedding, data_target, idx_id_val, idx_trans_val)
+                    else:
+                        logits = net(data, indices_identity, indices_transpose,
+                                     data_embedding, data_target)
                     logp = torch.sigmoid(logits)
                     labels_val = data_target[target_rel_id].values[:,0]
                     val_loss = loss_func(logp, labels_val)
@@ -274,8 +284,13 @@ def run_model(args):
                 target_matrix =  make_target_matrix_test(target_rel, left, right,
                                                       test_labels, device)
                 data_target[target_rel_id] = target_matrix
-                logits = net(data, indices_identity, indices_transpose,
-                             data_target, data_embedding)
+                if use_equiv:
+                    idx_id_tst, idx_trans_tst, = data_target.calculate_indices()
+                    logits = net(data, indices_identity, indices_transpose,
+                                   data_embedding, data_target, idx_id_tst, idx_trans_val)
+                else:
+                    logits = net(data, indices_identity, indices_transpose,
+                                 data_embedding, data_target)
                 pred = torch.sigmoid(logits).cpu().numpy()
                 edge_list = np.concatenate([left.reshape((1,-1)), right.reshape((1,-1))], axis=0)
                 test_neigh = np.vstack((left,right)).tolist()
@@ -295,8 +310,13 @@ def run_model(args):
                 target_matrix =  make_target_matrix_test(target_rel, left, right,
                                                       test_labels, device)
                 data_target[target_rel_id] = target_matrix
-                logits = net(data, indices_identity, indices_transpose,
-                             data_target, data_embedding)
+                if use_equiv:
+                    idx_id_tst, idx_trans_tst = data_target.calculate_indices()
+                    logits = net(data, indices_identity, indices_transpose,
+                                   data_embedding, data_target, idx_id_tst, idx_trans_val)
+                else:
+                    logits = net(data, indices_identity, indices_transpose,
+                                 data_embedding, data_target)
                 pred = torch.sigmoid(logits).cpu().numpy()
                 edge_list = np.concatenate([left.reshape((1,-1)), right.reshape((1,-1))], axis=0)
                 res = dl.evaluate(edge_list, pred, test_labels)

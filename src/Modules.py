@@ -91,6 +91,11 @@ class SparseMatrixRelationLinear(nn.Module):
         self.schema = schema
         self.node_only = node_only
         self.linear = nn.ModuleDict()
+        if type(in_dims) == int:
+            in_dims_dict = {}
+            for rel in self.schema.relations:
+                in_dims_dict[rel.id] = in_dims
+            in_dims = in_dims_dict
         for rel in self.schema.relations:
             linear = SparseMatrixLinear(in_dims[rel.id], out_dim)
             self.linear[str(rel.id)] = linear

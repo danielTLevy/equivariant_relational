@@ -7,6 +7,7 @@ from src.SparseMatrixEquivariantLayer import SparseMatrixEquivariantLayer, \
                     SparseMatrixEntityPoolingLayer, SparseMatrixEntityBroadcastingLayer
 from src.SparseEquivariantLayer import SparseEquivariantLayer
 from src.Modules import Activation,  Dropout,  SparseMatrixRelationLinear
+import pdb
 
 class DistMult(nn.Module):
     def __init__(self, num_rel, dim):
@@ -117,7 +118,7 @@ class EquivDecoder(nn.Module):
         # Equivariant Layers
         self.broadcasting = SparseMatrixEntityBroadcastingLayer(self.schema,
                                                                 embedding_dim,
-                                                                1,
+                                                                layers[0],
                                                                 entities=embedding_entities,
                                                                 pool_op=pool_op)
 
@@ -150,7 +151,7 @@ class EquivDecoder(nn.Module):
             print("Calculating idx_identity and idx_transpose. This can be precomputed.")
             idx_identity, idx_transpose = data_target.calculate_indices()
 
-        data = self.broadcast(data_embedding, data_target)
+        data = self.broadcasting(data_embedding, data_target)
         for i in range(self.n_equiv_layers):
             data = self.rel_dropout(self.rel_activation(self.norms[i](
                     self.equiv_layers[i](data, idx_identity, idx_transpose))))
@@ -162,7 +163,7 @@ class EquivDecoder(nn.Module):
 class EquivLinkPredictor(nn.Module):
     def __init__(self, schema, input_channels=1, activation=F.relu,
                  layers=[64, 64, 64], embedding_dim=50,
-                 dropout=0, norm=True, pool_op='mean', norm_affine=False,
+                 dropout=0,  pool_op='mean', norm_affine=False,
                  final_activation=nn.Identity(),
                  embedding_entities = None,
                  output_rel = None,
@@ -179,8 +180,12 @@ class EquivLinkPredictor(nn.Module):
         elif self.decode == 'distmult':
             self.decoder = DistMult(len(schema.relations), embedding_dim)
         elif decode == 'equiv':
-            #self.decoder = EquivDecoder()
-            raise NotImplementedError
+            self.decoder = EquivDecoder(schema, activation,
+                 layers, embedding_dim,
+                 dropout, pool_op, norm_affine,
+                 embedding_entities,
+                 output_rel,
+                 out_fc_layer=in_fc_layer)
         elif self.decode == 'broadcast':
             if output_rel == None:
                 self.schema_out = schema
@@ -194,10 +199,9 @@ class EquivLinkPredictor(nn.Module):
 
         self.final_activation = Activation(schema, final_activation, is_sparse=True)
 
-
-
     def forward(self, data, idx_identity=None, idx_transpose=None,
-                data_target=None, data_embedding=None, get_embeddings=False):
+                data_embedding=None, data_target=None,
+                idx_id_out=None, idx_trans_out=None):
         embeddings = self.encoder(data, idx_identity, idx_transpose, data_embedding)
         if self.decode == 'dot' or self.decode == 'distmult':
             left_id = self.output_rel.entities[0].id
@@ -207,8 +211,11 @@ class EquivLinkPredictor(nn.Module):
             right_target_indices = data_target[self.output_rel.id].indices[1]
             right = embeddings[right_id].values[right_target_indices]
             return self.decoder(left, right, self.output_rel.id)
-        else:
+        elif self.decode == 'broadcast':
             data_output = self.decoder(embeddings, data_target)
+            return data_output[self.output_rel.id].values.squeeze()
+        elif self.decode == 'equiv':
+            data_output = self.decoder(embeddings, idx_id_out, idx_trans_out, data_target)
             return data_output[self.output_rel.id].values.squeeze()
 
 class EquivHGAE(nn.Module):

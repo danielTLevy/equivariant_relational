@@ -232,6 +232,12 @@ class SparseMatrixData(Data):
 
         return cls(embedding_schema, data)
 
+    def clone(self):
+        cloned_data = {}
+        for rel_id, data in self.rel_tensors.items():
+            cloned_data[rel_id] = data.clone()
+        return SparseMatrixData(self.schema, cloned_data, self.batch_size)
+
     def mask_data(self, observed):
         pass
 

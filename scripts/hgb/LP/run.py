@@ -18,6 +18,7 @@ from EquivHGAE import EquivHGAE, EquivLinkPredictor
 from src.SparseMatrix import SparseMatrix
 from src.DataSchema import DataSchema, SparseMatrixData, Relation
 import warnings
+import pdb
 warnings.filterwarnings("ignore", message="Setting attributes on ParameterDict is not supported.")
 
 #%%
@@ -124,7 +125,7 @@ def make_target_matrix_test(relation, left, right, labels, device):
     values = torch.FloatTensor(labels).unsqueeze(1)
     shape = (relation.entities[0].n_instances,
              relation.entities[1].n_instances, 1)
-    return SparseMatrix(indices=indices, values=values, shape=shape).to(device).coalesce_()
+    return SparseMatrix(indices=indices, values=values, shape=shape).to(device)#.coalesce_()
 
 #%%
 def run_model(args):
@@ -185,6 +186,15 @@ def run_model(args):
                 entity='danieltlevy')
             wandb.watch(net, log='all', log_freq=args.wandb_log_param_freq)
         print(args)
+        if args.wandb_log_run:
+            checkpoint_path = f"checkpoint/checkpoint_{wandb.run.name}.pt"
+        else:
+            if args.checkpoint_path == "":
+                checkpoint_path = "checkpoint/checkpoint_" + args.dataset + \
+                str(args.run) + ".pt"
+            else:
+                checkpoint_path = args.checkpoint_path
+        print("Checkpoint Path: " + checkpoint_path)
         progress = tqdm(range(args.epoch), desc="Epoch 0", position=0, leave=True)
         # training loop
         net.train()
@@ -263,23 +273,24 @@ def run_model(args):
                             'val_loss': val_loss.item(),
                             'val_roc_auc': val_roc_auc,
                             'val_mrr': val_mrr
-                            }, args.checkpoint_path)
+                            }, checkpoint_path)
                         if args.wandb_log_run:
                             wandb.summary["val_roc_auc_best"] = val_roc_auc
                             wandb.summary["val_mrr_best"] = val_mrr
                             wandb.summary["val_loss_best"] = val_loss.item()
                             wandb.summary["epoch_best"] = epoch
                             wandb.summary["train_loss_best"] = train_loss.item()
-                            wandb.save(args.checkpoint_path)
+                            wandb.save(checkpoint_path)
             if args.wandb_log_run:
                 wandb.log(wandb_log)
 
         # testing with evaluate_results_nc
         if args.evaluate:
-            checkpoint = torch.load(args.checkpoint_path)
+            checkpoint = torch.load(checkpoint_path)
             net.load_state_dict(checkpoint['net_state_dict'])
             net.eval()
             with torch.no_grad():
+                pdb.set_trace()
                 left, right, test_labels = get_test_neigh(dl, target_rel_id)
                 target_matrix =  make_target_matrix_test(target_rel, left, right,
                                                       test_labels, device)
@@ -404,9 +415,6 @@ def get_hyperparams(argv):
         args.fc_layers = []
     else:
         args.fc_layers = [args.fc_layer]
-    if args.checkpoint_path == "":
-        args.checkpoint_path = "checkpoint/checkpoint_" + args.dataset + \
-            str(args.run) + ".pt"
     return args
 
     

@@ -290,7 +290,6 @@ def run_model(args):
             net.load_state_dict(checkpoint['net_state_dict'])
             net.eval()
             with torch.no_grad():
-                pdb.set_trace()
                 left, right, test_labels = get_test_neigh(dl, target_rel_id)
                 target_matrix =  make_target_matrix_test(target_rel, left, right,
                                                       test_labels, device)

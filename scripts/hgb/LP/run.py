@@ -348,7 +348,7 @@ def get_hyperparams(argv):
                         '4 - only term features (id vec for others);' + 
                         '5 - only term features (zero vec for others).')
     ap.add_argument('--epoch', type=int, default=300, help='Number of epochs.')
-    ap.add_argument('--batch_size', type=int, default=8192)
+    ap.add_argument('--batch_size', type=int, default=100000)
     ap.add_argument('--patience', type=int, default=30, help='Patience.')
     ap.add_argument('--repeat', type=int, default=1, help='Repeat the training \
                     and testing for N times. Default is 1.')

@@ -118,7 +118,7 @@ class SparseMatrix:
         indices_out = indices_and_values_sorted[[0,1],:]
         values_out = indices_and_values_sorted[2:, :]
         shape_out = (self.m, self.n, self.n_channels)
-        return SparseMatrix(indices_out, values_out, shape_out, indices_diag=self.indices_diag, is_set=self.is_set)
+        return SparseMatrix(indices_out, values_out, shape_out, is_set=self.is_set)
 
     def calc_indices_diag(self):
         '''
@@ -155,7 +155,8 @@ class SparseMatrix:
         values_intersection = self.values[:, indices_in_intersection]
 
         # Can take these values then add them to target sparse matrix and coalesce
-        return SparseMatrix(values_intersection, indices_in_intersection, self.shape(), self.indices_diag, self.is_set)
+        return SparseMatrix(values_intersection, indices_in_intersection,
+                            self.shape(), is_set=self.is_set)
 
     def to(self, *args, **kwargs):
         self.indices = self.indices.to(*args, **kwargs)
@@ -272,6 +273,7 @@ class SparseMatrix:
         '''
         self.indices, self.values = torch_sparse.coalesce(self.indices, self.values,
                                                           self.n, self.m)
+        self.indices_diag = self.calc_indices_diag()
         return self
         
     def coalesce(self):

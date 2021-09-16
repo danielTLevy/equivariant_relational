@@ -262,20 +262,20 @@ def run_model(args):
                                                          valid_neg_head, valid_neg_tail,
                                                          device)
                     if use_equiv:
-                        valid_matrix, valid_mask = combine_matrices(valid_matrix, data_target[target_rel_id])
-                        data_target[target_rel_id] = valid_matrix
+                        valid_combined_matrix, valid_mask = combine_matrices(valid_matrix, train_matrix)
+                        data_target[target_rel_id] = valid_combined_matrix
                         idx_id_val, idx_trans_val = data_target.calculate_indices()
                         logits_full = net(data, indices_identity, indices_transpose,
                                    data_embedding, data_target, idx_id_val, idx_trans_val)
                         logits = logits_full[valid_mask]
                         logp = torch.sigmoid(logits)
-                        labels_val = data_target[target_rel_id].values[valid_mask].squeeze()
+                        labels_val = valid_combined_matrix.values[valid_mask].squeeze()
                     else:
                         data_target[target_rel_id] = valid_matrix
                         logits = net(data, indices_identity, indices_transpose,
                                      data_embedding, data_target)
                         logp = torch.sigmoid(logits)
-                        labels_val = data_target[target_rel_id].values.squeeze()
+                        labels_val = valid_matrix.values.squeeze()
                     val_loss = loss_func(logp, labels_val)
                     left = data_target[target_rel_id].indices[0].cpu().numpy()
                     right = data_target[target_rel_id].indices[1].cpu().numpy()

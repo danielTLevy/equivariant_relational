@@ -270,15 +270,17 @@ def run_model(args):
                         logits = logits_full[valid_mask]
                         logp = torch.sigmoid(logits)
                         labels_val = valid_combined_matrix.values[valid_mask].squeeze()
+                        left = data_target[target_rel_id].indices[0, valid_mask].cpu().numpy()
+                        right = data_target[target_rel_id].indices[1, valid_mask].cpu().numpy()
                     else:
                         data_target[target_rel_id] = valid_matrix
                         logits = net(data, indices_identity, indices_transpose,
                                      data_embedding, data_target)
                         logp = torch.sigmoid(logits)
                         labels_val = valid_matrix.values.squeeze()
+                        left = data_target[target_rel_id].indices[0].cpu().numpy()
+                        right = data_target[target_rel_id].indices[1].cpu().numpy()
                     val_loss = loss_func(logp, labels_val)
-                    left = data_target[target_rel_id].indices[0].cpu().numpy()
-                    right = data_target[target_rel_id].indices[1].cpu().numpy()
                     edge_list = np.concatenate([left.reshape((1,-1)), right.reshape((1,-1))], axis=0)
                     wandb_log.update({'val_loss': val_loss.item()})
                     res = dl.evaluate(edge_list, logp.cpu().numpy(), labels_val.cpu().numpy())

@@ -108,14 +108,32 @@ def make_target_matrix(relation, pos_head, pos_tail, neg_head, neg_tail, device)
     
     return data_target
 
+def combine_matrices(matrix_a, matrix_b):
+    '''
+    Given Matrix A (target) and Matrix B (supplement), would like to get a
+    matrix that includes the indices of both matrix A and B, but only the
+    values of Matrix A. Additionally, return a mask indicating which indices
+    corresponding to Matrix A.
+    '''
+    # We only want indices from matrix_b, not values
+    matrix_b_zero = matrix_b.clone()
+    matrix_b_zero.values.zero_()
+    matrix_combined = matrix_a + matrix_b_zero
+
+    # To determine indices corresponding to matrix_a, make binary matrix
+    matrix_a_ones = matrix_a.clone()
+    matrix_a_ones.values.zero_()
+    matrix_a_ones.values += 1
+    mask_matrix_combined = matrix_a_ones + matrix_b_zero
+    matrix_a_mask = mask_matrix_combined.values[:,0].nonzero().squeeze()
+    return matrix_combined, matrix_a_mask
+
 def make_combined_data(schema, input_data, target_rel_id, target_matrix):
     '''
     given dataset and a single target matrix for predictions, produce new dataset
     with indices combining original dataset with new target matrix's indices
     '''
-    combined_data = SparseMatrixData(schema)
-    for rel in schema.relatoins:
-        combined_data[rel.id] = input_data[rel.id].clone()
+    combined_data = input_data.clone()
     combined_data[target_rel_id] += target_matrix
     return combined_data
 
@@ -207,10 +225,11 @@ def run_model(args):
 
             # training
             net.train()
-            data_target[target_rel_id] =  make_target_matrix(target_rel,
+            train_matrix = make_target_matrix(target_rel,
                                               train_pos_head, train_pos_tail,
                                               train_neg_head, train_neg_tail,
                                               device)
+            data_target[target_rel_id] = train_matrix
 
             if use_equiv:
                 idx_id_tgt, idx_trans_tgt = data_target.calculate_indices()
@@ -231,22 +250,26 @@ def run_model(args):
             progress.set_description(f"Epoch {epoch}")
             progress.set_postfix(loss=train_loss.item())
             wandb_log = {'Train Loss': train_loss.item(), 'epoch':epoch}
-    
+
             # validation
             net.eval()
             if epoch % args.val_every == 0:
                 with torch.no_grad():
                     net.eval()
                     valid_neg_head, valid_neg_tail = get_valid_neg(dl, target_rel_id)
-                    data_target[target_rel_id] = make_target_matrix(target_rel,
+                    valid_matrix = make_target_matrix(target_rel,
                                                          valid_pos_head, valid_pos_tail,
                                                          valid_neg_head, valid_neg_tail,
                                                          device)
                     if use_equiv:
+                        valid_matrix, valid_mask = combine_matrices(valid_matrix, data_target[target_rel_id])
+                        data_target[target_rel_id] = valid_matrix
                         idx_id_val, idx_trans_val = data_target.calculate_indices()
-                        logits = net(data, indices_identity, indices_transpose,
+                        logits_full = net(data, indices_identity, indices_transpose,
                                    data_embedding, data_target, idx_id_val, idx_trans_val)
+                        logits = logits_full[valid_mask]
                     else:
+                        data_target[target_rel_id] = valid_matrix
                         logits = net(data, indices_identity, indices_transpose,
                                      data_embedding, data_target)
                     logp = torch.sigmoid(logits)
@@ -297,7 +320,7 @@ def run_model(args):
                 if use_equiv:
                     idx_id_tst, idx_trans_tst, = data_target.calculate_indices()
                     logits = net(data, indices_identity, indices_transpose,
-                                   data_embedding, data_target, idx_id_tst, idx_trans_val)
+                                   data_embedding, data_target, idx_id_tst, idx_trans_tst)
                 else:
                     logits = net(data, indices_identity, indices_transpose,
                                  data_embedding, data_target)
@@ -323,7 +346,7 @@ def run_model(args):
                 if use_equiv:
                     idx_id_tst, idx_trans_tst = data_target.calculate_indices()
                     logits = net(data, indices_identity, indices_transpose,
-                                   data_embedding, data_target, idx_id_tst, idx_trans_val)
+                                   data_embedding, data_target, idx_id_tst, idx_trans_tst)
                 else:
                     logits = net(data, indices_identity, indices_transpose,
                                  data_embedding, data_target)
@@ -392,7 +415,7 @@ def get_hyperparams(argv):
     ap.add_argument('--output', type=str)
     ap.add_argument('--run', type=int, default=1)
     ap.add_argument('--evaluate', type=int, default=1)
-    ap.add_argument('--decoder', type=str, default='broadcast')
+    ap.add_argument('--decoder', type=str, default='equiv')
     ap.set_defaults(wandb_log_run=False)
     args, argv = ap.parse_known_args(argv)
     if args.output == None:

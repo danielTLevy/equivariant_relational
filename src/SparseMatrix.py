@@ -193,6 +193,8 @@ class SparseMatrix:
             return self.add_sparse_matrix(other)
         elif type(other) == torch.nn.parameter.Parameter or type(other) == torch.Tensor:
             return self.add_tensor(other)
+        else:
+            raise NotImplementedError()
 
     def __add__(self, other):
         return self.add(other)

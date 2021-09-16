@@ -261,7 +261,7 @@ def run_model(args):
                                                          valid_pos_head, valid_pos_tail,
                                                          valid_neg_head, valid_neg_tail,
                                                          device).coalesce()
-                    labels_val = valid_matrix.values
+                    labels_val = valid_matrix.values.squeeze()
                     left = valid_matrix.indices[0].cpu().numpy()
                     right = valid_matrix.indices[1].cpu().numpy()
 

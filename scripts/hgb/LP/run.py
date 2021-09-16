@@ -268,12 +268,14 @@ def run_model(args):
                         logits_full = net(data, indices_identity, indices_transpose,
                                    data_embedding, data_target, idx_id_val, idx_trans_val)
                         logits = logits_full[valid_mask]
+                        logp = torch.sigmoid(logits)
+                        labels_val = data_target[target_rel_id].values[valid_mask].squeeze()
                     else:
                         data_target[target_rel_id] = valid_matrix
                         logits = net(data, indices_identity, indices_transpose,
                                      data_embedding, data_target)
-                    logp = torch.sigmoid(logits)
-                    labels_val = data_target[target_rel_id].values[:,0]
+                        logp = torch.sigmoid(logits)
+                        labels_val = data_target[target_rel_id].values.squeeze()
                     val_loss = loss_func(logp, labels_val)
                     left = data_target[target_rel_id].indices[0].cpu().numpy()
                     right = data_target[target_rel_id].indices[1].cpu().numpy()

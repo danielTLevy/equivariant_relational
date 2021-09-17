@@ -105,7 +105,7 @@ def make_target_matrix(relation, pos_head, pos_tail, neg_head, neg_tail, device)
              relation.entities[1].n_instances, 1)
     data_target = SparseMatrix(indices=indices, values=values, shape=shape)
     data_target = data_target.to(device).coalesce_()
-    
+
     return data_target
 
 def combine_matrices(matrix_a, matrix_b):
@@ -168,14 +168,7 @@ def run_model(args):
         data_embedding = SparseMatrixData.make_entity_embeddings(target_ents,
                                                                  args.embedding_dim)
         data_embedding.to(device)
-        if use_equiv:
-            # Target is same as input
-            target_schema = schema
-            data_target = data.clone()
-        else:
-            # Target is just target relation
-            target_schema = DataSchema(schema.entities, [target_rel])
-            data_target = SparseMatrixData(target_schema)
+
 
         train_pos, valid_pos = dl.get_train_valid_pos()#edge_types=[target_rel_id])
         train_val_pos = get_train_valid_pos(dl, target_rel_id)
@@ -219,6 +212,16 @@ def run_model(args):
         loss_func = nn.BCELoss()
         val_roc_auc_best = 0
         for epoch in progress:
+
+            if use_equiv:
+                # Target is same as input
+                target_schema = schema
+                data_target = data.clone()
+            else:
+                # Target is just target relation
+                target_schema = DataSchema(schema.entities, [target_rel])
+                data_target = SparseMatrixData(target_schema)
+                
             train_neg_head, train_neg_tail = get_train_neg(dl, target_rel_id)
             train_idx = np.arange(len(train_pos_head))
             np.random.shuffle(train_idx)
@@ -267,6 +270,7 @@ def run_model(args):
 
                     if use_equiv:
                         valid_combined_matrix, valid_mask = combine_matrices(valid_matrix, train_matrix)
+                        data_target.zero_()
                         data_target[target_rel_id] = valid_combined_matrix
                         idx_id_val, idx_trans_val = data_target.calculate_indices()
                         logits_full = net(data, indices_identity, indices_transpose,
@@ -365,10 +369,11 @@ def run_model(args):
         res_random[k] /= total
     print(res_2hop)
     print(res_random)
-    wandb.summary["2hop_test_roc_auc"] = res_2hop['roc_auc']
-    wandb.summary["2hop_test_mrr"] = res_2hop['MRR']
-    wandb.summary["rand_test_roc_auc"] = res_random['roc_auc']
-    wandb.summary["rand_test_mrr"] = res_random['MRR']
+    if args.wandb_log_run:
+        wandb.summary["2hop_test_roc_auc"] = res_2hop['roc_auc']
+        wandb.summary["2hop_test_mrr"] = res_2hop['MRR']
+        wandb.summary["rand_test_roc_auc"] = res_random['roc_auc']
+        wandb.summary["rand_test_mrr"] = res_random['MRR']
 
 #%%
 def get_hyperparams(argv):

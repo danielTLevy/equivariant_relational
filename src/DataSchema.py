@@ -275,4 +275,8 @@ class SparseMatrixData(Data):
                 indices_identity[r_i, r_j] = idx_id_ij
                 indices_transpose[r_i, r_j] = idx_trans_ij
         return indices_identity, indices_transpose
-    
+
+    def zero_(self):
+        for rel in self.schema.relations:
+            self.rel_tensors[rel.id].zero_()
+        return self

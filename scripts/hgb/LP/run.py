@@ -344,6 +344,8 @@ def run_model(args):
                     logits = net(data, indices_identity, indices_transpose,
                                  data_embedding, data_target)
                 pred = torch.sigmoid(logits).cpu().numpy()
+                left = left.cpu().numpy()
+                right = right.cpu().numpy()
                 edge_list = np.concatenate([left.reshape((1,-1)), right.reshape((1,-1))], axis=0)
                 test_neigh = np.vstack((left,right)).tolist()
                 if args.wandb_log_run:
@@ -371,6 +373,8 @@ def run_model(args):
                     logits = net(data, indices_identity, indices_transpose,
                                  data_embedding, data_target)
                 pred = torch.sigmoid(logits).cpu().numpy()
+                left = left.cpu().numpy()
+                right = right.cpu().numpy()
                 edge_list = np.concatenate([left.reshape((1,-1)), right.reshape((1,-1))], axis=0)
                 res = dl.evaluate(edge_list, pred, test_labels)
                 print(res)

@@ -355,7 +355,7 @@ def run_model(args):
                     file_path = f"test_out/{args.dataset}_{args.run}.txt"
                 dl.gen_file_for_evaluate(test_neigh, pred, target_rel_id,
                                          file_path=file_path)
-                res = dl.evaluate(edge_list, pred, test_labels)
+                res = dl.evaluate(edge_list, pred, test_labels.cpu().numpy())
                 print(res)
                 for k in res:
                     res_2hop[k] += res[k]
@@ -376,7 +376,7 @@ def run_model(args):
                 left = left.cpu().numpy()
                 right = right.cpu().numpy()
                 edge_list = np.concatenate([left.reshape((1,-1)), right.reshape((1,-1))], axis=0)
-                res = dl.evaluate(edge_list, pred, test_labels)
+                res = dl.evaluate(edge_list, pred, test_labels.cpu().numpy())
                 print(res)
 
                 for k in res:

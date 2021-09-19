@@ -269,21 +269,21 @@ class SparseMatrix:
         return SparseMatrix(indices_out, values_out, shape_out, self.indices_diag, self.is_set)
 
     
-    def coalesce_(self):
+    def coalesce_(self, op='add'):
         '''
         Add all duplicated entries together
         '''
         self.indices, self.values = torch_sparse.coalesce(self.indices, self.values,
-                                                          self.n, self.m)
+                                                          self.n, self.m, op)
         self.indices_diag = self.calc_indices_diag()
         return self
         
-    def coalesce(self):
+    def coalesce(self, op='add'):
         '''
         Add all duplicated entries together
         '''
         indices, values = torch_sparse.coalesce(self.indices, self.values,
-                                                          self.n, self.m)
+                                                          self.n, self.m, op)
         return SparseMatrix(indices, values, self.shape(), is_set=self.is_set)
 
 

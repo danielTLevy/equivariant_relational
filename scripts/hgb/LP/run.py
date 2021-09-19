@@ -128,6 +128,13 @@ def combine_matrices(matrix_a, matrix_b):
     matrix_a_mask = mask_matrix_combined.values[:,0].nonzero().squeeze()
     return matrix_combined, matrix_a_mask
 
+def coalesce_matrix(matrix):
+    coalesced_matrix = matrix.coalesce(op='mean')
+    left = coalesced_matrix.indices[0,:]
+    right = coalesced_matrix.indices[1,:]
+    labels = coalesced_matrix.values.squeeze()
+    return coalesced_matrix, left, right, labels
+
 def make_combined_data(schema, input_data, target_rel_id, target_matrix):
     '''
     given dataset and a single target matrix for predictions, produce new dataset
@@ -143,7 +150,7 @@ def make_target_matrix_test(relation, left, right, labels, device):
     values = torch.FloatTensor(labels).unsqueeze(1)
     shape = (relation.entities[0].n_instances,
              relation.entities[1].n_instances, 1)
-    return SparseMatrix(indices=indices, values=values, shape=shape).to(device)#.coalesce_()
+    return SparseMatrix(indices=indices, values=values, shape=shape).to(device)
 
 #%%
 def run_model(args):
@@ -221,7 +228,7 @@ def run_model(args):
                 # Target is just target relation
                 target_schema = DataSchema(schema.entities, [target_rel])
                 data_target = SparseMatrixData(target_schema)
-                
+
             train_neg_head, train_neg_tail = get_train_neg(dl, target_rel_id)
             train_idx = np.arange(len(train_pos_head))
             np.random.shuffle(train_idx)
@@ -263,10 +270,10 @@ def run_model(args):
                     valid_matrix = make_target_matrix(target_rel,
                                                          valid_pos_head, valid_pos_tail,
                                                          valid_neg_head, valid_neg_tail,
-                                                         device).coalesce()
-                    labels_val = valid_matrix.values.squeeze()
-                    left = valid_matrix.indices[0].cpu().numpy()
-                    right = valid_matrix.indices[1].cpu().numpy()
+                                                         device)
+                    valid_matrix, left, right, labels_val = coalesce_matrix(valid_matrix)
+                    left = left.cpu().numpy()
+                    right = right.cpu().numpy()
 
                     if use_equiv:
                         valid_combined_matrix, valid_mask = combine_matrices(valid_matrix, train_matrix)
@@ -317,10 +324,17 @@ def run_model(args):
             checkpoint = torch.load(checkpoint_path)
             net.load_state_dict(checkpoint['net_state_dict'])
             net.eval()
+            if use_equiv:
+                # Target is same as input
+                data_target = data.clone()
+            else:
+                # Target is just target relation
+                data_target = SparseMatrixData(target_schema)
             with torch.no_grad():
                 left, right, test_labels = get_test_neigh(dl, target_rel_id)
                 target_matrix =  make_target_matrix_test(target_rel, left, right,
                                                       test_labels, device)
+                target_matrix, left, right, test_labels = coalesce_matrix(target_matrix)
                 data_target[target_rel_id] = target_matrix
                 if use_equiv:
                     idx_id_tst, idx_trans_tst, = data_target.calculate_indices()
@@ -347,6 +361,7 @@ def run_model(args):
                 left, right, test_labels = get_test_neigh(dl, target_rel_id, 'w_random')
                 target_matrix =  make_target_matrix_test(target_rel, left, right,
                                                       test_labels, device)
+                target_matrix, left, right, test_labels = coalesce_matrix(target_matrix)
                 data_target[target_rel_id] = target_matrix
                 if use_equiv:
                     idx_id_tst, idx_trans_tst = data_target.calculate_indices()

@@ -154,10 +154,12 @@ def make_target_matrix_test(relation, left, right, labels, device):
 
 #%%
 def run_model(args):
-    schema, schema_out, data_original, dl = load_data(args.dataset)
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-
     use_equiv = args.decoder == 'equiv'
+
+    # Collect data and schema
+    schema, schema_out, data_original, dl = load_data(args.dataset)
+
 
     data, in_dims = select_features(data_original, schema, args.feats_type)
     data = data.to(device)
@@ -518,11 +520,5 @@ if __name__ == '__main__':
     argv = sys.argv[1:]
     args = get_hyperparams(argv)
     set_seed(args.seed)
-    #%%
-    args.dataset= 'PubMed'
-    args.width = 16
-    args.depth = 2
-    args.epoch = 1
-    args.val_every = 1
     #%%
     run_model(args)

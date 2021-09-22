@@ -267,18 +267,18 @@ def run_model(args):
                 with torch.no_grad():
                     net.eval()
                     valid_neg_head, valid_neg_tail = get_valid_neg(dl, target_rel_id)
-                    valid_matrix = make_target_matrix(target_rel,
+                    valid_matrix_full = make_target_matrix(target_rel,
                                                          valid_pos_head, valid_pos_tail,
                                                          valid_neg_head, valid_neg_tail,
                                                          device)
-                    valid_matrix, left, right, labels_val = coalesce_matrix(valid_matrix)
+                    valid_matrix, left, right, labels_val = coalesce_matrix(valid_matrix_full)
                     left = left.cpu().numpy()
                     right = right.cpu().numpy()
 
                     if use_equiv:
                         valid_combined_matrix, valid_mask = combine_matrices(valid_matrix, train_matrix)
-                        data_target.zero_()
                         data_target[target_rel_id] = valid_combined_matrix
+                        data_target.zero_()
                         idx_id_val, idx_trans_val = data_target.calculate_indices()
                         logits_full = net(data, indices_identity, indices_transpose,
                                    data_embedding, data_target, idx_id_val, idx_trans_val)
@@ -331,16 +331,21 @@ def run_model(args):
                 # Target is just target relation
                 data_target = SparseMatrixData(target_schema)
             with torch.no_grad():
-                left, right, test_labels = get_test_neigh(dl, target_rel_id)
-                target_matrix =  make_target_matrix_test(target_rel, left, right,
-                                                      test_labels, device)
-                target_matrix, left, right, test_labels = coalesce_matrix(target_matrix)
-                data_target[target_rel_id] = target_matrix
+                left_full, right_full, test_labels_full = get_test_neigh(dl, target_rel_id)
+                test_matrix_full =  make_target_matrix_test(target_rel, left_full, right_full,
+                                                      test_labels_full, device)
+                test_matrix, left, right, test_labels = coalesce_matrix(test_matrix_full)
+
                 if use_equiv:
-                    idx_id_tst, idx_trans_tst, = data_target.calculate_indices()
-                    logits = net(data, indices_identity, indices_transpose,
-                                   data_embedding, data_target, idx_id_tst, idx_trans_tst)
+                    test_combined_matrix, test_mask = combine_matrices(test_matrix, train_matrix)
+                    data_target[target_rel_id] = test_combined_matrix
+                    data_target.zero_()
+                    idx_id_tst, idx_trans_tst = data_target.calculate_indices()
+                    logits_full = net(data, indices_identity, indices_transpose,
+                               data_embedding, data_target, idx_id_tst, idx_trans_tst)
+                    logits = logits_full[test_mask]
                 else:
+                    data_target[target_rel_id] = valid_matrix
                     logits = net(data, indices_identity, indices_transpose,
                                  data_embedding, data_target)
                 pred = torch.sigmoid(logits).cpu().numpy()
@@ -360,16 +365,21 @@ def run_model(args):
                 for k in res:
                     res_2hop[k] += res[k]
             with torch.no_grad():
-                left, right, test_labels = get_test_neigh(dl, target_rel_id, 'w_random')
-                target_matrix =  make_target_matrix_test(target_rel, left, right,
-                                                      test_labels, device)
-                target_matrix, left, right, test_labels = coalesce_matrix(target_matrix)
-                data_target[target_rel_id] = target_matrix
+                left_full, right_full, test_labels_full = get_test_neigh(dl, target_rel_id, 'w_random')
+                test_matrix_full =  make_target_matrix_test(target_rel, left_full, right_full,
+                                                      test_labels_full, device)
+                test_matrix, left, right, test_labels = coalesce_matrix(test_matrix_full)
+
                 if use_equiv:
+                    test_combined_matrix, test_mask = combine_matrices(test_matrix, train_matrix)
+                    data_target[target_rel_id] = test_combined_matrix
+                    data_target.zero_()
                     idx_id_tst, idx_trans_tst = data_target.calculate_indices()
-                    logits = net(data, indices_identity, indices_transpose,
-                                   data_embedding, data_target, idx_id_tst, idx_trans_tst)
+                    logits_full = net(data, indices_identity, indices_transpose,
+                               data_embedding, data_target, idx_id_tst, idx_trans_tst)
+                    logits = logits_full[test_mask]
                 else:
+                    data_target[target_rel_id] = valid_matrix
                     logits = net(data, indices_identity, indices_transpose,
                                  data_embedding, data_target)
                 pred = torch.sigmoid(logits).cpu().numpy()
@@ -471,3 +481,5 @@ if __name__ == '__main__':
     set_seed(args.seed)
     #%%
     run_model(args)
+
+

@@ -213,11 +213,9 @@ class EquivLinkPredictor(nn.Module):
             right = embeddings[right_id].values[right_target_indices]
             return self.decoder(left, right, self.output_rel.id)
         elif self.decode == 'broadcast':
-            data_output = self.decoder(embeddings, data_target)
-            return data_output[self.output_rel.id].values.squeeze()
+            return self.decoder(embeddings, data_target)
         elif self.decode == 'equiv':
-            data_output = self.decoder(embeddings, idx_id_out, idx_trans_out, data_target)
-            return data_output[self.output_rel.id].values.squeeze()
+            return self.decoder(embeddings, idx_id_out, idx_trans_out, data_target)
 
 class EquivHGAE(nn.Module):
     '''

@@ -352,7 +352,6 @@ def run_model(args):
         res_random = defaultdict(float)
         total = len(list(dl.links_test['data'].keys()))
         for target_rel in target_rels:
-            target_rel_id = target_rel.id
             checkpoint = torch.load(checkpoint_path)
             net.load_state_dict(checkpoint['net_state_dict'])
             net.eval()
@@ -378,7 +377,7 @@ def run_model(args):
                     logits_full = data_out[target_rel.id].values.squeeze()
                     logits = logits_full[test_mask]
                 else:
-                    data_target[target_rel.id] = valid_matrix
+                    data_target[target_rel.id] = test_matrix
                     logits = net(data, indices_identity, indices_transpose,
                                  data_embedding, data_target)
                 pred = torch.sigmoid(logits).cpu().numpy()
@@ -413,7 +412,7 @@ def run_model(args):
                     logits_full = data_out[target_rel.id].values.squeeze()
                     logits = logits_full[test_mask]
                 else:
-                    data_target[target_rel.id] = valid_matrix
+                    data_target[target_rel.id] = test_matrix
                     logits = net(data, indices_identity, indices_transpose,
                                  data_embedding, data_target)
                 pred = torch.sigmoid(logits).cpu().numpy()
@@ -433,12 +432,6 @@ def run_model(args):
     print(res_2hop)
     print(res_random)
 
-    for k in res_2hop:
-        res_2hop[k] /= total
-    for k in res_random:
-        res_random[k] /= total
-    print(res_2hop)
-    print(res_random)
     if args.wandb_log_run:
         wandb.summary["2hop_test_roc_auc"] = res_2hop['roc_auc']
         wandb.summary["2hop_test_mrr"] = res_2hop['MRR']

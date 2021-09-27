@@ -151,6 +151,15 @@ def run_model(args):
             entity='danieltlevy')
         wandb.watch(net, log='all', log_freq=args.wandb_log_param_freq)
     print(args)
+    if args.wandb_log_run:
+        checkpoint_path = f"checkpoint/checkpoint_{wandb.run.name}.pt"
+    else:
+        if args.checkpoint_path == "":
+            checkpoint_path = "checkpoint/checkpoint_" + args.dataset + \
+            str(args.run) + ".pt"
+        else:
+            checkpoint_path = args.checkpoint_path
+    print("Checkpoint Path: " + checkpoint_path)
     progress = tqdm(range(args.epoch), desc="Epoch 0", position=0, leave=True)
     # training loop
     net.train()

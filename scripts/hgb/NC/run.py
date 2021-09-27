@@ -104,13 +104,12 @@ def pred_fcn(values, multi_label=False):
         values.cpu().numpy().argmax(axis=1)
 #%%
 def run_model(args):
-    feats_type = args.feats_type
-    loaded = load_data(args.dataset)
-    schema, schema_out, data, data_target, labels, train_val_test_idx, dl = loaded
-    target_entity_id = 0 # TODO: figure out if this is true for all datasets
-    target_entity = schema.entities[target_entity_id]
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
+
+    schema, schema_out, data, data_target, labels, train_val_test_idx, dl = load_data(args.dataset)
+    target_entity_id = 0 # True for all current NC datasets
+    target_entity = schema.entities[target_entity_id]
     data, in_dims = select_features(data, schema, args.feats_type, target_entity_id)
     if args.multi_label:
         labels = torch.FloatTensor(labels).to(device)
@@ -127,133 +126,130 @@ def run_model(args):
     indices_identity, indices_transpose = data.calculate_indices()
     data_target = data_target.to(device)
 
-    for _ in range(args.repeat):
-        num_classes = dl.labels_train['num_classes']
-        net = EquivHGNet(schema, in_dims,
-                            layers = args.layers,
-                            in_fc_layer=args.in_fc_layer,
-                            fc_layers=args.fc_layers,
-                            activation=eval('nn.%s()' % args.act_fn),
-                            final_activation = nn.Identity(),
-                            target_entities=[target_entity],
-                            dropout=args.dropout,
-                            output_dim=num_classes,
-                            norm=args.norm,
-                            pool_op=args.pool_op,
-                            norm_affine=args.norm_affine)
+    num_classes = dl.labels_train['num_classes']
+    net = EquivHGNet(schema, in_dims,
+                        layers = args.layers,
+                        in_fc_layer=args.in_fc_layer,
+                        fc_layers=args.fc_layers,
+                        activation=eval('nn.%s()' % args.act_fn),
+                        final_activation = nn.Identity(),
+                        target_entities=[target_entity],
+                        dropout=args.dropout,
+                        output_dim=num_classes,
+                        norm=args.norm,
+                        pool_op=args.pool_op,
+                        norm_affine=args.norm_affine)
 
-        net.to(device)
-        optimizer = torch.optim.Adam(net.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    net.to(device)
+    optimizer = torch.optim.Adam(net.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
 
-        if args.wandb_log_run:
-            wandb.init(config=args,
-                settings=wandb.Settings(start_method='fork'),
-                project="EquivariantHGN",
-                entity='danieltlevy')
-            wandb.watch(net, log='all', log_freq=args.wandb_log_param_freq)
-        print(args)
-        progress = tqdm(range(args.epoch), desc="Epoch 0", position=0, leave=True)
-        # training loop
+    if args.wandb_log_run:
+        wandb.init(config=args,
+            settings=wandb.Settings(start_method='fork'),
+            project="EquivariantHGN",
+            entity='danieltlevy')
+        wandb.watch(net, log='all', log_freq=args.wandb_log_param_freq)
+    print(args)
+    progress = tqdm(range(args.epoch), desc="Epoch 0", position=0, leave=True)
+    # training loop
+    net.train()
+    val_micro_best = 0
+    for epoch in progress:
+        # training
         net.train()
-        val_micro_best = 0
-        val_macro_best = 0
-        val_loss_best = 1000
-        for epoch in progress:
-            # training
-            net.train()
-            optimizer.zero_grad()
+        optimizer.zero_grad()
+        logits = net(data, indices_identity, indices_transpose,
+                     data_target).squeeze()
+        logp = regr_fcn(logits, args.multi_label)
+        train_loss = loss_fcn(logp[train_idx], labels[train_idx], args.multi_label)
+        train_loss.backward()
+        optimizer.step()
+        if args.multi_label:
+            train_micro, train_macro = f1_scores_multi(logits[train_idx],
+                                                 dl.labels_train['data'][train_idx])
+        else:
+            train_micro, train_macro = f1_scores(logits[train_idx],
+                                                 labels[train_idx])
+        with torch.no_grad():
+            progress.set_description(f"Epoch {epoch}")
+            progress.set_postfix(loss=train_loss.item(), micr=train_micro)
+            wandb_log = {'Train Loss': train_loss.item(),
+                         'Train Micro': train_micro,
+                         'Train Macro': train_macro}
+            if epoch % args.val_every == 0:
+                # validation
+                net.eval()
+                logits = net(data, indices_identity, indices_transpose, data_target).squeeze()
+                logp = regr_fcn(logits, args.multi_label)
+                val_loss = loss_fcn(logp[val_idx], labels[val_idx], args.multi_label)
+                if args.multi_label:
+                    val_micro, val_macro = f1_scores_multi(logits[val_idx],
+                                                         dl.labels_train['data'][val_idx])
+                else:
+                    val_micro, val_macro = f1_scores(logits[val_idx],
+                                                         labels[val_idx])
+                print("\nVal Loss: {:.3f} Val Micro-F1: {:.3f} \
+Val Macro-F1: {:.3f}".format(val_loss, val_micro, val_macro))
+                wandb_log.update({'Val Loss': val_loss.item(),
+                                  'Val Micro-F1': val_micro, 'Val Macro-F1': val_macro})
+                if val_micro > val_micro_best:
+
+                    val_micro_best = val_micro
+                    print("New best, saving")
+                    torch.save({
+                        'epoch': epoch,
+                        'net_state_dict': net.state_dict(),
+                        'optimizer_state_dict': optimizer.state_dict(),
+                        'train_loss': train_loss.item(),
+                        'train_micro': train_micro,
+                        'train_macro': train_macro,
+                        'val_loss': val_loss.item(),
+                        'val_micro': val_micro,
+                        'val_macro': val_macro
+                        }, args.checkpoint_path)
+                    if args.wandb_log_run:
+                        wandb.summary["val_micro_best"] = val_micro
+                        wandb.summary["val_macro_best"] = val_macro
+                        wandb.summary["val_loss_best"] = val_loss.item()
+                        wandb.summary["epoch_best"] = epoch
+                        wandb.summary["train_loss_best"] = train_loss.item()
+                        wandb.summary['train_micro_best'] = train_micro,
+                        wandb.summary['train_macro_best'] = train_macro,
+                        wandb.save(args.checkpoint_path)
+
+            if epoch % args.wandb_log_loss_freq == 0:
+                if args.wandb_log_run:
+                    wandb.log(wandb_log, step=epoch)
+
+
+    # testing with evaluate_results_nc
+    if args.evaluate:
+        run_name = wandb.run.name
+        checkpoint = torch.load(args.checkpoint_path)
+        net.load_state_dict(checkpoint['net_state_dict'])
+        net.eval()
+        test_logits = []
+        with torch.no_grad():
             logits = net(data, indices_identity, indices_transpose,
                          data_target).squeeze()
-            logp = regr_fcn(logits, args.multi_label)
-            train_loss = loss_fcn(logp[train_idx], labels[train_idx], args.multi_label)
-            train_loss.backward()
-            optimizer.step()
+            test_logits = logits[test_idx]
             if args.multi_label:
-                train_micro, train_macro = f1_scores_multi(logits[train_idx],
-                                                     dl.labels_train['data'][train_idx])
+                pred = (test_logits.cpu().numpy()>0).astype(int)
             else:
-                train_micro, train_macro = f1_scores(logits[train_idx],
-                                                     labels[train_idx])
-            with torch.no_grad():
-                progress.set_description(f"Epoch {epoch}")
-                progress.set_postfix(loss=train_loss.item(), micr=train_micro)
-                wandb_log = {'Train Loss': train_loss.item(),
-                             'Train Micro': train_micro,
-                             'Train Macro': train_macro}
-                if epoch % args.val_every == 0:
-                    # validation
-                    net.eval()
-                    logits = net(data, indices_identity, indices_transpose, data_target).squeeze()
-                    logp = regr_fcn(logits, args.multi_label)
-                    val_loss = loss_fcn(logp[val_idx], labels[val_idx], args.multi_label)
-                    if args.multi_label:
-                        val_micro, val_macro = f1_scores_multi(logits[val_idx],
-                                                             dl.labels_train['data'][val_idx])
-                    else:
-                        val_micro, val_macro = f1_scores(logits[val_idx],
-                                                             labels[val_idx])
-                    print("\nVal Loss: {:.3f} Val Micro-F1: {:.3f} \
-    Val Macro-F1: {:.3f}".format(val_loss, val_micro, val_macro))
-                    wandb_log.update({'Val Loss': val_loss.item(),
-                                      'Val Micro-F1': val_micro, 'Val Macro-F1': val_macro})
-                    if val_micro > val_micro_best:
-
-                        val_micro_best = val_micro
-                        print("New best, saving")
-                        torch.save({
-                            'epoch': epoch,
-                            'net_state_dict': net.state_dict(),
-                            'optimizer_state_dict': optimizer.state_dict(),
-                            'train_loss': train_loss.item(),
-                            'train_micro': train_micro,
-                            'train_macro': train_macro,
-                            'val_loss': val_loss.item(),
-                            'val_micro': val_micro,
-                            'val_macro': val_macro
-                            }, args.checkpoint_path)
-                        if args.wandb_log_run:
-                            wandb.summary["val_micro_best"] = val_micro
-                            wandb.summary["val_macro_best"] = val_macro
-                            wandb.summary["val_loss_best"] = val_loss.item()
-                            wandb.summary["epoch_best"] = epoch
-                            wandb.summary["train_loss_best"] = train_loss.item()
-                            wandb.summary['train_micro_best'] = train_micro,
-                            wandb.summary['train_macro_best'] = train_macro,
-                            wandb.save(args.checkpoint_path)
-
-                if epoch % args.wandb_log_loss_freq == 0:
-                    if args.wandb_log_run:
-                        wandb.log(wandb_log, step=epoch)
-
-
-        # testing with evaluate_results_nc
-        if args.evaluate:
-            run_name = wandb.run.name
-            checkpoint = torch.load(args.checkpoint_path)
-            net.load_state_dict(checkpoint['net_state_dict'])
-            net.eval()
-            test_logits = []
-            with torch.no_grad():
-                logits = net(data, indices_identity, indices_transpose,
-                             data_target).squeeze()
-                test_logits = logits[test_idx]
-                if args.multi_label:
-                    pred = (test_logits.cpu().numpy()>0).astype(int)
+                pred = test_logits.cpu().numpy().argmax(axis=1)
+                onehot = np.eye(num_classes, dtype=np.int32)
+                if args.wandb_log_run:
+                    file_path = f"test_out/{args.dataset}_{run_name}.txt"
                 else:
-                    pred = test_logits.cpu().numpy().argmax(axis=1)
-                    onehot = np.eye(num_classes, dtype=np.int32)
-                    if args.wandb_log_run:
-                        file_path = f"test_out/{args.dataset}_{run_name}.txt"
-                    else:
-                        file_path = f"test_out/{args.dataset}_{run_name}.txt"
+                    file_path = f"test_out/{args.dataset}_{run_name}.txt"
 
-                dl.gen_file_for_evaluate(test_idx=test_idx, label=pred,
-                                         file_path=file_path,
-                                         multi_label=args.multi_label)
-                if not args.multi_label:
-                    pred = onehot[pred]
-                print(dl.evaluate(pred))
+            dl.gen_file_for_evaluate(test_idx=test_idx, label=pred,
+                                     file_path=file_path,
+                                     multi_label=args.multi_label)
+            if not args.multi_label:
+                pred = onehot[pred]
+            print(dl.evaluate(pred))
 #%%
 def get_hyperparams(argv):
     ap = argparse.ArgumentParser(allow_abbrev=False, description='EquivHGN for Node Classification')

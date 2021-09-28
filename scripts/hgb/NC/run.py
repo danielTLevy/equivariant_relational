@@ -234,7 +234,11 @@ Val Macro-F1: {:.3f}".format(val_loss, val_micro, val_macro))
 
     # testing with evaluate_results_nc
     if args.evaluate:
-        run_name = wandb.run.name
+        if args.wandb_log_run:
+            run_name = wandb.run.name + "_" + args.run
+        else:
+            run_name = args.run
+
         checkpoint = torch.load(args.checkpoint_path)
         net.load_state_dict(checkpoint['net_state_dict'])
         net.eval()
@@ -249,10 +253,7 @@ Val Macro-F1: {:.3f}".format(val_loss, val_micro, val_macro))
                 pred = test_logits.cpu().numpy().argmax(axis=1)
                 onehot = np.eye(num_classes, dtype=np.int32)
 
-            if args.wandb_log_run:
-                file_path = f"test_out/{args.dataset}_{run_name}.txt"
-            else:
-                file_path = f"test_out/{args.dataset}_{run_name}.txt"
+            file_path = f"test_out/{args.dataset}_{run_name}.txt"
             dl.gen_file_for_evaluate(test_idx=test_idx, label=pred,
                                      file_path=file_path,
                                      multi_label=args.multi_label)

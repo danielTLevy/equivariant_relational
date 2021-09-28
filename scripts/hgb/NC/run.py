@@ -217,7 +217,7 @@ Val Macro-F1: {:.3f}".format(val_loss, val_micro, val_macro))
                         'val_loss': val_loss.item(),
                         'val_micro': val_micro,
                         'val_macro': val_macro
-                        }, args.checkpoint_path)
+                        }, checkpoint_path)
                     if args.wandb_log_run:
                         wandb.summary["val_micro_best"] = val_micro
                         wandb.summary["val_macro_best"] = val_macro
@@ -226,7 +226,7 @@ Val Macro-F1: {:.3f}".format(val_loss, val_micro, val_macro))
                         wandb.summary["train_loss_best"] = train_loss.item()
                         wandb.summary['train_micro_best'] = train_micro,
                         wandb.summary['train_macro_best'] = train_macro,
-                        wandb.save(args.checkpoint_path)
+                        wandb.save(checkpoint_path)
 
             if epoch % args.wandb_log_loss_freq == 0:
                 if args.wandb_log_run:

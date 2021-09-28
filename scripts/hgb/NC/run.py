@@ -155,7 +155,7 @@ def run_model(args):
     if args.wandb_log_run and wandb.run.name is not None:
         run_name = run_name + '_' + str(wandb.run.name)
 
-    if args.checkpoint_path is not None:
+    if args.checkpoint_path is not '':
         checkpoint_path = args.checkpoint_path
     else:
         checkpoint_path = f"checkpoint/checkpoint_{run_name}.pt"
@@ -236,7 +236,7 @@ Val Macro-F1: {:.3f}".format(val_loss, val_micro, val_macro))
     # testing with evaluate_results_nc
     if args.evaluate:
 
-        checkpoint = torch.load(args.checkpoint_path)
+        checkpoint = torch.load(checkpoint_path)
         net.load_state_dict(checkpoint['net_state_dict'])
         net.eval()
         test_logits = []

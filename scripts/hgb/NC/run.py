@@ -151,9 +151,9 @@ def run_model(args):
             entity='danieltlevy')
         wandb.watch(net, log='all', log_freq=args.wandb_log_param_freq)
     print(args)
-    run_name = args.dataset + '_' + args.run
+    run_name = args.dataset + '_' + str(args.run)
     if args.wandb_log_run and wandb.run.name is not None:
-        run_name = run_name + '_' + wandb.run.name
+        run_name = run_name + '_' + str(wandb.run.name)
 
     if args.checkpoint_path is not None:
         checkpoint_path = args.checkpoint_path

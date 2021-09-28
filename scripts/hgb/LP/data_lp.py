@@ -4,6 +4,8 @@ import scipy
 import pickle
 import torch
 import scipy.sparse as sp
+import os
+from collections import defaultdict
 from data_loader_lp import data_loader
 from src.DataSchema import DataSchema, Entity, Relation, SparseMatrixData
 from src.SparseMatrix import SparseMatrix
@@ -124,3 +126,37 @@ def get_test_neigh(dl, edge_type=None, neigh_type=None):
     test_neigh_head = test_neigh_arr[0] - shift_i
     test_neigh_tail = test_neigh_arr[1] - shift_j
     return test_neigh_head, test_neigh_tail, test_label_arr
+
+def get_test_neigh_from_file(dl, dataset, edge_type):
+    save = np.loadtxt(os.path.join(dl.path, f"{dataset}_ini_{edge_type}_label.txt"), dtype=int)
+    shift_i, shift_j = get_shifts(dl, edge_type)
+
+    left  = save[0] - shift_i
+    right = save[1] - shift_j
+    # Don't have access to real labels, just get random
+    test_label = np.random.randint(2, size=save[0].shape[0])
+    return left, right, test_label
+
+
+
+def gen_file_for_evaluate(dl, target_edges, edges, confidence, edge_type, file_path):
+    """
+    :param edge_list: shape(2, edge_num)
+    :param confidence: shape(edge_num,)
+    :param edge_type: shape(1)
+    :param file_path: string
+    """
+    # First, turn output into dict
+    output_dict = defaultdict(dict)
+    shift_l, shift_r = get_shifts(dl, edge_type)
+    for l,r,c in zip(edges[0], edges[1], confidence):
+            l_i = l + shift_l
+            r_i = r + shift_r
+            output_dict[l_i][r_i] = c
+    # Then, write all the target test edges
+    with open(file_path, "a") as f:
+        for l,r in zip(target_edges[0], target_edges[1]):
+            l_i = l + shift_l
+            r_i = r + shift_r
+            c = output_dict[l_i][r_i]
+            f.write(f"{l_i}\t{r_i}\t{edge_type}\t{c}\n")

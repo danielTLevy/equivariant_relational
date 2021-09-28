@@ -13,7 +13,7 @@ import wandb
 from tqdm import tqdm
 from sklearn.metrics import f1_score, auc, roc_auc_score, precision_recall_curve
 from data_lp import load_data, get_train_valid_pos, get_train_neg, \
-    get_valid_neg, get_test_neigh
+    get_valid_neg, get_test_neigh_from_file, gen_file_for_evaluate
 from EquivHGAE import EquivHGAE, EquivLinkPredictor
 from src.SparseMatrix import SparseMatrix
 from src.DataSchema import DataSchema, SparseMatrixData, Relation
@@ -152,6 +152,9 @@ def make_target_matrix_test(relation, left, right, labels, device):
              relation.entities[1].n_instances, 1)
     return SparseMatrix(indices=indices, values=values, shape=shape).to(device)
 
+
+
+
 #%%
 def run_model(args):
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -207,22 +210,22 @@ def run_model(args):
             entity='danieltlevy')
         wandb.watch(net, log='all', log_freq=args.wandb_log_param_freq)
     print(args)
-    if args.wandb_log_run:
-        checkpoint_path = f"checkpoint/checkpoint_{wandb.run.name}.pt"
+    run_name = args.dataset + '_' + str(args.run)
+    if args.wandb_log_run and wandb.run.name is not None:
+        run_name = run_name + '_' + str(wandb.run.name)
+
+    if args.checkpoint_path is not '':
+        checkpoint_path = args.checkpoint_path
     else:
-        if args.checkpoint_path == "":
-            checkpoint_path = "checkpoint/checkpoint_" + args.dataset + \
-            str(args.run) + ".pt"
-        else:
-            checkpoint_path = args.checkpoint_path
+        checkpoint_path = f"checkpoint/checkpoint_{run_name}.pt"
+
     print("Checkpoint Path: " + checkpoint_path)
     progress = tqdm(range(args.epoch), desc="Epoch 0", position=0, leave=True)
     # training loop
-    net.train()
     loss_func = nn.BCELoss()
     val_roc_auc_best = 0
     for epoch in progress:
-
+        net.train()
         if use_equiv:
             # Target is same as input
             target_schema = schema
@@ -238,7 +241,6 @@ def run_model(args):
             np.random.shuffle(train_idx)
 
             # training
-            net.train()
             train_matrix = make_target_matrix(target_rel,
                                               train_pos_head, train_pos_tail,
                                               train_neg_head, train_neg_tail,
@@ -348,10 +350,8 @@ def run_model(args):
 
     # testing with evaluate_results_nc
     if args.evaluate:
-        res_2hop = defaultdict(float)
-        res_random = defaultdict(float)
-        total = len(list(dl.links_test['data'].keys()))
         for target_rel in target_rels:
+            print("Evaluating Target Rel " + str(target_rel.id))
             checkpoint = torch.load(checkpoint_path)
             net.load_state_dict(checkpoint['net_state_dict'])
             net.eval()
@@ -362,7 +362,7 @@ def run_model(args):
                 # Target is just target relation
                 data_target = SparseMatrixData(target_schema)
             with torch.no_grad():
-                left_full, right_full, test_labels_full = get_test_neigh(dl, target_rel.id)
+                left_full, right_full, test_labels_full = get_test_neigh_from_file(dl, args.dataset, target_rel.id)
                 test_matrix_full =  make_target_matrix_test(target_rel, left_full, right_full,
                                                       test_labels_full, device)
                 test_matrix, left, right, test_labels = coalesce_matrix(test_matrix_full)
@@ -383,60 +383,11 @@ def run_model(args):
                 pred = torch.sigmoid(logits).cpu().numpy()
                 left = left.cpu().numpy()
                 right = right.cpu().numpy()
-                edge_list = np.concatenate([left.reshape((1,-1)), right.reshape((1,-1))], axis=0)
-                test_neigh = np.vstack((left,right)).tolist()
-                if args.wandb_log_run:
-                    run_name = wandb.run.name
-                    file_path = f"test_out/{args.dataset}_{run_name}.txt"
-                else:
-                    file_path = f"test_out/{args.dataset}_{args.run}.txt"
-                dl.gen_file_for_evaluate(test_neigh, pred, target_rel.id,
+                edge_list = np.vstack((left,right))
+                edge_list_full = np.vstack((left_full, right_full))
+                file_path = f"test_out/{run_name}.txt"
+                gen_file_for_evaluate(dl, edge_list_full, edge_list, pred, target_rel.id,
                                          file_path=file_path)
-                res = dl.evaluate(edge_list, pred, test_labels.cpu().numpy())
-                print(res)
-                for k in res:
-                    res_2hop[k] += res[k]
-            with torch.no_grad():
-                left_full, right_full, test_labels_full = get_test_neigh(dl, target_rel.id, 'w_random')
-                test_matrix_full =  make_target_matrix_test(target_rel, left_full, right_full,
-                                                      test_labels_full, device)
-                test_matrix, left, right, test_labels = coalesce_matrix(test_matrix_full)
-
-                if use_equiv:
-                    test_combined_matrix, test_mask = combine_matrices(test_matrix, train_matrix)
-                    data_target[target_rel.id] = test_combined_matrix
-                    data_target.zero_()
-                    idx_id_tst, idx_trans_tst = data_target.calculate_indices()
-                    data_out = net(data, indices_identity, indices_transpose,
-                               data_embedding, data_target, idx_id_tst, idx_trans_tst)
-                    logits_full = data_out[target_rel.id].values.squeeze()
-                    logits = logits_full[test_mask]
-                else:
-                    data_target[target_rel.id] = test_matrix
-                    logits = net(data, indices_identity, indices_transpose,
-                                 data_embedding, data_target)
-                pred = torch.sigmoid(logits).cpu().numpy()
-                left = left.cpu().numpy()
-                right = right.cpu().numpy()
-                edge_list = np.concatenate([left.reshape((1,-1)), right.reshape((1,-1))], axis=0)
-                res = dl.evaluate(edge_list, pred, test_labels.cpu().numpy())
-                print(res)
-
-                for k in res:
-                    res_random[k] += res[k]
-
-    for k in res_2hop:
-        res_2hop[k] /= total
-    for k in res_random:
-        res_random[k] /= total
-    print(res_2hop)
-    print(res_random)
-
-    if args.wandb_log_run:
-        wandb.summary["2hop_test_roc_auc"] = res_2hop['roc_auc']
-        wandb.summary["2hop_test_mrr"] = res_2hop['MRR']
-        wandb.summary["rand_test_roc_auc"] = res_random['roc_auc']
-        wandb.summary["rand_test_mrr"] = res_random['MRR']
 
 #%%
 def get_hyperparams(argv):

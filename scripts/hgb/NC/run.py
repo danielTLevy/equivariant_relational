@@ -151,14 +151,15 @@ def run_model(args):
             entity='danieltlevy')
         wandb.watch(net, log='all', log_freq=args.wandb_log_param_freq)
     print(args)
-    if args.wandb_log_run:
-        checkpoint_path = f"checkpoint/checkpoint_{wandb.run.name}.pt"
+    run_name = args.dataset + '_' + args.run
+    if args.wandb_log_run and wandb.run.name is not None:
+        run_name = run_name + '_' + wandb.run.name
+
+    if args.checkpoint_path is not None:
+        checkpoint_path = args.checkpoint_path
     else:
-        if args.checkpoint_path == "":
-            checkpoint_path = "checkpoint/checkpoint_" + args.dataset + \
-            str(args.run) + ".pt"
-        else:
-            checkpoint_path = args.checkpoint_path
+        checkpoint_path = f"checkpoint/checkpoint_{run_name}.pt"
+
     print("Checkpoint Path: " + checkpoint_path)
     progress = tqdm(range(args.epoch), desc="Epoch 0", position=0, leave=True)
     # training loop
@@ -234,10 +235,6 @@ Val Macro-F1: {:.3f}".format(val_loss, val_micro, val_macro))
 
     # testing with evaluate_results_nc
     if args.evaluate:
-        if args.wandb_log_run:
-            run_name = wandb.run.name + "_" + args.run
-        else:
-            run_name = args.run
 
         checkpoint = torch.load(args.checkpoint_path)
         net.load_state_dict(checkpoint['net_state_dict'])
@@ -339,9 +336,6 @@ def get_hyperparams(argv):
     else:
         args.fc_layers = [args.fc_layer]
 
-    if args.checkpoint_path == "":
-        args.checkpoint_path = "checkpoint/checkpoint_" + args.dataset + \
-            str(args.run) + ".pt"
     return args
 
 

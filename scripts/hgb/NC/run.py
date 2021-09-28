@@ -248,11 +248,11 @@ Val Macro-F1: {:.3f}".format(val_loss, val_micro, val_macro))
             else:
                 pred = test_logits.cpu().numpy().argmax(axis=1)
                 onehot = np.eye(num_classes, dtype=np.int32)
-                if args.wandb_log_run:
-                    file_path = f"test_out/{args.dataset}_{run_name}.txt"
-                else:
-                    file_path = f"test_out/{args.dataset}_{run_name}.txt"
 
+            if args.wandb_log_run:
+                file_path = f"test_out/{args.dataset}_{run_name}.txt"
+            else:
+                file_path = f"test_out/{args.dataset}_{run_name}.txt"
             dl.gen_file_for_evaluate(test_idx=test_idx, label=pred,
                                      file_path=file_path,
                                      multi_label=args.multi_label)

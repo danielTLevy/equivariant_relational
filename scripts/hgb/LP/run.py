@@ -214,7 +214,7 @@ def run_model(args):
     if args.wandb_log_run and wandb.run.name is not None:
         run_name = run_name + '_' + str(wandb.run.name)
 
-    if args.checkpoint_path is not '':
+    if args.checkpoint_path != '':
         checkpoint_path = args.checkpoint_path
     else:
         checkpoint_path = f"checkpoint/checkpoint_{run_name}.pt"
@@ -408,7 +408,7 @@ def get_hyperparams(argv):
     ap.add_argument('--lr', type=float, default=1e-3)
     ap.add_argument('--dropout', type=float, default=0.5)
     ap.add_argument('--dataset', type=str, default='LastFM')
-    ap.add_argument('--checkpoint_path', type=str, default='checkpoint/checkpoint.pt')
+    ap.add_argument('--checkpoint_path', type=str, default='')
     ap.add_argument('--width', type=int, default=64)
     ap.add_argument('--depth', type=int, default=3)
     ap.add_argument('--embedding_dim', type=int, default=64)

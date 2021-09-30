@@ -111,6 +111,12 @@ def get_valid_neg(dl, edge_type=None, edge_types=None):
     valid_neg_tail = train_neg_arr[1] - shift_j
     return valid_neg_head, valid_neg_tail
 
+def get_valid_neg_2hop(dl, edge_type):
+    train_neg_arr = np.array(dl.get_valid_neg_2hop(edge_type))
+    shift_i, shift_j = get_shifts(dl, edge_type)
+    valid_neg_head = train_neg_arr[0] - shift_i
+    valid_neg_tail = train_neg_arr[1] - shift_j
+    return valid_neg_head, valid_neg_tail
 
 def get_test_neigh(dl, edge_type=None, neigh_type=None):
     if neigh_type == 'w_random':

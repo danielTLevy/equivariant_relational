@@ -13,7 +13,7 @@ import wandb
 from tqdm import tqdm
 from sklearn.metrics import f1_score, auc, roc_auc_score, precision_recall_curve
 from data_lp import load_data, get_train_valid_pos, get_train_neg, \
-    get_valid_neg, get_test_neigh_from_file, gen_file_for_evaluate
+    get_valid_neg, get_valid_neg_2hop, get_test_neigh_from_file, gen_file_for_evaluate
 from EquivHGAE import EquivHGAE, EquivLinkPredictor
 from src.SparseMatrix import SparseMatrix
 from src.DataSchema import DataSchema, SparseMatrixData, Relation
@@ -285,7 +285,7 @@ def run_model(args):
                 labels_val = torch.Tensor([]).to(device)
                 valid_masks = {}
                 for target_rel in target_rels:
-                    valid_neg_head, valid_neg_tail = get_valid_neg(dl, target_rel.id)
+                    valid_neg_head, valid_neg_tail = get_valid_neg_2hop(dl, target_rel.id)
                     valid_matrix_full = make_target_matrix(target_rel,
                                                      valid_pos_head, valid_pos_tail,
                                                      valid_neg_head, valid_neg_tail,
@@ -295,6 +295,7 @@ def run_model(args):
                     right = torch.cat([right, right_rel])
                     labels_val = torch.cat([labels_val, labels_val_rel])
                     if use_equiv:
+                        # Add in training indices
                         valid_combined_matrix, valid_mask = combine_matrices(valid_matrix, train_matrix)
                         valid_masks[target_rel.id] = valid_mask
                         data_target[target_rel.id] = valid_combined_matrix

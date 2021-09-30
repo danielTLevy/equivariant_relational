@@ -20,6 +20,7 @@ class data_loader:
         self.train_neg, self.valid_neg = self.get_train_neg(), self.get_valid_neg()
         self.gen_transpose_links()
         self.nonzero = False
+        self.neg_neigh = self.make_2hop()
 
     def get_train_valid_pos(self, train_ratio=0.9):
         if self.splited:
@@ -319,6 +320,74 @@ class data_loader:
                 neg_t = random.randrange(t_range[0], t_range[1])
                 valid_neg[r_id][1].append(neg_t)
         return valid_neg
+
+
+    def make_2hop(self):
+        '''
+        Make neg_neigh, a dict of head:tail dicts for each relation, giving
+        all non-positive 2 hop neighbours for each node
+        '''
+        neg_neigh  = dict()
+        edge_types = self.test_types
+        '''get sec_neigh'''
+        # Get full adjacency matrix
+        pos_links = 0
+        for r_id in self.links['data'].keys():
+            pos_links += self.links['data'][r_id] + self.links['data'][r_id].T
+        for r_id in self.valid_pos.keys():
+            values = [1] * len(self.valid_pos[r_id][0])
+            valid_of_rel = sp.coo_matrix((values, self.valid_pos[r_id]), shape=pos_links.shape)
+            pos_links += valid_of_rel
+        # Square of adjacency matrix
+        r_double_neighs = np.dot(pos_links, pos_links)
+        data = r_double_neighs.data
+        data[:] = 1
+        # 2-hop-neighs = (A^2 - A - I)
+        r_double_neighs = \
+            sp.coo_matrix((data, r_double_neighs.nonzero()), shape=np.shape(pos_links), dtype=int) \
+            - sp.coo_matrix(pos_links, dtype=int) \
+            - sp.lil_matrix(np.eye(np.shape(pos_links)[0], dtype=int))
+        data = r_double_neighs.data
+        pos_count_index = np.where(data > 0)
+        row, col = r_double_neighs.nonzero()
+        r_double_neighs = sp.coo_matrix((data[pos_count_index], (row[pos_count_index], col[pos_count_index])),
+                                        shape=np.shape(pos_links))
+
+        row, col = r_double_neighs.nonzero()
+        data = r_double_neighs.data
+        sec_index = np.where(data > 0)
+        row, col = row[sec_index], col[sec_index]
+
+        relation_range = [self.nodes['shift'][k] for k in range(len(self.nodes['shift']))] + [self.nodes['total']]
+        for r_id in edge_types:
+            neg_neigh[r_id] = defaultdict(list)
+            h_type, t_type = self.links_test['meta'][r_id]
+            # Get all examples of this relation by checking row and col ranges
+            r_id_index = np.where((row >= relation_range[h_type]) & (row < relation_range[h_type + 1])
+                                  & (col >= relation_range[t_type]) & (col < relation_range[t_type + 1]))[0]
+
+            r_row, r_col = row[r_id_index], col[r_id_index]
+            for h_id, t_id in zip(r_row, r_col):
+                neg_neigh[r_id][h_id].append(t_id)
+        return neg_neigh
+
+    def get_valid_neg_2hop(self, target_rel_id):
+        '''get pos_neigh'''
+        pos_neigh = defaultdict(list)
+        row, col = self.valid_pos[target_rel_id]
+        for h_id, t_id in zip(row, col):
+            pos_neigh[h_id].append(t_id)
+
+        '''sample neg as same number as pos for each head node'''
+        valid_neigh = [[], []]
+        for h_id in sorted(list(pos_neigh.keys())):
+            n_pos = len(pos_neigh[h_id])
+
+            neg_list = random.choices(self.neg_neigh[target_rel_id][h_id], k=n_pos) if len(
+                self.neg_neigh[target_rel_id][h_id]) != 0 else []
+            valid_neigh[0].extend([h_id] * len(neg_list))
+            valid_neigh[1].extend(neg_list)
+        return valid_neigh
 
     def get_test_neigh_2hop(self):
         return self.get_test_neigh()

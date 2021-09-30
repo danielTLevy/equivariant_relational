@@ -223,7 +223,9 @@ def run_model(args):
     progress = tqdm(range(args.epoch), desc="Epoch 0", position=0, leave=True)
     # training loop
     loss_func = nn.BCELoss()
-    val_roc_auc_best = 0
+
+    val_metric_best = -1e10
+
     for epoch in progress:
         net.train()
         if use_equiv:
@@ -285,7 +287,10 @@ def run_model(args):
                 labels_val = torch.Tensor([]).to(device)
                 valid_masks = {}
                 for target_rel in target_rels:
-                    valid_neg_head, valid_neg_tail = get_valid_neg_2hop(dl, target_rel.id)
+                    if args.val_neg == '2hop':
+                        valid_neg_head, valid_neg_tail = get_valid_neg_2hop(dl, target_rel.id)
+                    else:
+                        valid_neg_head, valid_neg_tail = get_valid_neg(dl, target_rel.id)
                     valid_matrix_full = make_target_matrix(target_rel,
                                                      valid_pos_head, valid_pos_tail,
                                                      valid_neg_head, valid_neg_tail,
@@ -316,40 +321,46 @@ def run_model(args):
                     logits_combined = net(data, indices_identity, indices_transpose,
                                  data_embedding, data_target)
                 logp = torch.sigmoid(logits_combined)
-                val_loss = loss_func(logp, labels_val)
+                val_loss = loss_func(logp, labels_val).item()
                 left = left.cpu().numpy()
                 right = right.cpu().numpy()
                 edge_list = np.concatenate([left.reshape((1,-1)), right.reshape((1,-1))], axis=0)
-                wandb_log.update({'val_loss': val_loss.item()})
+                wandb_log.update({'val_loss': val_loss})
                 res = dl.evaluate(edge_list, logp.cpu().numpy(), labels_val.cpu().numpy())
                 val_roc_auc = res['roc_auc']
                 val_mrr = res['MRR']
                 wandb_log.update(res)
                 print("\nVal Loss: {:.3f} Val ROC AUC: {:.3f} Val MRR: {:.3f}".format(
-                    val_loss.item(), val_roc_auc, val_mrr))
-                if val_roc_auc > val_roc_auc_best:
-                    val_roc_auc_best = val_roc_auc
+                    val_loss, val_roc_auc, val_mrr))
+                if args.val_metric == 'loss':
+                    val_metric = -val_loss
+                elif args.val_metric == 'roc_auc':
+                    val_metric = val_roc_auc
+                elif args.val_metric == 'mrr':
+                    val_metric = val_mrr
+
+                if val_metric > val_metric_best:
+                    val_metric_best = val_metric
                     print("New best, saving")
                     torch.save({
                         'epoch': epoch,
                         'net_state_dict': net.state_dict(),
                         'optimizer_state_dict': optimizer.state_dict(),
                         'train_loss': train_loss.item(),
-                        'val_loss': val_loss.item(),
+                        'val_loss': val_loss,
                         'val_roc_auc': val_roc_auc,
                         'val_mrr': val_mrr
                         }, checkpoint_path)
                     if args.wandb_log_run:
                         wandb.summary["val_roc_auc_best"] = val_roc_auc
                         wandb.summary["val_mrr_best"] = val_mrr
-                        wandb.summary["val_loss_best"] = val_loss.item()
+                        wandb.summary["val_loss_best"] = val_loss
                         wandb.summary["epoch_best"] = epoch
                         wandb.summary["train_loss_best"] = train_loss.item()
                         wandb.save(checkpoint_path)
         if args.wandb_log_run:
             wandb.log(wandb_log)
 
-    # testing with evaluate_results_nc
     if args.evaluate:
         for target_rel in target_rels:
             print("Evaluating Target Rel " + str(target_rel.id))
@@ -437,6 +448,8 @@ def get_hyperparams(argv):
     ap.add_argument('--run', type=int, default=1)
     ap.add_argument('--evaluate', type=int, default=1)
     ap.add_argument('--decoder', type=str, default='equiv')
+    ap.add_argument('--val_neg', type=str, default='random')
+    ap.add_argument('--val_metric', type=str, default='roc_auc')
     ap.set_defaults(wandb_log_run=False)
     args, argv = ap.parse_known_args(argv)
     if args.output == None:

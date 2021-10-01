@@ -162,23 +162,15 @@ def run_model(args):
 
     # Collect data and schema
     schema, schema_out, data_original, dl = load_data(args.dataset)
-
-
     data, in_dims = select_features(data_original, schema, args.feats_type)
     data = data.to(device)
+    
+    # Precompute data indices
     indices_identity, indices_transpose = data.calculate_indices()
-
+    # Get target relations and create data structure for embeddings
     target_rel_ids = dl.links_test['data'].keys()
     target_rels = [schema.relations[rel_id] for rel_id in target_rel_ids]
     target_ents = schema.entities
-    data_embedding = SparseMatrixData.make_entity_embeddings(target_ents,
-                                                             args.embedding_dim)
-    data_embedding.to(device)
-
-    for target_rel_id in target_rel_ids:
-        train_val_pos = get_train_valid_pos(dl, target_rel_id)
-        train_pos_head, train_pos_tail, \
-            valid_pos_head, valid_pos_tail = train_val_pos
     if use_equiv:
         output_rel = None
     else:
@@ -187,6 +179,19 @@ def run_model(args):
             raise NotImplementedError()
         else:
             output_rel = target_rels[0]
+    data_embedding = SparseMatrixData.make_entity_embeddings(target_ents,
+                                                             args.embedding_dim)
+    data_embedding.to(device)
+
+    # Get training and validation positive samples now
+    train_pos_heads, train_pos_tails = dict(), dict()
+    val_pos_heads, val_pos_tails = dict(), dict()
+    for target_rel_id in target_rel_ids:
+        train_val_pos = get_train_valid_pos(dl, target_rel_id)
+        train_pos_heads[target_rel_id], train_pos_tails[target_rel_id], \
+            val_pos_heads[target_rel_id], val_pos_tails[target_rel_id] = train_val_pos
+
+    # Create network and optimizer
     net = EquivLinkPredictor(schema, in_dims,
                     layers=args.layers,
                     embedding_dim=args.embedding_dim,
@@ -202,7 +207,7 @@ def run_model(args):
     net.to(device)
     optimizer = torch.optim.Adam(net.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
-
+    # Set up logging and checkpointing
     if args.wandb_log_run:
         wandb.init(config=args,
             settings=wandb.Settings(start_method='fork'),
@@ -213,21 +218,19 @@ def run_model(args):
     run_name = args.dataset + '_' + str(args.run)
     if args.wandb_log_run and wandb.run.name is not None:
         run_name = run_name + '_' + str(wandb.run.name)
-
     if args.checkpoint_path != '':
         checkpoint_path = args.checkpoint_path
     else:
         checkpoint_path = f"checkpoint/checkpoint_{run_name}.pt"
-
     print("Checkpoint Path: " + checkpoint_path)
-    progress = tqdm(range(args.epoch), desc="Epoch 0", position=0, leave=True)
-    # training loop
-    loss_func = nn.BCELoss()
-
     val_metric_best = -1e10
 
+    # training
+    loss_func = nn.BCELoss()
+    progress = tqdm(range(args.epoch), desc="Epoch 0", position=0, leave=True)
     for epoch in progress:
         net.train()
+        # Make target matrix and labels to train on
         if use_equiv:
             # Target is same as input
             target_schema = schema
@@ -236,19 +239,19 @@ def run_model(args):
             # Target is just target relation
             target_schema = DataSchema(schema.entities, target_rels)
             data_target = SparseMatrixData(target_schema)
-
+        labels_train = torch.Tensor([]).to(device)
         for target_rel in target_rels:
             train_neg_head, train_neg_tail = get_train_neg(dl, target_rel.id)
-            train_idx = np.arange(len(train_pos_head))
-            np.random.shuffle(train_idx)
-
-            # training
             train_matrix = make_target_matrix(target_rel,
-                                              train_pos_head, train_pos_tail,
+                                              train_pos_heads[target_rel.id],
+                                              train_pos_tails[target_rel.id],
                                               train_neg_head, train_neg_tail,
                                               device)
             data_target[target_rel.id] = train_matrix
+            labels_train_rel = train_matrix.values.squeeze()
+            labels_train = torch.cat([labels_train, labels_train_rel])
 
+        # Make prediction
         if use_equiv:
             idx_id_tgt, idx_trans_tgt = data_target.calculate_indices()
             output_data = net(data, indices_identity, indices_transpose,
@@ -261,11 +264,6 @@ def run_model(args):
             logits_combined = net(data, indices_identity, indices_transpose,
                          data_embedding, data_target)
         logp = torch.sigmoid(logits_combined)
-
-        labels_train = torch.Tensor([]).to(device)
-        for target_rel in target_rels:
-            labels_train_rel = data_target[target_rel.id].values.squeeze()
-            labels_train = torch.cat([labels_train, labels_train_rel])
         train_loss = loss_func(logp, labels_train)
 
         # autograd
@@ -273,11 +271,12 @@ def run_model(args):
         train_loss.backward()
         optimizer.step()
 
+        # Update logging
         progress.set_description(f"Epoch {epoch}")
         progress.set_postfix(loss=train_loss.item())
         wandb_log = {'Train Loss': train_loss.item(), 'epoch':epoch}
 
-        # validation
+        # Evaluate on validation set
         net.eval()
         if epoch % args.val_every == 0:
             with torch.no_grad():
@@ -292,7 +291,7 @@ def run_model(args):
                     else:
                         valid_neg_head, valid_neg_tail = get_valid_neg(dl, target_rel.id)
                     valid_matrix_full = make_target_matrix(target_rel,
-                                                     valid_pos_head, valid_pos_tail,
+                                                     val_pos_heads[target_rel.id], val_pos_tails[target_rel.id],
                                                      valid_neg_head, valid_neg_tail,
                                                      device)
                     valid_matrix, left_rel, right_rel, labels_val_rel = coalesce_matrix(valid_matrix_full)
@@ -304,6 +303,9 @@ def run_model(args):
                         valid_combined_matrix, valid_mask = combine_matrices(valid_matrix, train_matrix)
                         valid_masks[target_rel.id] = valid_mask
                         data_target[target_rel.id] = valid_combined_matrix
+                left = left.cpu().numpy()
+                right = right.cpu().numpy()
+                edge_list = np.concatenate([left.reshape((1,-1)), right.reshape((1,-1))], axis=0)
 
                 if use_equiv:
                     data_target.zero_()
@@ -322,9 +324,7 @@ def run_model(args):
                                  data_embedding, data_target)
                 logp = torch.sigmoid(logits_combined)
                 val_loss = loss_func(logp, labels_val).item()
-                left = left.cpu().numpy()
-                right = right.cpu().numpy()
-                edge_list = np.concatenate([left.reshape((1,-1)), right.reshape((1,-1))], axis=0)
+
                 wandb_log.update({'val_loss': val_loss})
                 res = dl.evaluate(edge_list, logp.cpu().numpy(), labels_val.cpu().numpy())
                 val_roc_auc = res['roc_auc']
@@ -361,6 +361,7 @@ def run_model(args):
         if args.wandb_log_run:
             wandb.log(wandb_log)
 
+    # Evaluate on test set
     if args.evaluate:
         for target_rel in target_rels:
             print("Evaluating Target Rel " + str(target_rel.id))

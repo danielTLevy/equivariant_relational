@@ -161,7 +161,7 @@ def run_model(args):
     use_equiv = args.decoder == 'equiv'
 
     # Collect data and schema
-    schema, schema_out, data_original, dl = load_data(args.dataset)
+    schema, schema_out, data_original, dl = load_data(args.dataset, use_edge_data=args.use_edge_data)
     data, in_dims = select_features(data_original, schema, args.feats_type)
     data = data.to(device)
     
@@ -436,6 +436,7 @@ def get_hyperparams(argv):
     ap.add_argument('--seed', type=int, default=1)
     ap.add_argument('--norm_affine', type=int, default=1)
     ap.add_argument('--pool_op', type=str, default='mean')
+    ap.add_argument('--use_edge_data',  type=int, default=1)
     ap.add_argument('--save_embeddings', dest='save_embeddings', action='store_true', default=True)
     ap.add_argument('--no_save_embeddings', dest='save_embeddings', action='store_false', default=True)
     ap.set_defaults(save_embeddings=True)
@@ -467,6 +468,10 @@ def get_hyperparams(argv):
         args.norm_affine = True
     else:
         args.norm_affine = False
+    if args.use_edge_data == 1:
+        args.use_edge_data = True
+    else:
+        args.use_edge_data = False
     args.layers = [args.width]*args.depth
     if args.fc_layer == 0:
         args.fc_layers = []

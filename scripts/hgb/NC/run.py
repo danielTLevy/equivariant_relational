@@ -106,8 +106,7 @@ def pred_fcn(values, multi_label=False):
 def run_model(args):
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
-
-    schema, schema_out, data, data_target, labels, train_val_test_idx, dl = load_data(args.dataset)
+    schema, schema_out, data, data_target, labels, train_val_test_idx, dl = load_data(args.dataset, use_edge_data=args.use_edge_data)
     target_entity_id = 0 # True for all current NC datasets
     target_entity = schema.entities[target_entity_id]
     data, in_dims = select_features(data, schema, args.feats_type, target_entity_id)
@@ -141,7 +140,8 @@ def run_model(args):
                         norm_affine=args.norm_affine)
 
     net.to(device)
-    optimizer = torch.optim.Adam(net.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    optimizer = torch.optim.Adam(net.parameters(), lr=args.lr,
+                                 weight_decay=args.weight_decay)
 
 
     if args.wandb_log_run:
@@ -259,7 +259,8 @@ Val Macro-F1: {:.3f}".format(val_loss, val_micro, val_macro))
             print(dl.evaluate(pred))
 #%%
 def get_hyperparams(argv):
-    ap = argparse.ArgumentParser(allow_abbrev=False, description='EquivHGN for Node Classification')
+    ap = argparse.ArgumentParser(allow_abbrev=False,
+                                 description='EquivHGN for Node Classification')
     ap.set_defaults(dataset='PubMed')
     ap.add_argument('--feats_type', type=int, default=0,
                     help='Type of the node features used. ' +
@@ -271,7 +272,8 @@ def get_hyperparams(argv):
                         '5 - only term features (zero vec for others).')
     ap.add_argument('--epoch', type=int, default=300, help='Number of epochs.')
     ap.add_argument('--patience', type=int, default=30, help='Patience.')
-    ap.add_argument('--repeat', type=int, default=1, help='Repeat the training and testing for N times. Default is 1.')
+    ap.add_argument('--repeat', type=int, default=1,
+                    help='Repeat the training and testing for N times. Default is 1.')
     ap.add_argument('--lr', type=float, default=1e-3)
     ap.add_argument('--dropout', type=float, default=0.5)
     ap.add_argument('--dataset', type=str, default='IMDB')
@@ -292,8 +294,11 @@ def get_hyperparams(argv):
     ap.add_argument('--norm',  type=int, default=1)
     ap.add_argument('--norm_affine', type=int, default=1)
     ap.add_argument('--pool_op', type=str, default='mean')
-    ap.add_argument('--save_embeddings', dest='save_embeddings', action='store_true', default=True)
-    ap.add_argument('--no_save_embeddings', dest='save_embeddings', action='store_false', default=True)
+    ap.add_argument('--use_edge_data',  type=int, default=1)
+    ap.add_argument('--save_embeddings', dest='save_embeddings',
+                    action='store_true', default=True)
+    ap.add_argument('--no_save_embeddings', dest='save_embeddings',
+                    action='store_false', default=True)
     ap.set_defaults(save_embeddings=True)
     ap.add_argument('--wandb_log_param_freq', type=int, default=100)
     ap.add_argument('--wandb_log_loss_freq', type=int, default=1)
@@ -330,6 +335,10 @@ def get_hyperparams(argv):
         args.norm = True
     else:
         args.norm = False
+    if args.use_edge_data == 1:
+        args.use_edge_data = True
+    else:
+        args.use_edge_data = False
     args.layers = [args.width]*args.depth
     if args.fc_layer == 0:
         args.fc_layers = []

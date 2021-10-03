@@ -13,7 +13,7 @@ from src.SparseMatrix import SparseMatrix
 
 DATA_FILE_DIR = '../../../data/hgb/LP/'
 
-def load_data(prefix='LastFM'):
+def load_data(prefix='LastFM', use_node_attrs=True, use_edge_data=True):
     dl = data_loader(DATA_FILE_DIR+prefix)
 
     entities = [Entity(entity_id, n_instances)
@@ -23,7 +23,6 @@ def load_data(prefix='LastFM'):
                     for rel_id, (entity_i, entity_j)
                     in sorted(dl.links['meta'].items())]
     num_relations = len(relations)
-    use_node_attrs = True
     if use_node_attrs:
         # Create fake relations to represent node attributes
         for entity in entities:
@@ -41,6 +40,9 @@ def load_data(prefix='LastFM'):
         end_j = start_j + dl.nodes['count'][relations[rel_id].entities[1].id]
         rel_matrix = data_matrix[start_i:end_i, start_j:end_j]
         data[rel_id] = SparseMatrix.from_scipy_sparse(rel_matrix.tocoo())
+        if not use_edge_data:
+            # Use only adjacency information
+            data[rel_id].values = torch.ones(data[rel_id].values.shape)
 
     for ent_id, attr_matrix in dl.nodes['attr'].items():
         if attr_matrix is None:

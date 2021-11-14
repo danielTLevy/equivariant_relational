@@ -103,10 +103,11 @@ class EquivDecoder(nn.Module):
                  dropout=0, pool_op='mean', norm_affine=False,
                  embedding_entities = None,
                  output_relations = None,
-                 out_fc_layer=True):
+                 out_fc_layer=True,
+                 out_dim=1):
         super(EquivDecoder, self).__init__()
         self.schema = schema
-
+        self.out_dim = out_dim
         self.activation = activation
         self.rel_activation = Activation(schema, self.activation, is_sparse=True)
 
@@ -129,11 +130,11 @@ class EquivDecoder(nn.Module):
         self.n_layers = len(layers) - 1
         if self.use_out_fc_layer:
             # Add fully connected layer to output
-            self.fc_out_layer = SparseMatrixRelationLinear(schema, layers[-1], 1)
+            self.fc_out_layer = SparseMatrixRelationLinear(schema, layers[-1], self.out_dim)
         else:
             # Alternatively, use an equivariant layer
             self.equiv_layers.append(SparseMatrixEquivariantLayer(
-                schema, layers[-1], 1, pool_op=pool_op))
+                schema, layers[-1], self.out_dim, pool_op=pool_op))
 
         self.norms = nn.ModuleList()
         for channels in layers:
@@ -169,9 +170,11 @@ class EquivLinkPredictor(nn.Module):
                  embedding_entities = None,
                  output_rel = None,
                  in_fc_layer=True,
-                 decode = 'dot'):
+                 decode = 'dot',
+                 out_dim=1):
         super(EquivLinkPredictor, self).__init__()
         self.output_rel = output_rel
+        self.out_dim = out_dim
         self.encoder = EquivEncoder(schema, input_channels, activation, layers,
                                     embedding_dim, dropout, pool_op,
                                     norm_affine, embedding_entities, in_fc_layer)
@@ -186,7 +189,8 @@ class EquivLinkPredictor(nn.Module):
                  dropout, pool_op, norm_affine,
                  embedding_entities,
                  output_rel,
-                 out_fc_layer=in_fc_layer)
+                 out_fc_layer=in_fc_layer,
+                 out_dim=self.out_dim)
         elif self.decode == 'broadcast':
             if output_rel == None:
                 self.schema_out = schema

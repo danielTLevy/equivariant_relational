@@ -366,8 +366,8 @@ def run_model(args):
                 output_data = net(data, indices_identity, indices_transpose,
                            data_embedding, data_target, idx_id_val, idx_trans_val)
 
-                left = torch.Tensor([], dtype=np.int32).to(device)
-                right = torch.Tensor([], dtype=np.int32).to(device)
+                left = torch.Tensor([]).to(device)
+                right = torch.Tensor([]).to(device)
                 logits_combined = torch.Tensor([]).to(device)
                 labels_val = torch.Tensor([]).to(device)
 

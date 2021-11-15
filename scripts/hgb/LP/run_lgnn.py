@@ -223,16 +223,12 @@ def make_combined_data(schema, input_data, target_rel_id, target_matrix):
     combined_data[target_rel_id] += target_matrix
     return combined_data
 
-
 def make_target_matrix_test(relation, left, right, labels, device):
     indices = torch.LongTensor(np.vstack((left, right)))
     values = torch.FloatTensor(labels).unsqueeze(1)
     shape = (relation.entities[0].n_instances,
              relation.entities[1].n_instances, 1)
     return SparseMatrix(indices=indices, values=values, shape=shape).to(device)
-
-
-
 
 #%%
 def run_model(args):
@@ -370,8 +366,8 @@ def run_model(args):
                 output_data = net(data, indices_identity, indices_transpose,
                            data_embedding, data_target, idx_id_val, idx_trans_val)
 
-                left = torch.Tensor([]).to(device)
-                right = torch.Tensor([]).to(device)
+                left = torch.Tensor([], dtype=np.int32).to(device)
+                right = torch.Tensor([], dtype=np.int32).to(device)
                 logits_combined = torch.Tensor([]).to(device)
                 labels_val = torch.Tensor([]).to(device)
 
@@ -381,7 +377,7 @@ def run_model(args):
                     logits_rel = output_data[flat_rel.id].values[:, rel_channel][mask]
                     logits_combined = torch.cat([logits_combined, logits_rel])
 
-                    left_rel, right_rel = val_matrix_combined.indices[:, val_masks[rel_id]]
+                    left_rel, right_rel = val_matrix_combined.indices[:, mask]
                     left = torch.cat([left, left_rel])
                     right = torch.cat([right, right_rel])
                     labels_val_rel = val_matrix_combined.values[:,rel_channel][mask]
@@ -430,38 +426,54 @@ def run_model(args):
         if args.wandb_log_run:
             wandb.log(wandb_log)
 
+
     # Evaluate on test set
     if args.evaluate:
-        print("Evaluating Target Rel " + str(target_rel_id))
+        print("Evaluating Target Rel " + str(rel_id))
         checkpoint = torch.load(checkpoint_path)
         net.load_state_dict(checkpoint['net_state_dict'])
         net.eval()
+
+        # Target is same as input
         data_target = data.clone()
-
         with torch.no_grad():
-            left_full, right_full, test_labels_full = get_test_neigh_from_file(dl, args.dataset, target_rel_id)
-            test_matrix_full =  make_target_matrix_test(flat_rel, left_full, right_full,
-                                                  test_labels_full, device)
-            test_matrix, left, right, test_labels = coalesce_matrix(test_matrix_full)
 
-            test_combined_matrix, test_mask = combine_matrices(test_matrix, train_matrix)
-            data_target[flat_rel.id] = test_combined_matrix
+            test_heads_full = dict()
+            test_tails_full = dict()
+            for rel_id in target_rel_ids:
+                test_heads_full[rel_id], test_tails_full[rel_id], test_labels_full = get_test_neigh_from_file(dl, args.dataset, rel_id)
+
+            test_matrix_combined, test_masks = combine_matrices_flat(flat_rel, test_heads_full,
+                                                test_tails_full, test_heads_full,
+                                                test_tails_full, target_rel_ids, train_matrix,
+                                                device)
+            data_target[flat_rel.id] = test_matrix_combined.clone()
+
             data_target.zero_()
             idx_id_tst, idx_trans_tst = data_target.calculate_indices()
-            data_out = net(data, indices_identity, indices_transpose,
+            output_data = net(data, indices_identity, indices_transpose,
                        data_embedding, data_target, idx_id_tst, idx_trans_tst)
-            logits_full = data_out[flat_rel.id].values.squeeze()
-            logits = logits_full[test_mask]
-            pred = torch.sigmoid(logits).cpu().numpy()
-            left = left.cpu().numpy()
-            right = right.cpu().numpy()
-            edge_list = np.vstack((left,right))
-            edge_list_full = np.vstack((left_full, right_full))
-            file_path = f"test_out/{run_name}.txt"
-            gen_file_for_evaluate(dl, edge_list_full, edge_list, pred, target_rel_id,
-                                     file_path=file_path, flat=True)
 
+            for rel_channel, rel_id in enumerate(target_rel_ids):
+                mask = test_masks[rel_id]
 
+                logits = output_data[flat_rel.id].values[:, rel_channel][mask]
+                logits_combined = torch.cat([logits_combined, logits_rel])
+
+                left, right = test_matrix_combined.indices[:, mask]
+                labels_test = test_matrix_combined.values[:,rel_channel][mask]
+                left_full = test_heads_full[rel_id]
+                right_full = test_tails_full[rel_id]
+
+                pred = torch.sigmoid(logits)
+
+                left = left.cpu().numpy()
+                right = right.cpu().numpy()
+                edge_list = np.concatenate([left.reshape((1,-1)), right.reshape((1,-1))], axis=0)
+                edge_list_full = np.vstack((left_full, right_full))
+                file_path = f"test_out/{run_name}.txt"
+                gen_file_for_evaluate(dl, edge_list_full, edge_list, pred, rel_id,
+                                         file_path=file_path, flat=True)
 #%%
 def get_hyperparams(argv):
     ap = argparse.ArgumentParser(allow_abbrev=False, description='EquivHGN for Link Prediction')

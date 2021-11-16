@@ -235,7 +235,10 @@ def run_model(args):
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
     # Collect data and schema
-    schema, data_original, dl = load_data_flat(args.dataset, use_edge_data=args.use_edge_data)
+    schema, data_original, dl = load_data_flat(args.dataset,
+                                               use_edge_data=args.use_edge_data,
+                                               use_node_attrs=args.use_node_attrs,
+                                               node_val=args.node_val)
     data, in_dims = select_features(data_original, schema, args.feats_type)
     data = data.to(device)
     
@@ -441,7 +444,7 @@ def run_model(args):
             test_heads_full = dict()
             test_tails_full = dict()
             for rel_id in target_rel_ids:
-                test_heads_full[rel_id], test_tails_full[rel_id], test_labels_full = get_test_neigh_from_file(dl, args.dataset, rel_id)
+                test_heads_full[rel_id], test_tails_full[rel_id], test_labels_full = get_test_neigh_from_file(dl, args.dataset, rel_id, flat=True)
 
             test_matrix_combined, test_masks = combine_matrices_flat(flat_rel, test_heads_full,
                                                 test_tails_full, test_heads_full,
@@ -509,6 +512,8 @@ def get_hyperparams(argv):
     ap.add_argument('--norm_affine', type=int, default=1)
     ap.add_argument('--pool_op', type=str, default='mean')
     ap.add_argument('--use_edge_data',  type=int, default=0)
+    ap.add_argument('--use_node_attrs',  type=int, default=1)
+    ap.add_argument('--node_val',  type=str, default='one', help='Default value to use if nodes have no attributes')
     ap.add_argument('--save_embeddings', dest='save_embeddings', action='store_true', default=True)
     ap.add_argument('--no_save_embeddings', dest='save_embeddings', action='store_false', default=True)
     ap.set_defaults(save_embeddings=True)
@@ -545,6 +550,10 @@ def get_hyperparams(argv):
         args.use_edge_data = True
     else:
         args.use_edge_data = False
+    if args.use_node_attrs == 1:
+        args.use_node_attrs = True
+    else:
+        args.use_node_attrs = False
     args.layers = [args.width]*args.depth
     if args.fc_layer == 0:
         args.fc_layers = []

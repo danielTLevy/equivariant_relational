@@ -13,7 +13,7 @@ from src.SparseMatrix import SparseMatrix
 
 DATA_FILE_DIR = '../../../data/hgb/LP/'
 
-def load_data(prefix, use_node_attrs=True, use_edge_data=True):
+def load_data(prefix, use_node_attrs=True, use_edge_data=True, node_val='one'):
     dl = data_loader(DATA_FILE_DIR+prefix)
 
     entities = [Entity(entity_id, n_instances)
@@ -44,19 +44,24 @@ def load_data(prefix, use_node_attrs=True, use_edge_data=True):
             # Use only adjacency information
             data[rel_id].values = torch.ones(data[rel_id].values.shape)
 
-    for ent_id, attr_matrix in dl.nodes['attr'].items():
-        n_instances = dl.nodes['count'][ent_id]
-        if attr_matrix is None:
-            # Attribute for each node is a single 1
-            attr_matrix = np.ones(n_instances)[:, None]
-        n_channels = attr_matrix.shape[1]
-        rel_id = ent_id + num_relations
-        indices = torch.arange(n_instances).unsqueeze(0).repeat(2, 1)
-        data[rel_id] = SparseMatrix(
-            indices = indices,
-            values = torch.FloatTensor(attr_matrix),
-            shape = np.array([n_instances, n_instances, n_channels]),
-            is_set = True)
+    if use_node_attrs:
+        for ent_id, attr_matrix in dl.nodes['attr'].items():
+            n_instances = dl.nodes['count'][ent_id]
+            if attr_matrix is None:
+                if node_val == 'zero':
+                    attr_matrix = np.zeros((n_instances,1))
+                elif node_val == 'rand':
+                    attr_matrix = np.random.randn(n_instances, 1)
+                else:
+                    attr_matrix = np.ones((n_instances,1))
+            n_channels = attr_matrix.shape[1]
+            rel_id = ent_id + num_relations
+            indices = torch.arange(n_instances).unsqueeze(0).repeat(2, 1)
+            data[rel_id] = SparseMatrix(
+                indices = indices,
+                values = torch.FloatTensor(attr_matrix),
+                shape = np.array([n_instances, n_instances, n_channels]),
+                is_set = True)
 
 
     target_rel_id = dl.test_types[0]
@@ -70,12 +75,13 @@ def load_data(prefix, use_node_attrs=True, use_edge_data=True):
            data, \
            dl
 
-def load_data_flat(prefix, use_node_attrs=True, use_edge_data=True):
+def load_data_flat(prefix, use_node_attrs=True, use_edge_data=True, node_val='one'):
     '''
     Load data into one matrix with all relations, reproducing Maron 2019
     The first [# relation types] channels are adjacency matrices,
     while the next [sum of feature dimensions per entity type] channels have
-    node attributes on the relevant segment of their diagonals
+    node attributes on the relevant segment of their diagonals if use_node_attrs=True.
+    If node features aren't included, then ndoe_val is used instead.
     '''
     dl = data_loader(DATA_FILE_DIR+prefix)
     total_n_nodes = dl.nodes['total']
@@ -103,22 +109,27 @@ def load_data_flat(prefix, use_node_attrs=True, use_edge_data=True):
         data_out.values = torch.cat([data_out.values, data_rel_full.values], 1)
         data_out.n_channels += 1
 
-    for ent_id, attr_matrix in dl.nodes['attr'].items():
-        start_i = dl.nodes['shift'][ent_id]
-        n_instances = dl.nodes['count'][ent_id]
-        if attr_matrix is None:
-            # Attribute for each node is a single 1
-            attr_matrix = np.ones(n_instances)[:, None]
-        n_channels = attr_matrix.shape[1]
-        indices = torch.arange(start_i, start_i+n_instances).unsqueeze(0).repeat(2, 1)
-        data_rel = SparseMatrix(
-            indices = indices,
-            values = torch.FloatTensor(attr_matrix),
-            shape = np.array([total_n_nodes, total_n_nodes, n_channels]),
-            is_set = True)
-        data_rel_full = SparseMatrix.from_other_sparse_matrix(data_full, n_channels) + data_rel
-        data_out.values = torch.cat([data_out.values, data_rel_full.values], 1)
-        data_out.n_channels += n_channels
+    if use_node_attrs:
+        for ent_id, attr_matrix in dl.nodes['attr'].items():
+            start_i = dl.nodes['shift'][ent_id]
+            n_instances = dl.nodes['count'][ent_id]
+            if attr_matrix is None:
+                if node_val == 'zero':
+                    attr_matrix = np.zeros((n_instances,1))
+                elif node_val == 'rand':
+                    attr_matrix = np.random.randn(n_instances, 1)
+                else: 
+                    attr_matrix = np.ones((n_instances,1))
+            n_channels = attr_matrix.shape[1]
+            indices = torch.arange(start_i, start_i+n_instances).unsqueeze(0).repeat(2, 1)
+            data_rel = SparseMatrix(
+                indices = indices,
+                values = torch.FloatTensor(attr_matrix),
+                shape = np.array([total_n_nodes, total_n_nodes, n_channels]),
+                is_set = True)
+            data_rel_full = SparseMatrix.from_other_sparse_matrix(data_full, n_channels) + data_rel
+            data_out.values = torch.cat([data_out.values, data_rel_full.values], 1)
+            data_out.n_channels += n_channels
 
     data = SparseMatrixData(schema)
     data[0] = data_out

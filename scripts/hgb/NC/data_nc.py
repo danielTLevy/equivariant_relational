@@ -43,20 +43,20 @@ def load_data(prefix='DBLP', use_node_attrs=True, use_edge_data=True):
         if not use_edge_data:
             # Use only adjacency information
             data[rel_id].values = torch.ones(data[rel_id].values.shape)
-
-    for ent_id, attr_matrix in dl.nodes['attr'].items():
-        if attr_matrix is None:
-            # Attribute for each node is a single 1
-            attr_matrix = np.ones(dl.nodes['count'][ent_id])[:, None]
-        n_channels = attr_matrix.shape[1]
-        rel_id = ent_id + num_relations
-        n_instances = dl.nodes['count'][ent_id]
-        indices = torch.arange(n_instances).unsqueeze(0).repeat(2, 1)
-        data[rel_id] = SparseMatrix(
-            indices = indices,
-            values = torch.FloatTensor(attr_matrix),
-            shape = np.array([n_instances, n_instances, n_channels]),
-            is_set = True)
+    if use_node_attrs:
+        for ent_id, attr_matrix in dl.nodes['attr'].items():
+            if attr_matrix is None:
+                # Attribute for each node is a single 1
+                attr_matrix = np.ones(dl.nodes['count'][ent_id])[:, None]
+            n_channels = attr_matrix.shape[1]
+            rel_id = ent_id + num_relations
+            n_instances = dl.nodes['count'][ent_id]
+            indices = torch.arange(n_instances).unsqueeze(0).repeat(2, 1)
+            data[rel_id] = SparseMatrix(
+                indices = indices,
+                values = torch.FloatTensor(attr_matrix),
+                shape = np.array([n_instances, n_instances, n_channels]),
+                is_set = True)
 
 
     target_entity = 0 #TODO: Check if this is true for all datasets

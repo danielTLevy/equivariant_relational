@@ -106,7 +106,10 @@ def pred_fcn(values, multi_label=False):
 def run_model(args):
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
-    schema, schema_out, data, data_target, labels, train_val_test_idx, dl = load_data(args.dataset, use_edge_data=args.use_edge_data)
+    schema, schema_out, data, data_target, labels, \
+        train_val_test_idx, dl = load_data(args.dataset,
+                       use_edge_data=args.use_edge_data,
+                       use_node_attrs=args.use_node_attr)
     target_entity_id = 0 # True for all current NC datasets
     target_entity = schema.entities[target_entity_id]
     data, in_dims = select_features(data, schema, args.feats_type, target_entity_id)
@@ -295,6 +298,7 @@ def get_hyperparams(argv):
     ap.add_argument('--norm_affine', type=int, default=1)
     ap.add_argument('--pool_op', type=str, default='mean')
     ap.add_argument('--use_edge_data',  type=int, default=1)
+    ap.add_argument('--use_node_attr',  type=int, default=1)
     ap.add_argument('--save_embeddings', dest='save_embeddings',
                     action='store_true', default=True)
     ap.add_argument('--no_save_embeddings', dest='save_embeddings',
@@ -339,6 +343,10 @@ def get_hyperparams(argv):
         args.use_edge_data = True
     else:
         args.use_edge_data = False
+    if args.use_node_attr == 1:
+        args.use_node_attr = True
+    else:
+        args.use_node_attr = False
     args.layers = [args.width]*args.depth
     if args.fc_layer == 0:
         args.fc_layers = []
@@ -353,4 +361,5 @@ if __name__ == '__main__':
     argv = sys.argv[1:]
     args = get_hyperparams(argv)
     set_seed(args.seed)
+    #%%
     run_model(args)

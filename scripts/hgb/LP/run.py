@@ -36,7 +36,6 @@ def select_features(data, schema, feats_type):
     '''
     # Select features for nodes
     in_dims = {}
-    num_relations = len(schema.relations) - len(schema.entities)
 
     if feats_type == 0:
         # Keep all node attributes
@@ -161,10 +160,11 @@ def run_model(args):
     use_equiv = args.decoder == 'equiv'
 
     # Collect data and schema
-    schema, schema_out, data_original, dl = load_data(args.dataset,
-                                                      use_edge_data=args.use_edge_data,
-                                                      use_node_attrs=args.use_node_attrs,
-                                                      node_val=args.node_val)
+    schema, data_original, dl = load_data(args.dataset,
+                                          use_edge_data=args.use_edge_data,
+                                          use_other_edges=args.use_other_edges,
+                                          use_node_attrs=args.use_node_attrs,
+                                          node_val=args.node_val)
     data, in_dims = select_features(data_original, schema, args.feats_type)
     data = data.to(device)
     
@@ -368,7 +368,7 @@ def run_model(args):
     if args.evaluate:
         for target_rel in target_rels:
             print("Evaluating Target Rel " + str(target_rel.id))
-            checkpoint = torch.load(checkpoint_path)
+            checkpoint = torch.load(checkpoint_path, map_location=device)
             net.load_state_dict(checkpoint['net_state_dict'])
             net.eval()
             if use_equiv:
@@ -439,7 +439,9 @@ def get_hyperparams(argv):
     ap.add_argument('--seed', type=int, default=1)
     ap.add_argument('--norm_affine', type=int, default=1)
     ap.add_argument('--pool_op', type=str, default='mean')
-    ap.add_argument('--use_edge_data',  type=int, default=1)
+    ap.add_argument('--use_edge_data',  type=int, default=0)
+    ap.add_argument('--use_other_edges',  type=int, default=1,
+                    help='Whether to use non-target relations at all')
     ap.add_argument('--use_node_attrs',  type=int, default=1)
     ap.add_argument('--node_val',  type=str, default='one', help='Default value to use if nodes have no attributes')
     ap.add_argument('--save_embeddings', dest='save_embeddings', action='store_true', default=True)
@@ -475,6 +477,10 @@ def get_hyperparams(argv):
         args.norm_affine = False
     if args.use_edge_data == 1:
         args.use_edge_data = True
+    else:
+        args.use_edge_data = False
+    if args.use_other_edges == 1:
+        args.use_other_edges = True
     else:
         args.use_edge_data = False
     if args.use_node_attrs == 1:

@@ -13,39 +13,60 @@ from src.SparseMatrix import SparseMatrix
 
 DATA_FILE_DIR = '../../../data/hgb/LP/'
 
-def load_data(prefix, use_node_attrs=True, use_edge_data=True, node_val='one'):
+def load_data(prefix, use_node_attrs=True, use_edge_data=True, use_other_edges=True, node_val='one'):
     dl = data_loader(DATA_FILE_DIR+prefix)
 
-    entities = [Entity(entity_id, n_instances)
-                for entity_id, n_instances
-                in sorted(dl.nodes['count'].items())]
-    relations = [Relation(rel_id, [entities[entity_i], entities[entity_j]])
-                    for rel_id, (entity_i, entity_j)
-                    in sorted(dl.links['meta'].items())]
-    num_relations = len(relations)
+
+    all_entities = [Entity(entity_id, n_instances)
+                    for entity_id, n_instances
+                    in sorted(dl.nodes['count'].items())]
+
+    rel_id_to_idx = {}
+    relations = []
+    if use_other_edges:
+        for rel_id, (entity_i, entity_j) in sorted(dl.links['meta'].items()):
+            relations.append(Relation(rel_id, [all_entities[entity_i], all_entities[entity_j]]))
+            rel_id_to_idx[rel_id] = len(relations) - 1
+
+    else:
+        for rel_id in dl.test_types:
+            entity_i, entity_j = dl.links['meta'][rel_id]
+            relations.append(Relation(rel_id, [all_entities[entity_i], all_entities[entity_j]]))
+            rel_id_to_idx[rel_id] = len(relations) - 1
+
+    if use_other_edges:
+        entities = all_entities
+    else:
+        entities = list(np.unique(relations[0].entities))
+
+    max_relation = max(rel.id for rel in relations) + 1
     if use_node_attrs:
         # Create fake relations to represent node attributes
         for entity in entities:
-            rel_id = num_relations + entity.id
+            rel_id = max_relation + entity.id
             rel = Relation(rel_id, [entity, entity], is_set=True)
             relations.append(rel)
     schema = DataSchema(entities, relations)
 
     data = SparseMatrixData(schema)
     for rel_id, data_matrix in dl.links['data'].items():
-        # Get subset belonging to entities in relation
-        start_i = dl.nodes['shift'][relations[rel_id].entities[0].id]
-        end_i = start_i + dl.nodes['count'][relations[rel_id].entities[0].id]
-        start_j = dl.nodes['shift'][relations[rel_id].entities[1].id]
-        end_j = start_j + dl.nodes['count'][relations[rel_id].entities[1].id]
-        rel_matrix = data_matrix[start_i:end_i, start_j:end_j]
-        data[rel_id] = SparseMatrix.from_scipy_sparse(rel_matrix.tocoo())
-        if not use_edge_data:
-            # Use only adjacency information
-            data[rel_id].values = torch.ones(data[rel_id].values.shape)
+        if use_other_edges or rel_id in dl.test_types:
+            # Get subset belonging to entities in relation
+            relation = relations[rel_id_to_idx[rel_id]]
+            start_i = dl.nodes['shift'][relation.entities[0].id]
+            end_i = start_i + dl.nodes['count'][relation.entities[0].id]
+            start_j = dl.nodes['shift'][relation.entities[1].id]
+            end_j = start_j + dl.nodes['count'][relation.entities[1].id]
+            rel_matrix = data_matrix[start_i:end_i, start_j:end_j]
+            data[rel_id] = SparseMatrix.from_scipy_sparse(rel_matrix.tocoo())
+            if not use_edge_data:
+                # Use only adjacency information
+                data[rel_id].values = torch.ones(data[rel_id].values.shape)
 
     if use_node_attrs:
-        for ent_id, attr_matrix in dl.nodes['attr'].items():
+        for ent in entities:
+            ent_id = ent.id
+            attr_matrix = dl.nodes['attr'][ent_id]
             n_instances = dl.nodes['count'][ent_id]
             if attr_matrix is None:
                 if node_val == 'zero':
@@ -55,7 +76,7 @@ def load_data(prefix, use_node_attrs=True, use_edge_data=True, node_val='one'):
                 else:
                     attr_matrix = np.ones((n_instances,1))
             n_channels = attr_matrix.shape[1]
-            rel_id = ent_id + num_relations
+            rel_id = ent_id + max_relation
             indices = torch.arange(n_instances).unsqueeze(0).repeat(2, 1)
             data[rel_id] = SparseMatrix(
                 indices = indices,
@@ -63,15 +84,7 @@ def load_data(prefix, use_node_attrs=True, use_edge_data=True, node_val='one'):
                 shape = np.array([n_instances, n_instances, n_channels]),
                 is_set = True)
 
-
-    target_rel_id = dl.test_types[0]
-    ent_i, ent_j = relations[target_rel_id].entities
-
-    #TODO: this next line might cause an issue
-    schema_out = DataSchema([ent_i, ent_j], relations[target_rel_id])
-
     return schema,\
-           schema_out, \
            data, \
            dl
 

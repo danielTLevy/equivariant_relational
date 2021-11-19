@@ -101,10 +101,10 @@ class Data:
         Normalize each relation by the std and mean
         '''
         self.std_means = {}
-        for relation in self.schema.relations:
-            std, mean = torch.std_mean(self.rel_tensors[relation.id])
-            self.rel_tensors[relation.id] = (self.rel_tensors[relation.id] - mean) / std
-            self.std_means[relation.id] = (std, mean)
+        for rel_id in self.schema.relations:
+            std, mean = torch.std_mean(self.rel_tensors[rel_id])
+            self.rel_tensors[rel_id] = (self.rel_tensors[rel_id] - mean) / std
+            self.std_means[rel_id] = (std, mean)
         return self
 
     def unnormalize_data(self, std_means=None):
@@ -116,10 +116,10 @@ class Data:
             assert self.std_means != None
             std_means = self.std_means
 
-        for relation in self.schema.relations:
-            std, mean = std_means[relation.id]
-            self.rel_tensors[relation.id] = std*self.rel_tensors[relation.id] + mean
-            std_means[relation.id] = torch.std_mean(self.rel_tensors[relation.id])
+        for rel_id in self.schema.relations:
+            std, mean = std_means[rel_id]
+            self.rel_tensors[rel_id] = std*self.rel_tensors[rel_id] + mean
+            std_means[rel_id] = torch.std_mean(self.rel_tensors[rel_id])
         self.std_means = std_means
         return self
 
@@ -132,22 +132,22 @@ class Data:
 
     def to_sparse(self):
         sparse = {}
-        for relation in self.schema.relations:
-            dense = self.rel_tensors[relation.id]
-            sparse[relation.id] = SparseTensor.from_dense_tensor(dense)
+        for rel_id in self.schema.relations:
+            dense = self.rel_tensors[rel_id]
+            sparse[rel_id] = SparseTensor.from_dense_tensor(dense)
         return  Data(self.schema, sparse, batch_size=self.batch_size)
 
     def to_sparse_matrix(self):
         sparse = {}
-        for relation in self.schema.relations:
-            dense = self.rel_tensors[relation.id]
-            sparse[relation.id] = SparseMatrix.from_dense_tensor(dense)
+        for rel_id in self.schema.relations:
+            dense = self.rel_tensors[rel_id]
+            sparse[rel_id] = SparseMatrix.from_dense_tensor(dense)
         return SparseMatrixData(self.schema, sparse, batch_size=self.batch_size)
 
     def to_tensor(self):
         # Get maximum multiplicity for each relation
         multiplicities = {}
-        for relation in self.schema.relations:
+        for relation in self.schema.relations.values():
             for entity_i, entity in enumerate(relation.entities):
                 # Get multiplicity of that entity
                  multiplicity = relation.entities.count(entity)
@@ -170,7 +170,7 @@ class Data:
 
         # Map dimensions in each relation to dimension in final tensor
         relation_mapping = {}
-        for relation in self.schema.relations:
+        for relation in self.schema.relations.values():
             rel_dim_mappings = {}
             entity_counts = {entity: 0 for entity in relation.entities}
             for entity_i, entity in enumerate(relation.entities):
@@ -178,8 +178,8 @@ class Data:
                 entity_counts[entity] += 1
             relation_mapping[relation.id] = rel_dim_mappings
 
-        for relation in self.schema.relations:
-            rel_data = self.rel_tensors[relation.id]
+        for rel_id in self.schema.relations:
+            rel_data = self.rel_tensors[rel_id]
 
             # Get rid of batching dimension
             assert rel_data.shape[0] == 1
@@ -187,7 +187,7 @@ class Data:
 
             permutation = list(range(tensor.ndim))
 
-            mapping = relation_mapping[relation.id]
+            mapping = relation_mapping[rel_id]
             for _ in range(tensor.ndim - rel_data.ndim):
                 rel_data = rel_data.unsqueeze(-1)
 
@@ -195,7 +195,7 @@ class Data:
                 permutation[permutation.index(k)] = permutation[v]
                 permutation[v] = k
 
-            output_size = tensor[relation.id].shape
+            output_size = tensor[rel_id].shape
             rel_data = rel_data.permute(permutation).squeeze(0)
             tensor[relation.id] = rel_data.expand(output_size)
         return tensor
@@ -218,7 +218,7 @@ class SparseMatrixData(Data):
         Initialize from pytorch's built-in sparse tensor
         '''
         data = {}
-        relations = []
+        relations = {}
         for ent in entities:
             n_ent = ent.n_instances
             data[ent.id] = SparseMatrix(
@@ -226,7 +226,7 @@ class SparseMatrixData(Data):
                     values=torch.zeros([n_ent, embedding_dim]),
                     shape=(n_ent, n_ent, embedding_dim),
                     is_set=True)
-            relations.append(Relation(ent.id, [ent, ent], is_set=True))
+            relations[ent.id] = Relation(ent.id, [ent, ent], is_set=True)
 
         embedding_schema = DataSchema(entities, relations)
 
@@ -277,6 +277,6 @@ class SparseMatrixData(Data):
         return indices_identity, indices_transpose
 
     def zero_(self):
-        for rel in self.schema.relations:
-            self.rel_tensors[rel.id].zero_()
+        for rel_id in self.schema.relations:
+            self.rel_tensors[rel_id].zero_()
         return self

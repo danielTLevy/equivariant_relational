@@ -68,8 +68,8 @@ class EquivEncoder(nn.Module):
         self.norms = nn.ModuleList()
         for channels in layers:
             norm_dict = nn.ModuleDict()
-            for relation in self.schema.relations:
-                norm_dict[str(relation.id)] = nn.BatchNorm1d(channels, affine=norm_affine, track_running_stats=False)
+            for rel_id in self.schema.relations:
+                norm_dict[str(rel_id)] = nn.BatchNorm1d(channels, affine=norm_affine, track_running_stats=False)
             norm_activation = Activation(schema, norm_dict, is_dict=True, is_sparse=True)
             self.norms.append(norm_activation)
 
@@ -139,8 +139,8 @@ class EquivDecoder(nn.Module):
         self.norms = nn.ModuleList()
         for channels in layers:
             norm_dict = nn.ModuleDict()
-            for relation in self.schema.relations:
-                norm_dict[str(relation.id)] = nn.BatchNorm1d(channels, affine=norm_affine, track_running_stats=False)
+            for rel_id in self.schema.relations:
+                norm_dict[str(rel_id)] = nn.BatchNorm1d(channels, affine=norm_affine, track_running_stats=False)
             norm_activation = Activation(schema, norm_dict, is_dict=True, is_sparse=True)
             self.norms.append(norm_activation)
 
@@ -267,8 +267,8 @@ class EquivHGAE(nn.Module):
             self.norms = nn.ModuleList()
             for channels in layers:
                 norm_dict = nn.ModuleDict()
-                for relation in self.schema.relations:
-                    norm_dict[str(relation.id)] = nn.BatchNorm1d(channels, affine=norm_affine, track_running_stats=False)
+                for rel_id in self.schema.relations:
+                    norm_dict[str(rel_id)] = nn.BatchNorm1d(channels, affine=norm_affine, track_running_stats=False)
                 norm_activation = Activation(schema, norm_dict, is_dict=True, is_sparse=True)
                 self.norms.append(norm_activation)
         else:

@@ -207,17 +207,17 @@ class EquivariantLayer(nn.Module):
         self.schema_out = schema_out
         if self.schema_out == None:
             self.schema_out = schema
-        self.relation_pairs = list(itertools.product(self.schema.relations,
-                                                self.schema_out.relations))
+        self.relation_pairs = list(itertools.product(self.schema.relations.values(),
+                                                self.schema_out.relations.values()))
         block_modules = {}
         if type(input_dim) == dict:
             self.input_dim = input_dim
         else:
-            self.input_dim = {rel.id: input_dim for rel in self.schema.relations}
+            self.input_dim = {rel_id: input_dim for rel_id in self.schema.relations}
         if type(output_dim) == dict:
             self.output_dim = output_dim
         else:
-            self.output_dim = {rel.id: output_dim for rel in self.schema_out.relations}
+            self.output_dim = {rel_id: output_dim for rel_id in self.schema_out.relations}
         for relation_i, relation_j in self.relation_pairs:
             block_module = EquivariantLayerBlock(self.input_dim[relation_i.id],
                                                  self.output_dim[relation_j.id],

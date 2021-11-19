@@ -21,38 +21,35 @@ def load_data(prefix, use_node_attrs=True, use_edge_data=True, use_other_edges=T
                     for entity_id, n_instances
                     in sorted(dl.nodes['count'].items())]
 
-    rel_id_to_idx = {}
-    relations = []
+    relations = {}
+    test_types = dl.test_types
     if use_other_edges:
         for rel_id, (entity_i, entity_j) in sorted(dl.links['meta'].items()):
-            relations.append(Relation(rel_id, [all_entities[entity_i], all_entities[entity_j]]))
-            rel_id_to_idx[rel_id] = len(relations) - 1
+            relations[rel_id] = Relation(rel_id, [all_entities[entity_i], all_entities[entity_j]])
 
     else:
-        for rel_id in dl.test_types:
+        for rel_id in test_types:
             entity_i, entity_j = dl.links['meta'][rel_id]
-            relations.append(Relation(rel_id, [all_entities[entity_i], all_entities[entity_j]]))
-            rel_id_to_idx[rel_id] = len(relations) - 1
+            relations[rel_id]  = Relation(rel_id, [all_entities[entity_i], all_entities[entity_j]])
 
     if use_other_edges:
         entities = all_entities
     else:
-        entities = list(np.unique(relations[0].entities))
+        entities = list(np.unique(relations[test_types[0]].entities))
 
-    max_relation = max(rel.id for rel in relations) + 1
+    max_relation = max(relations) + 1
     if use_node_attrs:
         # Create fake relations to represent node attributes
         for entity in entities:
             rel_id = max_relation + entity.id
-            rel = Relation(rel_id, [entity, entity], is_set=True)
-            relations.append(rel)
+            relations[rel_id] = Relation(rel_id, [entity, entity], is_set=True)
     schema = DataSchema(entities, relations)
 
     data = SparseMatrixData(schema)
     for rel_id, data_matrix in dl.links['data'].items():
-        if use_other_edges or rel_id in dl.test_types:
+        if use_other_edges or rel_id in test_types:
             # Get subset belonging to entities in relation
-            relation = relations[rel_id_to_idx[rel_id]]
+            relation = relations[rel_id]
             start_i = dl.nodes['shift'][relation.entities[0].id]
             end_i = start_i + dl.nodes['count'][relation.entities[0].id]
             start_j = dl.nodes['shift'][relation.entities[1].id]
@@ -99,7 +96,7 @@ def load_data_flat(prefix, use_node_attrs=True, use_edge_data=True, node_val='on
     dl = data_loader(DATA_FILE_DIR+prefix)
     total_n_nodes = dl.nodes['total']
     entities = [Entity(0, total_n_nodes)]
-    relations = [Relation(0, [entities[0], entities[0]])]
+    relations = {0: Relation(0, [entities[0], entities[0]])}
     schema = DataSchema(entities, relations)
 
     # Sparse Matrix containing all data

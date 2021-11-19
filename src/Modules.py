@@ -93,16 +93,16 @@ class SparseMatrixRelationLinear(nn.Module):
         self.linear = nn.ModuleDict()
         if type(in_dims) == int:
             in_dims_dict = {}
-            for rel in self.schema.relations:
-                in_dims_dict[rel.id] = in_dims
+            for rel_id in self.schema.relations:
+                in_dims_dict[rel_id] = in_dims
             in_dims = in_dims_dict
-        for rel in self.schema.relations:
-            linear = SparseMatrixLinear(in_dims[rel.id], out_dim)
-            self.linear[str(rel.id)] = linear
+        for rel_id in self.schema.relations:
+            linear = SparseMatrixLinear(in_dims[rel_id], out_dim)
+            self.linear[str(rel_id)] = linear
 
     def forward(self, X):
         X_out = SparseMatrixData(X.schema)
-        for rel in self.schema.relations:
+        for rel in self.schema.relations.values():
             if self.node_only and rel.is_set:
                 X_out[rel.id] = X[rel.id]
             else:
@@ -126,14 +126,14 @@ class RelationNorm(nn.Module):
         else:
             GroupNorm = nn.GroupNorm
 
-        for relation in schema.relations:
+        for rel_id in schema.relations:
             rel_norm = GroupNorm(num_channels, num_channels, affine=affine)
-            self.rel_norms[str(relation.id)] = rel_norm
+            self.rel_norms[str(rel_id)] = rel_norm
 
     def forward(self, X):
-        for relation in self.schema.relations:
-            rel_norm = self.rel_norms[str(relation.id)]
-            X[relation.id] = rel_norm(X[relation.id])
+        for rel_id in self.schema.relations:
+            rel_norm = self.rel_norms[str(rel_id)]
+            X[rel_id] = rel_norm(X[rel_id])
         return X
 
 
@@ -153,24 +153,24 @@ class Activation(nn.Module):
         self.is_sparse = is_sparse
 
     def forward(self, X):
-        for relation in self.schema.relations:
-            if relation.id in X:
+        for rel_id in self.schema.relations:
+            if rel_id in X:
                 if self.is_dict:
-                    activation = self.activation[str(relation.id)]
+                    activation = self.activation[str(rel_id)]
                 else:
                     activation = self.activation
                 if self.is_sparse:
-                    X[relation.id].values = activation(X[relation.id].values)
+                    X[rel_id].values = activation(X[rel_id].values)
                 else:
-                    X[relation.id] = activation(X[relation.id])
+                    X[rel_id] = activation(X[rel_id])
         return X
 
 def functional(function, schema, X, *args, **kwargs):
     '''
     Extend torch.nn.functional functions to be applied to each relation
     '''
-    for relation in schema.relations:
-        X[relation.id] = function(X[relation.id], *args, **kwargs)
+    for rel_id in schema.relations:
+        X[rel_id] = function(X[rel_id], *args, **kwargs)
     return X
 
 
@@ -180,8 +180,8 @@ class ReLU(nn.Module):
         self.schema = schema
     
     def forward(self, X):
-        for relation in self.schema.relations:
-            X[relation.id] = F.relu(X[relation.id]) 
+        for rel_id in self.schema.relations:
+            X[rel_id] = F.relu(X[rel_id]) 
         return X
 
 
@@ -215,7 +215,7 @@ class EntityBroadcasting(nn.Module):
 
     def forward(self, encodings):
         data_out = Data(self.schema)
-        for relation in self.schema.relations:
+        for relation in self.schema.relations.values():
             data_out[relation.id] = self.make_relation(encodings, relation)
         return data_out
 
@@ -231,8 +231,8 @@ class EntityPooling(nn.Module):
         self.dims = dims
         self.out_shape = [e.n_instances for e in self.schema.entities]
         # Make a "schema" for the encodings
-        enc_relations = [Relation(i, [self.schema.entities[i]])
-                            for i in range(len(self.schema.entities))]
+        enc_relations = {i : Relation(i, [self.schema.entities[i]])
+                            for i in range(len(self.schema.entities))}
         self.enc_schema = DataSchema(self.schema.entities, enc_relations)
     
     def get_pooling_dims(self, entity, relation):
@@ -257,7 +257,7 @@ class EntityPooling(nn.Module):
     def forward(self, data):
         out = Data(self.enc_schema, batch_size=data.batch_size)
         for entity in self.schema.entities:
-            for relation in self.schema.relations:
+            for relation in self.schema.relations.values():
                 if entity not in relation.entities:
                     continue
                 else:

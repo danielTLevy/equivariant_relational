@@ -250,11 +250,11 @@ class SparseEquivariantLayer(nn.Module):
         self.schema = schema
         self.target_rel = target_rel
         if target_rel == None:
-            self.relation_pairs = list(itertools.product(self.schema.relations,
-                                                    self.schema.relations))
+            self.relation_pairs = list(itertools.product(self.schema.relations.values(),
+                                                    self.schema.relations.values()))
         else:
-            self.relation_pairs = [(rel_i, self.schema.relations[target_rel]) \
-                                   for rel_i in self.schema.relations]
+            rel_j = self.schema.relations[target_rel]
+            self.relation_pairs = [(rel_i, rel_j) for rel_i in self.schema.relations.values()]
         block_modules = {}
         self.input_dim = input_dim
         self.output_dim = output_dim

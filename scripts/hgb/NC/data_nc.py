@@ -18,16 +18,15 @@ def load_data(prefix='DBLP', use_node_attrs=True, use_edge_data=True):
     entities = [Entity(entity_id, n_instances)
                 for entity_id, n_instances
                 in sorted(dl.nodes['count'].items())]
-    relations = [Relation(rel_id, [entities[entity_i], entities[entity_j]])
+    relations = {rel_id : Relation(rel_id, [entities[entity_i], entities[entity_j]])
                     for rel_id, (entity_i, entity_j)
-                    in sorted(dl.links['meta'].items())]
+                    in sorted(dl.links['meta'].items())}
     num_relations = len(relations)
     if use_node_attrs:
         # Create fake relations to represent node attributes
         for entity in entities:
             rel_id = num_relations + entity.id
-            rel = Relation(rel_id, [entity, entity], is_set=True)
-            relations.append(rel)
+            relations[rel_id] = Relation(rel_id, [entity, entity], is_set=True)
     schema = DataSchema(entities, relations)
 
     # Collect data

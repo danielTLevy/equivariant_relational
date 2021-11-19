@@ -82,8 +82,8 @@ def select_features(data, schema, feats_type):
             values = torch.FloatTensor(np.ones(dim))
             features_list[i] = torch.sparse.FloatTensor(indices, values, torch.Size([dim, dim])).to(device)
     '''
-    for rel in schema.relations:
-        in_dims[rel.id] = data[rel.id].n_channels
+    for rel_id in schema.relations:
+        in_dims[rel_id] = data[rel_id].n_channels
     return data, in_dims
 
 def loss_fcn(data_pred, data_true):

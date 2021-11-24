@@ -244,7 +244,8 @@ def run_model(args):
             data_target = SparseMatrixData(target_schema)
         labels_train = torch.Tensor([]).to(device)
         for target_rel in target_rels:
-            train_neg_head, train_neg_tail = get_train_neg(dl, target_rel.id)
+            train_neg_head, train_neg_tail = get_train_neg(dl, target_rel.id,
+                                                           tail_weighted=args.tail_weighted)
             train_matrix = make_target_matrix(target_rel,
                                               train_pos_heads[target_rel.id],
                                               train_pos_tails[target_rel.id],
@@ -443,6 +444,8 @@ def get_hyperparams(argv):
     ap.add_argument('--use_other_edges',  type=int, default=1,
                     help='Whether to use non-target relations at all')
     ap.add_argument('--use_node_attrs',  type=int, default=1)
+    ap.add_argument('--tail_weighted', type=int, default=0,
+                    help='Whether to weight negative tail samples by frequency')
     ap.add_argument('--node_val',  type=str, default='one', help='Default value to use if nodes have no attributes')
     ap.add_argument('--save_embeddings', dest='save_embeddings', action='store_true', default=True)
     ap.add_argument('--no_save_embeddings', dest='save_embeddings', action='store_false', default=True)
@@ -487,6 +490,10 @@ def get_hyperparams(argv):
         args.use_node_attrs = True
     else:
         args.use_node_attrs = False
+    if args.tail_weighted == 1:
+        args.tail_weighted = True
+    else:
+        args.tail_weighted = False
     args.layers = [args.width]*args.depth
     if args.fc_layer == 0:
         args.fc_layers = []

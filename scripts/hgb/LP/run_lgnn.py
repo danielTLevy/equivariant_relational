@@ -150,7 +150,6 @@ def combine_matrices_flat(full_relation, a_pos_heads, a_pos_tails, a_neg_heads, 
         full_heads = np.concatenate((full_heads, a_neg_heads[rel_id]))
         full_tails = np.concatenate((full_tails, a_pos_tails[rel_id]))
         full_tails = np.concatenate((full_tails, a_neg_tails[rel_id]))
-    n_rels = len(ids)
     indices = torch.LongTensor(np.vstack((full_heads, full_tails)))
     values = torch.zeros((indices.shape[1], 1))
     shape = (full_relation.entities[0].n_instances,

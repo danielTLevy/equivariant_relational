@@ -173,13 +173,13 @@ def get_train_valid_pos(dl, edge_type, flat=False):
     return train_pos_head_full, train_pos_tail_full, \
             valid_pos_head_full, valid_pos_tail_full
 
-def get_train_neg(dl, edge_type=None, edge_types=None, flat=False):
+def get_train_neg(dl, edge_type=None, edge_types=None, flat=False, tail_weighted=False):
     if edge_types is None:
         if edge_type is None:
             edge_types = []
         else:
             edge_types = [edge_type]
-    train_neg_arr = np.array(dl.get_train_neg(edge_types)[edge_type])
+    train_neg_arr = np.array(dl.get_train_neg(edge_types,tail_weighted=tail_weighted)[edge_type])
     shift_i, shift_j = get_shifts(dl, edge_type, flat)
     train_neg_head = train_neg_arr[0] - shift_i
     train_neg_tail = train_neg_arr[1] - shift_j

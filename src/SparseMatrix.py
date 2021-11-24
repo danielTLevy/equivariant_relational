@@ -5,6 +5,7 @@ import torch
 import numpy as np
 import torch_sparse
 import torch_scatter
+import scipy.sparse
 from src.utils import get_masks_of_intersection, MATRIX_PREFIX_DIMS
 import pdb
 
@@ -164,6 +165,12 @@ class SparseMatrix:
         if self.indices_diag != None:
             self.indices_diag = self.indices_diag.to(*args, **kwargs)
         return self
+
+    def to_scipy_sparse(self, channel=0):
+        data = self.values[:, channel]
+        rows = self.indices[0]
+        cols = self.indices[1]
+        return scipy.sparse.coo_matrix((data, (rows,cols)), (self.n, self.m))
 
     def add_sparse_matrix(self, other):
         assert (self.shape() == other.shape()), \

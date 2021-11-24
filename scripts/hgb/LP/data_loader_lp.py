@@ -21,6 +21,7 @@ class data_loader:
         self.gen_transpose_links()
         self.nonzero = False
         self.neg_neigh = self.make_2hop()
+        self.tail_prob = self.make_tail_prob()
 
     def get_train_valid_pos(self, train_ratio=0.9):
         if self.splited:
@@ -293,18 +294,21 @@ class data_loader:
         types['types'] = list(set(types['types']))
         return types
 
-    def get_train_neg(self, edge_types=[]):
+    def get_train_neg(self, edge_types=[], tail_weighted=False):
         edge_types = self.test_types if edge_types == [] else edge_types
         train_neg = dict()
         for r_id in edge_types:
             h_type, t_type = self.links['meta'][r_id]
             t_range = (self.nodes['shift'][t_type], self.nodes['shift'][t_type] + self.nodes['count'][t_type])
+            t_arange = np.arange(t_range[0], t_range[1])
             '''get neg_neigh'''
-            train_neg[r_id] = [[], []]
-            for h_id in self.train_pos[r_id][0]:
-                train_neg[r_id][0].append(h_id)
-                neg_t = random.randrange(t_range[0], t_range[1])
-                train_neg[r_id][1].append(neg_t)
+            neg_h = self.train_pos[r_id][0]
+            n_pos = len(neg_h)
+            if tail_weighted:
+                neg_t = list(np.random.choice(t_arange, size=n_pos, p=self.tail_prob[r_id]))
+            else:
+                neg_t = list(np.random.choice(t_arange, size=n_pos))
+            train_neg[r_id] = [neg_h, neg_t]
         return train_neg
 
     def get_valid_neg(self, edge_types=[]):
@@ -317,6 +321,7 @@ class data_loader:
             valid_neg[r_id] = [[], []]
             for h_id in self.valid_pos[r_id][0]:
                 valid_neg[r_id][0].append(h_id)
+                #TODO: replace with sampling weighed by frequency
                 neg_t = random.randrange(t_range[0], t_range[1])
                 valid_neg[r_id][1].append(neg_t)
         return valid_neg
@@ -636,3 +641,18 @@ class data_loader:
             shift += nodes['count'][i]
         nodes['attr'] = attr
         return nodes
+
+    def make_tail_prob(self):
+        tail_probs = dict()
+        for r_id in self.test_types:
+            h_type, t_type = self.links_test['meta'][r_id]
+            t_range = (self.nodes['shift'][t_type], self.nodes['shift'][t_type] + self.nodes['count'][t_type])
+            node_to_count = {}
+            tails, counts = np.unique(self.train_pos[r_id][1], return_counts=True)
+            for node_i, count in zip(tails, counts):
+                node_to_count[node_i] = count
+            all_counts = []
+            for tail_i in range(t_range[0], t_range[1]):
+                all_counts.append(node_to_count.get(tail_i, 1))
+            tail_probs[r_id] = np.array(all_counts) / sum(all_counts)
+        return tail_probs

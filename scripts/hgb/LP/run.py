@@ -134,15 +134,6 @@ def coalesce_matrix(matrix):
     labels = coalesced_matrix.values.squeeze()
     return coalesced_matrix, left, right, labels
 
-def make_combined_data(schema, input_data, target_rel_id, target_matrix):
-    '''
-    given dataset and a single target matrix for predictions, produce new dataset
-    with indices combining original dataset with new target matrix's indices
-    '''
-    combined_data = input_data.clone()
-    combined_data[target_rel_id] += target_matrix
-    return combined_data
-
 
 def make_target_matrix_test(relation, left, right, labels, device):
     indices = torch.LongTensor(np.vstack((left, right)))
@@ -292,6 +283,8 @@ def run_model(args):
                 for target_rel in target_rels:
                     if args.val_neg == '2hop':
                         valid_neg_head, valid_neg_tail = get_valid_neg_2hop(dl, target_rel.id)
+                    elif args.val_neg == 'randomtw':
+                        valid_neg_head, valid_neg_tail = get_valid_neg(dl, target_rel.id, tail_weighted=True)
                     else:
                         valid_neg_head, valid_neg_tail = get_valid_neg(dl, target_rel.id)
                     valid_matrix_full = make_target_matrix(target_rel,

@@ -186,13 +186,13 @@ def get_train_neg(dl, edge_type=None, edge_types=None, flat=False, tail_weighted
     return train_neg_head, train_neg_tail
 
 
-def get_valid_neg(dl, edge_type=None, edge_types=None, flat=False):
+def get_valid_neg(dl, edge_type=None, edge_types=None, flat=False, tail_weighted=False):
     if edge_types is None:
         if edge_type is None:
             edge_types = []
         else:
             edge_types = [edge_type]
-    train_neg_arr = np.array(dl.get_valid_neg(edge_types)[edge_type])
+    train_neg_arr = np.array(dl.get_valid_neg(edge_types,tail_weighted=tail_weighted)[edge_type])
     shift_i, shift_j = get_shifts(dl, edge_type, flat)
     valid_neg_head = train_neg_arr[0] - shift_i
     valid_neg_tail = train_neg_arr[1] - shift_j

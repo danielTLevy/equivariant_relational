@@ -311,19 +311,21 @@ class data_loader:
             train_neg[r_id] = [neg_h, neg_t]
         return train_neg
 
-    def get_valid_neg(self, edge_types=[]):
+    def get_valid_neg(self, edge_types=[], tail_weighted=False):
         edge_types = self.test_types if edge_types == [] else edge_types
         valid_neg = dict()
         for r_id in edge_types:
             h_type, t_type = self.links['meta'][r_id]
             t_range = (self.nodes['shift'][t_type], self.nodes['shift'][t_type] + self.nodes['count'][t_type])
+            t_arange = np.arange(t_range[0], t_range[1])
             '''get neg_neigh'''
-            valid_neg[r_id] = [[], []]
-            for h_id in self.valid_pos[r_id][0]:
-                valid_neg[r_id][0].append(h_id)
-                #TODO: replace with sampling weighed by frequency
-                neg_t = random.randrange(t_range[0], t_range[1])
-                valid_neg[r_id][1].append(neg_t)
+            neg_h = self.valid_pos[r_id][0]
+            n_pos = len(neg_h)
+            if tail_weighted:
+                neg_t = list(np.random.choice(t_arange, size=n_pos, p=self.tail_prob[r_id]))
+            else:
+                neg_t = list(np.random.choice(t_arange, size=n_pos))
+            valid_neg[r_id] = [neg_h, neg_t]
         return valid_neg
 
 

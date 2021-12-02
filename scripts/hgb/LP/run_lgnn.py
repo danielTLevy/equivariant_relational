@@ -308,7 +308,8 @@ def run_model(args):
 
         train_neg_heads, train_neg_tails = dict(), dict()
         for target_rel_id in target_rel_ids:
-            train_neg_heads[target_rel_id], train_neg_tails[target_rel_id] = get_train_neg(dl, target_rel_id, flat=True)
+            train_neg_heads[target_rel_id], train_neg_tails[target_rel_id] = get_train_neg(dl, target_rel_id, flat=True,
+                                                                                           tail_weighted=args.tail_weighted)
 
 
         train_matrix = make_flat_target_matrix(flat_rel, target_rel_ids,
@@ -353,6 +354,8 @@ def run_model(args):
                 for target_rel_id in target_rel_ids:
                     if args.val_neg == '2hop':
                         val_neg_heads[target_rel_id], val_neg_tails[target_rel_id] = get_valid_neg_2hop(dl, target_rel_id)
+                    elif args.val_neg == 'randomtw':
+                        val_neg_heads[target_rel_id], val_neg_tails[target_rel_id] = get_valid_neg(dl, target_rel_id, tail_weighted=True)
                     else:
                         val_neg_heads[target_rel_id], val_neg_tails[target_rel_id] = get_valid_neg(dl, target_rel_id)
 
@@ -512,6 +515,8 @@ def get_hyperparams(argv):
     ap.add_argument('--pool_op', type=str, default='mean')
     ap.add_argument('--use_edge_data',  type=int, default=0)
     ap.add_argument('--use_node_attrs',  type=int, default=1)
+    ap.add_argument('--tail_weighted', type=int, default=0,
+                    help='Whether to weight negative tail samples by frequency')
     ap.add_argument('--node_val',  type=str, default='one', help='Default value to use if nodes have no attributes')
     ap.add_argument('--save_embeddings', dest='save_embeddings', action='store_true', default=True)
     ap.add_argument('--no_save_embeddings', dest='save_embeddings', action='store_false', default=True)
@@ -553,6 +558,10 @@ def get_hyperparams(argv):
         args.use_node_attrs = True
     else:
         args.use_node_attrs = False
+    if args.tail_weighted == 1:
+        args.tail_weighted = True
+    else:
+        args.tail_weighted = False
     args.layers = [args.width]*args.depth
     if args.fc_layer == 0:
         args.fc_layers = []

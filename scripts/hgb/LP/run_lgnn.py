@@ -186,48 +186,6 @@ def combine_matrices_flat(full_relation, a_pos_heads, a_pos_tails, a_neg_heads, 
         masks[rel_id] = out_idx_matrix.values[:,channel_i+1].nonzero().squeeze()
     return out_matrix, masks
 
-def combine_matrices(matrix_a, matrix_b):
-    '''
-    Given Matrix A (target) and Matrix B (supplement), would like to get a
-    matrix that includes the indices of both matrix A and B, but only the
-    values of Matrix A. Additionally, return a mask indicating which indices
-    corresponding to Matrix A.
-    '''
-    # We only want indices from matrix_b, not values
-    matrix_b_zero = matrix_b.clone()
-    matrix_b_zero.values.zero_()
-    matrix_combined = matrix_a + matrix_b_zero
-
-    # To determine indices corresponding to matrix_a, make binary matrix
-    matrix_a_ones = matrix_a.clone()
-    matrix_a_ones.values.zero_()
-    matrix_a_ones.values += 1
-    mask_matrix_combined = matrix_a_ones + matrix_b_zero
-    matrix_a_mask = mask_matrix_combined.values[:,0].nonzero().squeeze()
-    return matrix_combined, matrix_a_mask
-
-def coalesce_matrix(matrix):
-    coalesced_matrix = matrix.coalesce(op='mean')
-    left = coalesced_matrix.indices[0,:]
-    right = coalesced_matrix.indices[1,:]
-    labels = coalesced_matrix.values.squeeze()
-    return coalesced_matrix, left, right, labels
-
-def make_combined_data(schema, input_data, target_rel_id, target_matrix):
-    '''
-    given dataset and a single target matrix for predictions, produce new dataset
-    with indices combining original dataset with new target matrix's indices
-    '''
-    combined_data = input_data.clone()
-    combined_data[target_rel_id] += target_matrix
-    return combined_data
-
-def make_target_matrix_test(relation, left, right, labels, device):
-    indices = torch.LongTensor(np.vstack((left, right)))
-    values = torch.FloatTensor(labels).unsqueeze(1)
-    shape = (relation.entities[0].n_instances,
-             relation.entities[1].n_instances, 1)
-    return SparseMatrix(indices=indices, values=values, shape=shape).to(device)
 
 #%%
 def run_model(args):

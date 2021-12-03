@@ -185,6 +185,30 @@ def run_model(args):
         train_pos_heads[target_rel_id], train_pos_tails[target_rel_id], \
             val_pos_heads[target_rel_id], val_pos_tails[target_rel_id] = train_val_pos
 
+    # Get additional indices to be used when making predictions
+    pred_idx_matrices = {}
+    for target_rel in target_rels:
+        if args.pred_indices == 'train':
+            train_neg_head, train_neg_tail = get_train_neg(dl, target_rel.id,
+                                                       tail_weighted=args.tail_weighted)
+            pred_idx_matrices[target_rel.id] = make_target_matrix(target_rel,
+                                              train_pos_heads[target_rel.id],
+                                              train_pos_tails[target_rel.id],
+                                              train_neg_head, train_neg_tail,
+                                              device)
+        elif args.pred_indices == 'train_neg':
+            # Get negative samples twice
+            train_neg_head1, train_neg_tail1 = get_train_neg(dl, target_rel.id,
+                                                   tail_weighted=args.tail_weighted)
+            train_neg_head2, train_neg_tail2 = get_train_neg(dl, target_rel.id,
+                                                   tail_weighted=args.tail_weighted)
+            pred_idx_matrices[target_rel.id] = make_target_matrix(target_rel,
+                                              train_neg_head1, train_neg_tail1,
+                                              train_neg_head2, train_neg_tail2,
+                                              device)
+        elif args.pred_indices == 'none':
+            pred_idx_matrices[target_rel.id] = None
+
     # Create network and optimizer
     net = EquivLinkPredictor(schema, in_dims,
                     layers=args.layers,
@@ -296,8 +320,13 @@ def run_model(args):
                     right = torch.cat([right, right_rel])
                     labels_val = torch.cat([labels_val, labels_val_rel])
                     if use_equiv:
-                        # Add in training indices
-                        valid_combined_matrix, valid_mask = combine_matrices(valid_matrix, train_matrix)
+                        # Add in additional prediction indices
+                        pred_idx_matrix = pred_idx_matrices[target_rel.id]
+                        if pred_idx_matrix is None:
+                            valid_combined_matrix = valid_matrix
+                            valid_mask = torch.arange(valid_matrix.nnz()).to(device)
+                        else:
+                            valid_combined_matrix, valid_mask = combine_matrices(valid_matrix, pred_idx_matrix)
                         valid_masks[target_rel.id] = valid_mask
                         data_target[target_rel.id] = valid_combined_matrix
                 left = left.cpu().numpy()
@@ -440,6 +469,7 @@ def get_hyperparams(argv):
     ap.add_argument('--tail_weighted', type=int, default=0,
                     help='Whether to weight negative tail samples by frequency')
     ap.add_argument('--node_val',  type=str, default='one', help='Default value to use if nodes have no attributes')
+    ap.add_argument('--pred_indices', type=str, default='train', help='Additional indices to include when making predictions')
     ap.add_argument('--save_embeddings', dest='save_embeddings', action='store_true', default=True)
     ap.add_argument('--no_save_embeddings', dest='save_embeddings', action='store_false', default=True)
     ap.set_defaults(save_embeddings=True)

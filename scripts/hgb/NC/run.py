@@ -17,6 +17,7 @@ import numpy as np
 #from utils import EarlyStopping
 from EquivHGNet import EquivHGNet
 from src.SparseMatrix import SparseMatrix
+from src.utils import count_parameters
 
 from data_nc import load_data, load_data_flat
 import warnings
@@ -159,6 +160,8 @@ def run_model(args):
             entity='danieltlevy')
         wandb.watch(net, log='all', log_freq=args.wandb_log_param_freq)
     print(args)
+    print("Number of parameters: {}".format(count_parameters(net)))
+
     run_name = args.dataset + '_' + str(args.run)
     if args.wandb_log_run and wandb.run.name is not None:
         run_name = run_name + '_' + str(wandb.run.name)

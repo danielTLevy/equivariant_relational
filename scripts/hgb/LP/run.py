@@ -17,6 +17,7 @@ from data_lp import load_data, get_train_valid_pos, get_train_neg, \
 from EquivHGAE import EquivHGAE, EquivLinkPredictor
 from src.SparseMatrix import SparseMatrix
 from src.DataSchema import DataSchema, SparseMatrixData, Relation
+from src.utils import count_parameters
 import warnings
 import pdb
 warnings.filterwarnings("ignore", message="Setting attributes on ParameterDict is not supported.")
@@ -233,6 +234,7 @@ def run_model(args):
             entity='danieltlevy')
         wandb.watch(net, log='all', log_freq=args.wandb_log_param_freq)
     print(args)
+    print("Number of parameters: {}".format(count_parameters(net)))
     run_name = args.dataset + '_' + str(args.run)
     if args.wandb_log_run and wandb.run.name is not None:
         run_name = run_name + '_' + str(wandb.run.name)

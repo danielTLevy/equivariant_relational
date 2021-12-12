@@ -109,9 +109,9 @@ def run_model(args):
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
     if args.lgnn:
-        load_data_fn = load_data
-    else:
         load_data_fn = load_data_flat
+    else:
+        load_data_fn = load_data
     schema, schema_out, data, data_target, labels, \
         train_val_test_idx, dl = load_data_fn(args.dataset,
                        use_edge_data=args.use_edge_data,

@@ -1,3 +1,4 @@
+#%%
 import sys
 sys.path.append('../../')
 sys.path.append('../')
@@ -17,7 +18,7 @@ import numpy as np
 from EquivHGNet import EquivHGNet
 from src.SparseMatrix import SparseMatrix
 
-from data_nc import load_data
+from data_nc import load_data, load_data_flat
 import warnings
 warnings.filterwarnings("ignore", message="Setting attributes on ParameterDict is not supported.")
 
@@ -106,8 +107,12 @@ def pred_fcn(values, multi_label=False):
 def run_model(args):
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
+    if args.lgnn:
+        load_data_fn = load_data
+    else:
+        load_data_fn = load_data_flat
     schema, schema_out, data, data_target, labels, \
-        train_val_test_idx, dl = load_data(args.dataset,
+        train_val_test_idx, dl = load_data_fn(args.dataset,
                        use_edge_data=args.use_edge_data,
                        use_node_attrs=args.use_node_attr)
     target_entity_id = 0 # True for all current NC datasets
@@ -158,7 +163,7 @@ def run_model(args):
     if args.wandb_log_run and wandb.run.name is not None:
         run_name = run_name + '_' + str(wandb.run.name)
 
-    if args.checkpoint_path is not '':
+    if args.checkpoint_path != '':
         checkpoint_path = args.checkpoint_path
     else:
         checkpoint_path = f"checkpoint/checkpoint_{run_name}.pt"
@@ -315,6 +320,7 @@ def get_hyperparams(argv):
     ap.add_argument('--multi_label', default=False, action='store_true',
                     help='multi-label classification. Only valid for IMDb dataset')
     ap.add_argument('--evaluate', type=int, default=1)
+    ap.add_argument('--lgnn', action='store_true', default=False)
     ap.set_defaults(wandb_log_run=False)
 
     args, argv = ap.parse_known_args(argv)

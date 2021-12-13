@@ -115,7 +115,8 @@ def run_model(args):
     schema, schema_out, data, data_target, labels, \
         train_val_test_idx, dl = load_data_fn(args.dataset,
                        use_edge_data=args.use_edge_data,
-                       use_node_attrs=args.use_node_attr)
+                       use_node_attrs=args.use_node_attr,
+                       feats_type=args.feats_type)
     target_entity_id = 0 # True for all current NC datasets
     target_entity = schema.entities[target_entity_id]
     data, in_dims = select_features(data, schema, args.feats_type, target_entity_id)

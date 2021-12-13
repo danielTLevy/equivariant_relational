@@ -11,7 +11,7 @@ from data_loader_nc import data_loader
 
 DATA_FILE_DIR = '../../../data/hgb/NC/'
 
-def load_data(prefix='DBLP', use_node_attrs=True, use_edge_data=True):
+def load_data(prefix='DBLP', use_node_attrs=True, use_edge_data=True, feats_type=0):
     dl = data_loader(DATA_FILE_DIR + prefix)
 
     # Create Schema
@@ -42,6 +42,9 @@ def load_data(prefix='DBLP', use_node_attrs=True, use_edge_data=True):
         if not use_edge_data:
             # Use only adjacency information
             data[rel_id].values = torch.ones(data[rel_id].values.shape)
+
+    target_entity = 0
+
     if use_node_attrs:
         for ent_id, attr_matrix in dl.nodes['attr'].items():
             if attr_matrix is None:
@@ -58,7 +61,6 @@ def load_data(prefix='DBLP', use_node_attrs=True, use_edge_data=True):
                 is_set = True)
 
 
-    target_entity = 0
     n_outputs = dl.nodes['count'][target_entity]
     n_output_classes = dl.labels_train['num_classes']
     schema_out = DataSchema([entities[target_entity]],
@@ -99,7 +101,7 @@ def load_data(prefix='DBLP', use_node_attrs=True, use_edge_data=True):
            train_val_test_idx,\
            dl
 
-def load_data_flat(prefix, use_node_attrs=True, use_edge_data=True, node_val='one'):
+def load_data_flat(prefix, use_node_attrs=True, use_edge_data=True, node_val='zero', feats_type=0):
     '''
     Load data into one matrix with all relations, reproducing Maron 2019
     The first [# relation types] channels are adjacency matrices,
@@ -133,6 +135,8 @@ def load_data_flat(prefix, use_node_attrs=True, use_edge_data=True, node_val='on
         data_out.values = torch.cat([data_out.values, data_rel_full.values], 1)
         data_out.n_channels += 1
 
+    target_entity = 0
+
     if use_node_attrs:
         for ent_id, attr_matrix in dl.nodes['attr'].items():
             start_i = dl.nodes['shift'][ent_id]
@@ -144,6 +148,9 @@ def load_data_flat(prefix, use_node_attrs=True, use_edge_data=True, node_val='on
                     attr_matrix = np.random.randn(n_instances, 1)
                 else: 
                     attr_matrix = np.ones((n_instances,1))
+            if feats_type == 1 and ent_id != target_entity:
+                # To keep same behaviour as non-LGNN model, use 10 dimensions
+                attr_matrix = np.zeros((n_instances, 10))
             n_channels = attr_matrix.shape[1]
             indices = torch.arange(start_i, start_i+n_instances).unsqueeze(0).repeat(2, 1)
             data_rel = SparseMatrix(
@@ -159,7 +166,6 @@ def load_data_flat(prefix, use_node_attrs=True, use_edge_data=True, node_val='on
     data[0] = data_out
 
 
-    target_entity = 0
     n_outputs = total_n_nodes
     n_output_classes = dl.labels_train['num_classes']
     schema_out = DataSchema([entities[target_entity]],

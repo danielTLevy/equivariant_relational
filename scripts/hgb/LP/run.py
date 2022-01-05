@@ -385,7 +385,6 @@ def run_model(args):
                         wandb.summary["val_loss_best"] = val_loss
                         wandb.summary["epoch_best"] = epoch
                         wandb.summary["train_loss_best"] = train_loss.item()
-                        wandb.summary.update()
                         wandb.save(checkpoint_path)
         if args.wandb_log_run:
             wandb.log(wandb_log)

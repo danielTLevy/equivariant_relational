@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from src.DataSchema import DataSchema
@@ -18,7 +19,8 @@ class EquivHGNet(nn.Module):
                  layers=[32, 64, 32], target_entities=None,
                  fc_layers=[], final_activation=nn.Identity(),
                  output_dim=1,  dropout=0, norm=True, pool_op='mean',
-                 in_fc_layer=True, norm_affine=False):
+                 in_fc_layer=True, norm_affine=False,
+                 norm_out=False):
         super(EquivHGNet, self).__init__()
 
         self.schema = schema
@@ -69,8 +71,10 @@ class EquivHGNet(nn.Module):
         self.fc_layers = nn.ModuleList([])
         self.fc_layers.extend([nn.Linear(embedding_layers[i-1], embedding_layers[i])
                             for i in range(1, self.n_fc_layers+1)])
-
         self.final_activation = final_activation
+        self.norm_out = norm_out
+        self.epsilon = torch.FloatTensor([1e-12])
+
 
 
     def forward(self, data, idx_identity=None, idx_transpose=None, data_out=None, get_embeddings=False):
@@ -88,6 +92,8 @@ class EquivHGNet(nn.Module):
             out = self.fc_layers[0](out)
             for i in range(1, self.n_fc_layers):
                 out = self.fc_layers[i](self.dropout(self.activation(out)))
+        if self.norm_out:
+            out = out / (torch.max(torch.norm(out, dim=1, keepdim=True), self.epsilon))
         out = self.final_activation(out)
         return out
 
@@ -103,7 +109,8 @@ class AlternatingHGN(nn.Module):
                   activation=F.relu,
                  fc_layers=[], final_activation=nn.Identity(),
                  output_dim=1,  dropout=0, norm=True, pool_op='mean',
-                 in_fc_layer=True, norm_affine=False):
+                 in_fc_layer=True, norm_affine=False,
+                 norm_out=False):
         super(AlternatingHGN, self).__init__()
 
         self.schema = schema
@@ -161,7 +168,8 @@ class AlternatingHGN(nn.Module):
 
 
         self.final_activation = final_activation
-
+        self.norm_out = norm_out
+        self.epsilon = torch.FloatTensor([1e-12])
 
     def forward(self, data, data_embedding):
         for i in range(self.depth):
@@ -170,6 +178,8 @@ class AlternatingHGN(nn.Module):
             data = self.rel_activation(self.bcast_layers[i](data_embedding, data))
 
         out = self.pool_layers[-1](data, data_embedding)[0].values
+        if self.norm_out:
+            out = out / (torch.max(torch.norm(out, dim=1, keepdim=True), self.epsilon))
         out = self.final_activation(out)
         return out
 

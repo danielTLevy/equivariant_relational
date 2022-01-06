@@ -151,7 +151,8 @@ def run_model(args):
                         output_dim=num_classes,
                         norm=args.norm,
                         pool_op=args.pool_op,
-                        norm_affine=args.norm_affine)
+                        norm_affine=args.norm_affine,
+                        norm_out=args.norm_out)
 
     net.to(device)
     optimizer = torch.optim.Adam(net.parameters(), lr=args.lr,
@@ -307,6 +308,7 @@ def get_hyperparams(argv):
     ap.add_argument('--seed', type=int, default=1)
     ap.add_argument('--norm',  type=int, default=1)
     ap.add_argument('--norm_affine', type=int, default=1)
+    ap.add_argument('--norm_out', action='store_true', default=False)
     ap.add_argument('--pool_op', type=str, default='mean')
     ap.add_argument('--use_edge_data',  type=int, default=1)
     ap.add_argument('--use_node_attr',  type=int, default=1)

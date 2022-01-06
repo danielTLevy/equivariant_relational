@@ -73,7 +73,6 @@ class EquivHGNet(nn.Module):
                             for i in range(1, self.n_fc_layers+1)])
         self.final_activation = final_activation
         self.norm_out = norm_out
-        self.epsilon = torch.FloatTensor([1e-12])
 
 
 
@@ -93,7 +92,7 @@ class EquivHGNet(nn.Module):
             for i in range(1, self.n_fc_layers):
                 out = self.fc_layers[i](self.dropout(self.activation(out)))
         if self.norm_out:
-            out = out / (torch.max(torch.norm(out, dim=1, keepdim=True), self.epsilon))
+            out = F.normalize(out, p=2., dim=1)
         out = self.final_activation(out)
         return out
 
@@ -169,7 +168,6 @@ class AlternatingHGN(nn.Module):
 
         self.final_activation = final_activation
         self.norm_out = norm_out
-        self.epsilon = torch.FloatTensor([1e-12])
 
     def forward(self, data, data_embedding):
         for i in range(self.depth):
@@ -179,7 +177,7 @@ class AlternatingHGN(nn.Module):
 
         out = self.pool_layers[-1](data, data_embedding)[0].values
         if self.norm_out:
-            out = out / (torch.max(torch.norm(out, dim=1, keepdim=True), self.epsilon))
+            out = F.normalize(out, p=2., dim=1)
         out = self.final_activation(out)
         return out
 

@@ -317,7 +317,7 @@ def get_hyperparams(argv):
     ap.add_argument('--no_save_embeddings', dest='save_embeddings',
                     action='store_false', default=True)
     ap.set_defaults(save_embeddings=True)
-    ap.add_argument('--wandb_log_param_freq', type=int, default=100)
+    ap.add_argument('--wandb_log_param_freq', type=int, default=1000)
     ap.add_argument('--wandb_log_loss_freq', type=int, default=1)
     ap.add_argument('--wandb_log_run', dest='wandb_log_run', action='store_true',
                         help='Log this run in wandb')

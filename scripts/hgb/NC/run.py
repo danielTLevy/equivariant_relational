@@ -148,7 +148,8 @@ def run_model(args):
                         norm=args.norm,
                         pool_op=args.pool_op,
                         norm_affine=args.norm_affine,
-                        norm_out=args.norm_out)
+                        norm_out=args.norm_out,
+                        residual=args.residual)
 
     net.to(device)
     optimizer = torch.optim.Adam(net.parameters(), lr=args.lr,
@@ -310,6 +311,7 @@ def get_hyperparams(argv):
     ap.add_argument('--pool_op', type=str, default='mean')
     ap.add_argument('--use_edge_data',  type=int, default=1)
     ap.add_argument('--use_node_attr',  type=int, default=1)
+    ap.add_argument('--residual', action='store_true', default=False)
     ap.add_argument('--save_embeddings', dest='save_embeddings',
                     action='store_true', default=True)
     ap.add_argument('--no_save_embeddings', dest='save_embeddings',

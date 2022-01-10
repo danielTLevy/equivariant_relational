@@ -280,3 +280,9 @@ class SparseMatrixData(Data):
         for rel_id in self.schema.relations:
             self.rel_tensors[rel_id].zero_()
         return self
+
+    def __add__(self, other):
+        data_out = {}
+        for rel_id in self.schema.relations:
+            data_out[rel_id] = self.rel_tensors[rel_id] + other[rel_id]
+        return SparseMatrixData(self.schema, data_out, self.batch_size)

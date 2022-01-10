@@ -9,7 +9,6 @@ from src.SparseMatrixEquivariantLayer import SparseMatrixEquivariantLayer, \
 from src.SparseEquivariantLayer import SparseEquivariantLayer
 from src.Modules import Activation,  Dropout,  SparseMatrixRelationLinear
 
-
 class EquivHGNet(nn.Module):
     '''
     Network for predicting properties of a single entity, where relations
@@ -20,7 +19,8 @@ class EquivHGNet(nn.Module):
                  fc_layers=[], final_activation=nn.Identity(),
                  output_dim=1,  dropout=0, norm=True, pool_op='mean',
                  in_fc_layer=True, norm_affine=False,
-                 norm_out=False):
+                 norm_out=False,
+                 residual=False):
         super(EquivHGNet, self).__init__()
 
         self.schema = schema
@@ -73,8 +73,7 @@ class EquivHGNet(nn.Module):
                             for i in range(1, self.n_fc_layers+1)])
         self.final_activation = final_activation
         self.norm_out = norm_out
-
-
+        self.residual = residual
 
     def forward(self, data, idx_identity=None, idx_transpose=None, data_out=None, get_embeddings=False):
         if idx_identity is None or idx_transpose is None:
@@ -83,8 +82,11 @@ class EquivHGNet(nn.Module):
         if self.use_in_fc_layer:
             data = self.fc_in_layer(data)
         for i in range(self.n_equiv_layers):
+            equiv_out = self.equiv_layers[i](data, idx_identity, idx_transpose)
+            if self.residual and i != 0:
+                equiv_out = equiv_out + data
             data = self.rel_dropout(self.rel_activation(self.norms[i](
-                    self.equiv_layers[i](data, idx_identity, idx_transpose))))
+                    equiv_out)))
         data = self.pooling(data, data_out)
         out = data[0].values
         if self.n_fc_layers > 0 and get_embeddings == False:

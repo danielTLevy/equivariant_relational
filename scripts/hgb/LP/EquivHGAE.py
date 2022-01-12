@@ -221,6 +221,82 @@ class EquivLinkPredictor(nn.Module):
         elif self.decode == 'equiv':
             return self.decoder(embeddings, idx_id_out, idx_trans_out, data_target)
 
+class EquivAlternatingLinkPredictor(nn.Module):
+    def __init__(self, schema, input_channels,
+                 width, depth, embedding_dim,
+                  activation=F.relu,
+                 fc_layers=[], final_activation=nn.Identity(),
+                 output_dim=1,  dropout=0, norm=True, pool_op='mean',
+                 in_fc_layer=True, norm_affine=False):
+        super(EquivAlternatingLinkPredictor, self).__init__()
+
+        self.schema = schema
+        self.input_channels = input_channels
+
+        self.width = width
+        self.depth = depth
+        self.embedding_dim = embedding_dim
+        self.activation = activation
+        self.rel_activation = Activation(schema, self.activation, is_sparse=True)
+
+        self.dropout = Dropout(p=dropout)
+
+        self.use_in_fc_layer = in_fc_layer
+        # Equivariant Layers
+        self.pool_layers = nn.ModuleList([])
+        self.bcast_layers = nn.ModuleList([])
+
+        for i in range(depth):
+            if i == 0:
+                in_dim = input_channels
+            else:
+                in_dim = width
+            if i == depth - 1:
+                out_dim = output_dim
+            else:
+                out_dim = width
+
+            pool_i = SparseMatrixEntityPoolingLayer(schema, in_dim,
+                                                      embedding_dim,
+                                                      entities=schema.entities,
+                                                      pool_op=pool_op)
+            self.pool_layers.append(pool_i)
+
+            bcast_i = SparseMatrixEntityBroadcastingLayer(schema, embedding_dim,
+                                                          out_dim,
+                                                          entities=schema.entities,
+                                                          pool_op=pool_op)
+            self.bcast_layers.append(bcast_i)
+
+        if norm:
+            self.norms = nn.ModuleList()
+            for i in range(depth):
+                norm_dict = nn.ModuleDict()
+                for rel_id in self.schema.relations:
+                    norm_dict[str(rel_id)] = nn.BatchNorm1d(embedding_dim,
+                                                            affine=norm_affine, track_running_stats=False)
+                norm_activation = Activation(schema, norm_dict, is_dict=True, is_sparse=True)
+                self.norms.append(norm_activation)
+        else:
+            self.norms = nn.ModuleList([Activation(schema, nn.Identity(), is_sparse=True)
+                                        for _ in range(depth)])
+
+
+        self.final_activation = final_activation
+
+    def forward(self, data, indices_identity, indices_transpose, data_embedding, data_target):
+        for i in range(self.depth):
+            data_embedding = self.norms[i](self.rel_activation(self.pool_layers[i](data, data_embedding)))
+
+            if i == self.depth - 1:
+                data = self.bcast_layers[i](data_embedding, data_target)
+            else:
+                data = self.rel_activation(self.bcast_layers[i](data_embedding, data))
+
+        out = self.final_activation(data)
+        return out
+
+
 class EquivHGAE(nn.Module):
     '''
     Autoencoder to produce entity embeddings which can be used for

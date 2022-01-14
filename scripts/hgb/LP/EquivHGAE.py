@@ -225,9 +225,10 @@ class EquivAlternatingLinkPredictor(nn.Module):
     def __init__(self, schema, input_channels,
                  width, depth, embedding_dim,
                   activation=F.relu,
-                 fc_layers=[], final_activation=nn.Identity(),
+                 final_activation=nn.Identity(),
                  output_dim=1,  dropout=0, norm=True, pool_op='mean',
-                 in_fc_layer=True, norm_affine=False):
+                 in_fc_layer=True, out_fc_layer=True,
+                 norm_affine=False):
         super(EquivAlternatingLinkPredictor, self).__init__()
 
         self.schema = schema
@@ -242,16 +243,24 @@ class EquivAlternatingLinkPredictor(nn.Module):
         self.dropout = Dropout(p=dropout)
 
         self.use_in_fc_layer = in_fc_layer
+        if self.use_in_fc_layer:
+            self.in_fc_layer = SparseMatrixRelationLinear(schema, self.input_channels,
+                                                          width)
+        self.use_out_fc_layer = out_fc_layer
+        if self.use_out_fc_layer:
+            self.out_fc_layer = SparseMatrixRelationLinear(schema, width,
+                                                          output_dim)
+
         # Equivariant Layers
         self.pool_layers = nn.ModuleList([])
         self.bcast_layers = nn.ModuleList([])
 
         for i in range(depth):
-            if i == 0:
+            if i == 0 and not self.use_in_fc_layer:
                 in_dim = input_channels
             else:
                 in_dim = width
-            if i == depth - 1:
+            if i == depth - 1 and not self.use_out_fc_layer:
                 out_dim = output_dim
             else:
                 out_dim = width
@@ -281,10 +290,11 @@ class EquivAlternatingLinkPredictor(nn.Module):
             self.norms = nn.ModuleList([Activation(schema, nn.Identity(), is_sparse=True)
                                         for _ in range(depth)])
 
-
         self.final_activation = final_activation
 
     def forward(self, data, indices_identity, indices_transpose, data_embedding, data_target):
+        if self.use_in_fc_layer:
+            data = self.rel_activation(self.in_fc_layer(data))
         for i in range(self.depth):
             data_embedding = self.norms[i](self.rel_activation(self.pool_layers[i](data, data_embedding)))
 
@@ -292,7 +302,8 @@ class EquivAlternatingLinkPredictor(nn.Module):
                 data = self.bcast_layers[i](data_embedding, data_target)
             else:
                 data = self.rel_activation(self.bcast_layers[i](data_embedding, data))
-
+        if self.use_out_fc_layer:
+            data = self.out_fc_layer(data)
         out = self.final_activation(data)
         return out
 

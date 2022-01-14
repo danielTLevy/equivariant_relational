@@ -1,9 +1,8 @@
 import sys
 sys.path.append('../../')
-import time
+
 import argparse
 
-from collections import defaultdict
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -11,15 +10,14 @@ import numpy as np
 import random
 import wandb
 from tqdm import tqdm
-from sklearn.metrics import f1_score, auc, roc_auc_score, precision_recall_curve
-from data_lp import load_data, get_train_valid_pos, get_train_neg, \
+from data_lp import load_data_flat, get_train_valid_pos, get_train_neg, \
     get_valid_neg, get_valid_neg_2hop, get_test_neigh_from_file, gen_file_for_evaluate
 from EquivHGAE import EquivAlternatingLinkPredictor
 from src.SparseMatrix import SparseMatrix
-from src.DataSchema import DataSchema, SparseMatrixData, Relation
+from src.DataSchema import SparseMatrixData
 from src.utils import count_parameters
 import warnings
-import pdb
+
 warnings.filterwarnings("ignore", message="Setting attributes on ParameterDict is not supported.")
 
 #%%
@@ -37,6 +35,7 @@ def select_features(data, schema, feats_type):
     '''
     # Select features for nodes
     in_dims = {}
+    num_relations = len(schema.relations) - len(schema.entities)
 
     if feats_type == 0:
         # Keep all node attributes
@@ -65,42 +64,86 @@ def make_target_matrix(relation, pos_head, pos_tail, neg_head, neg_tail, device)
 
     return data_target
 
-def combine_matrices(matrix_a, matrix_b):
+def make_flat_target_matrix(full_relation, rel_ids, pos_heads, pos_tails, neg_heads, neg_tails, device):
+    full_heads, full_tails = np.array([], dtype=np.int32), np.array([], dtype=np.int32)
+    for rel_id in rel_ids:
+        full_heads = np.concatenate((full_heads, pos_heads[rel_id]))
+        full_heads = np.concatenate((full_heads, neg_heads[rel_id]))
+        full_tails = np.concatenate((full_tails, pos_tails[rel_id]))
+        full_tails = np.concatenate((full_tails, neg_tails[rel_id]))
+    n_rels = len(rel_ids)
+    indices = torch.LongTensor(np.vstack((full_heads, full_tails)))
+    values = torch.zeros((indices.shape[1], n_rels))
+    shape = (full_relation.entities[0].n_instances,
+             full_relation.entities[1].n_instances, n_rels)
+    full_matrix = SparseMatrix(indices=indices, values=values, shape=shape)
+    full_matrix = full_matrix.to(device).coalesce_()
+    matrix_out = SparseMatrix.from_other_sparse_matrix(full_matrix, 0)
+
+    for rel_id in rel_ids:
+        rel_matrix = make_target_matrix(full_relation,  pos_heads[rel_id],
+                                        pos_tails[rel_id], neg_heads[rel_id],
+                                        neg_tails[rel_id], device)
+
+        rel_matrix_full = SparseMatrix.from_other_sparse_matrix(full_matrix, 1) + rel_matrix
+        matrix_out.values = torch.cat([matrix_out.values, rel_matrix_full.values], 1)
+        matrix_out.n_channels += 1
+    return matrix_out
+
+def combine_matrices_flat(full_relation, a_pos_heads, a_pos_tails, a_neg_heads, a_neg_tails, ids, b_matrix, device):
     '''
-    Given Matrix A (target) and Matrix B (supplement), would like to get a
-    matrix that includes the indices of both matrix A and B, but only the
-    values of Matrix A. Additionally, return a mask indicating which indices
-    corresponding to Matrix A.
+    inputs:
+        a_heads: a dict of ID : head indices
+        a_tails: a dict of ID : tail indices
+        ids: IDs with which to access the indices of A
+        b_matrix: a matrix whose indices we want to include in output
+
+    returns:
+        out_matrix: matrix with indices & values of A as well as indices of B
+        valid_masks: a dict of id:indices that correspond to the indices  for
+             each of the relations in A
     '''
-    # We only want indices from matrix_b, not values
-    matrix_b_zero = matrix_b.clone()
-    matrix_b_zero.values.zero_()
-    matrix_combined = matrix_a + matrix_b_zero
-
-    # To determine indices corresponding to matrix_a, make binary matrix
-    matrix_a_ones = matrix_a.clone()
-    matrix_a_ones.values.zero_()
-    matrix_a_ones.values += 1
-    mask_matrix_combined = matrix_a_ones + matrix_b_zero
-    matrix_a_mask = mask_matrix_combined.values[:,0].nonzero().squeeze()
-    return matrix_combined, matrix_a_mask
-
-def coalesce_matrix(matrix):
-    coalesced_matrix = matrix.coalesce(op='mean')
-    left = coalesced_matrix.indices[0,:]
-    right = coalesced_matrix.indices[1,:]
-    labels = coalesced_matrix.values.squeeze()
-    return coalesced_matrix, left, right, labels
+    full_heads, full_tails = np.array([], dtype=np.int32), np.array([], dtype=np.int32)
+    for rel_id in ids:
+        full_heads = np.concatenate((full_heads, a_pos_heads[rel_id]))
+        full_heads = np.concatenate((full_heads, a_neg_heads[rel_id]))
+        full_tails = np.concatenate((full_tails, a_pos_tails[rel_id]))
+        full_tails = np.concatenate((full_tails, a_neg_tails[rel_id]))
+    indices = torch.LongTensor(np.vstack((full_heads, full_tails)))
+    values = torch.zeros((indices.shape[1], 1))
+    shape = (full_relation.entities[0].n_instances,
+             full_relation.entities[1].n_instances, 1)
+    full_a_matrix = SparseMatrix(indices=indices, values=values, shape=shape)
+    full_a_matrix = full_a_matrix.to(device).coalesce_()
 
 
-def make_target_matrix_test(relation, left, right, labels, device):
-    indices = torch.LongTensor(np.vstack((left, right)))
-    values = torch.FloatTensor(labels).unsqueeze(1)
-    shape = (relation.entities[0].n_instances,
-             relation.entities[1].n_instances, 1)
-    return SparseMatrix(indices=indices, values=values, shape=shape).to(device)
+    b_idx_matrix = SparseMatrix.from_other_sparse_matrix(b_matrix, 1)
+    b_idx_matrix.values += 1
+
+    out_idx_matrix = b_idx_matrix + full_a_matrix
+    out_matrix = SparseMatrix.from_other_sparse_matrix(out_idx_matrix, 0)
 
 
+    for rel_id in ids:
+        rel_matrix = make_target_matrix(full_relation,  a_pos_heads[rel_id],
+                                        a_pos_tails[rel_id], a_neg_heads[rel_id],
+                                        a_neg_tails[rel_id], device)
+
+
+        rel_full_matrix = SparseMatrix.from_other_sparse_matrix(out_idx_matrix, 1) + rel_matrix
+        out_matrix.values = torch.cat([out_matrix.values, rel_full_matrix.values], 1)
+        out_matrix.n_channels += 1
+
+        rel_idx_matrix = SparseMatrix.from_other_sparse_matrix(rel_matrix, 1)
+        rel_idx_matrix.values += 1
+        rel_idx_full_matrix = SparseMatrix.from_other_sparse_matrix(out_idx_matrix, 1) + rel_idx_matrix
+        out_idx_matrix.values = torch.cat([out_idx_matrix.values, rel_idx_full_matrix.values], 1)
+        out_idx_matrix.n_channels += 1
+
+    masks = {}
+    for channel_i, rel_id in enumerate(ids):
+        masks[rel_id] = out_idx_matrix.values[:,channel_i+1].nonzero().squeeze()
+    return out_matrix, masks
 
 
 #%%
@@ -108,11 +151,10 @@ def run_model(args):
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
     # Collect data and schema
-    schema, data_original, dl = load_data(args.dataset,
-                                          use_edge_data=args.use_edge_data,
-                                          use_other_edges=args.use_other_edges,
-                                          use_node_attrs=args.use_node_attrs,
-                                          node_val=args.node_val)
+    schema, data_original, dl = load_data_flat(args.dataset,
+                                               use_edge_data=args.use_edge_data,
+                                               use_node_attrs=args.use_node_attrs,
+                                               node_val=args.node_val)
     data, in_dims = select_features(data_original, schema, args.feats_type)
     data = data.to(device)
     
@@ -120,8 +162,10 @@ def run_model(args):
     indices_identity, indices_transpose = data.calculate_indices()
     # Get target relations and create data structure for embeddings
     target_rel_ids = dl.links_test['data'].keys()
-    target_rels = [schema.relations[rel_id] for rel_id in target_rel_ids]
+    num_outputs = len(target_rel_ids)
+    flat_rel = schema.relations[0]
     target_ents = schema.entities
+
     data_embedding = SparseMatrixData.make_entity_embeddings(target_ents,
                                                              args.embedding_dim)
     data_embedding.to(device)
@@ -130,33 +174,9 @@ def run_model(args):
     train_pos_heads, train_pos_tails = dict(), dict()
     val_pos_heads, val_pos_tails = dict(), dict()
     for target_rel_id in target_rel_ids:
-        train_val_pos = get_train_valid_pos(dl, target_rel_id)
+        train_val_pos = get_train_valid_pos(dl, target_rel_id, flat=True)
         train_pos_heads[target_rel_id], train_pos_tails[target_rel_id], \
             val_pos_heads[target_rel_id], val_pos_tails[target_rel_id] = train_val_pos
-
-    # Get additional indices to be used when making predictions
-    pred_idx_matrices = {}
-    for target_rel in target_rels:
-        if args.pred_indices == 'train':
-            train_neg_head, train_neg_tail = get_train_neg(dl, target_rel.id,
-                                                       tail_weighted=args.tail_weighted)
-            pred_idx_matrices[target_rel.id] = make_target_matrix(target_rel,
-                                              train_pos_heads[target_rel.id],
-                                              train_pos_tails[target_rel.id],
-                                              train_neg_head, train_neg_tail,
-                                              device)
-        elif args.pred_indices == 'train_neg':
-            # Get negative samples twice
-            train_neg_head1, train_neg_tail1 = get_train_neg(dl, target_rel.id,
-                                                   tail_weighted=args.tail_weighted)
-            train_neg_head2, train_neg_tail2 = get_train_neg(dl, target_rel.id,
-                                                   tail_weighted=args.tail_weighted)
-            pred_idx_matrices[target_rel.id] = make_target_matrix(target_rel,
-                                              train_neg_head1, train_neg_tail1,
-                                              train_neg_head2, train_neg_tail2,
-                                              device)
-        elif args.pred_indices == 'none':
-            pred_idx_matrices[target_rel.id] = None
 
     # Create network and optimizer
     net = EquivAlternatingLinkPredictor(schema, in_dims,
@@ -197,28 +217,36 @@ def run_model(args):
     for epoch in progress:
         net.train()
         # Make target matrix and labels to train on
+        # Target is same as input
         data_target = data.clone()
-
         labels_train = torch.Tensor([]).to(device)
-        for target_rel in target_rels:
-            train_neg_head, train_neg_tail = get_train_neg(dl, target_rel.id,
-                                                           tail_weighted=args.tail_weighted)
-            train_matrix = make_target_matrix(target_rel,
-                                              train_pos_heads[target_rel.id],
-                                              train_pos_tails[target_rel.id],
-                                              train_neg_head, train_neg_tail,
-                                              device)
-            data_target[target_rel.id] = train_matrix
-            labels_train_rel = train_matrix.values.squeeze()
-            labels_train = torch.cat([labels_train, labels_train_rel])
+
+        train_neg_heads, train_neg_tails = dict(), dict()
+        for target_rel_id in target_rel_ids:
+            train_neg_heads[target_rel_id], train_neg_tails[target_rel_id] = get_train_neg(dl, target_rel_id, flat=True,
+                                                                                           tail_weighted=args.tail_weighted)
+
+
+        train_matrix = make_flat_target_matrix(flat_rel, target_rel_ids,
+                                               train_pos_heads,
+                                               train_pos_tails,
+                                               train_neg_heads,
+                                               train_neg_tails,
+                                               device)
+        data_target[flat_rel.id] = train_matrix
+
 
         # Make prediction
+        idx_id_tgt, idx_trans_tgt = data_target.calculate_indices()
         output_data = net(data, indices_identity, indices_transpose,
                    data_embedding, data_target)
         logits_combined = torch.Tensor([]).to(device)
-        for target_rel in target_rels:
-            logits_rel = output_data[target_rel.id].values.squeeze()
+        for rel_channel, target_rel_id in enumerate(target_rel_ids):
+            logits_rel = output_data[flat_rel.id].values[:, rel_channel]
             logits_combined = torch.cat([logits_combined, logits_rel])
+
+            labels_train_rel = train_matrix.values[:,rel_channel]
+            labels_train = torch.cat([labels_train, labels_train_rel])
 
         logp = torch.sigmoid(logits_combined)
         train_loss = loss_func(logp, labels_train)
@@ -234,54 +262,53 @@ def run_model(args):
         wandb_log = {'Train Loss': train_loss.item(), 'epoch':epoch}
 
         # Evaluate on validation set
-        net.eval()
         if epoch % args.val_every == 0:
             with torch.no_grad():
                 net.eval()
-                left = torch.Tensor([]).to(device)
-                right = torch.Tensor([]).to(device)
-                labels_val = torch.Tensor([]).to(device)
-                valid_masks = {}
-                for target_rel in target_rels:
+                val_neg_heads, val_neg_tails = dict(), dict()
+                for target_rel_id in target_rel_ids:
                     if args.val_neg == '2hop':
-                        valid_neg_head, valid_neg_tail = get_valid_neg_2hop(dl, target_rel.id)
+                        val_neg_heads[target_rel_id], val_neg_tails[target_rel_id] = get_valid_neg_2hop(dl, target_rel_id)
                     elif args.val_neg == 'randomtw':
-                        valid_neg_head, valid_neg_tail = get_valid_neg(dl, target_rel.id, tail_weighted=True)
+                        val_neg_heads[target_rel_id], val_neg_tails[target_rel_id] = get_valid_neg(dl, target_rel_id, tail_weighted=True)
                     else:
-                        valid_neg_head, valid_neg_tail = get_valid_neg(dl, target_rel.id)
-                    valid_matrix_full = make_target_matrix(target_rel,
-                                                     val_pos_heads[target_rel.id], val_pos_tails[target_rel.id],
-                                                     valid_neg_head, valid_neg_tail,
-                                                     device)
-                    valid_matrix, left_rel, right_rel, labels_val_rel = coalesce_matrix(valid_matrix_full)
-                    left = torch.cat([left, left_rel])
-                    right = torch.cat([right, right_rel])
-                    labels_val = torch.cat([labels_val, labels_val_rel])
-                    # Add in additional prediction indices
-                    pred_idx_matrix = pred_idx_matrices[target_rel.id]
-                    if pred_idx_matrix is None:
-                        valid_combined_matrix = valid_matrix
-                        valid_mask = torch.arange(valid_matrix.nnz()).to(device)
-                    else:
-                        valid_combined_matrix, valid_mask = combine_matrices(valid_matrix, pred_idx_matrix)
-                    valid_masks[target_rel.id] = valid_mask
-                    data_target[target_rel.id] = valid_combined_matrix
-                left = left.cpu().numpy()
-                right = right.cpu().numpy()
-                edge_list = np.concatenate([left.reshape((1,-1)), right.reshape((1,-1))], axis=0)
+                        val_neg_heads[target_rel_id], val_neg_tails[target_rel_id] = get_valid_neg(dl, target_rel_id)
+
+                val_matrix_combined, val_masks = combine_matrices_flat(flat_rel, val_pos_heads,
+                                                    val_pos_tails, val_neg_heads,
+                                                    val_neg_tails, target_rel_ids, train_matrix,
+                                                    device)
+                data_target[flat_rel.id] = val_matrix_combined.clone()
 
 
                 data_target.zero_()
+                idx_id_val, idx_trans_val = data_target.calculate_indices()
                 output_data = net(data, indices_identity, indices_transpose,
                            data_embedding, data_target)
+
+                left = torch.Tensor([]).to(device)
+                right = torch.Tensor([]).to(device)
                 logits_combined = torch.Tensor([]).to(device)
-                for target_rel in target_rels:
-                    logits_rel_full = output_data[target_rel.id].values.squeeze()
-                    logits_rel = logits_rel_full[valid_masks[target_rel.id]]
+                labels_val = torch.Tensor([]).to(device)
+
+                for rel_channel, rel_id in enumerate(target_rel_ids):
+                    mask = val_masks[rel_id]
+
+                    logits_rel = output_data[flat_rel.id].values[:, rel_channel][mask]
                     logits_combined = torch.cat([logits_combined, logits_rel])
+
+                    left_rel, right_rel = val_matrix_combined.indices[:, mask]
+                    left = torch.cat([left, left_rel])
+                    right = torch.cat([right, right_rel])
+                    labels_val_rel = val_matrix_combined.values[:,rel_channel][mask]
+                    labels_val = torch.cat([labels_val, labels_val_rel])
 
                 logp = torch.sigmoid(logits_combined)
                 val_loss = loss_func(logp, labels_val).item()
+
+                left = left.cpu().numpy()
+                right = right.cpu().numpy()
+                edge_list = np.concatenate([left.reshape((1,-1)), right.reshape((1,-1))], axis=0)
 
                 wandb_log.update({'val_loss': val_loss})
                 res = dl.evaluate(edge_list, logp.cpu().numpy(), labels_val.cpu().numpy())
@@ -319,41 +346,57 @@ def run_model(args):
         if args.wandb_log_run:
             wandb.log(wandb_log)
 
+
     # Evaluate on test set
     if args.evaluate:
-        for target_rel in target_rels:
-            print("Evaluating Target Rel " + str(target_rel.id))
-            checkpoint = torch.load(checkpoint_path, map_location=device)
-            net.load_state_dict(checkpoint['net_state_dict'])
-            net.eval()
-            # Target is same as input
-            data_target = data.clone()
-            with torch.no_grad():
-                left_full, right_full, test_labels_full = get_test_neigh_from_file(dl, args.dataset, target_rel.id)
-                test_matrix_full =  make_target_matrix_test(target_rel, left_full, right_full,
-                                                      test_labels_full, device)
-                test_matrix, left, right, test_labels = coalesce_matrix(test_matrix_full)
+        print("Evaluating Target Rel " + str(rel_id))
+        checkpoint = torch.load(checkpoint_path)
+        net.load_state_dict(checkpoint['net_state_dict'])
+        net.eval()
 
-                test_combined_matrix, test_mask = combine_matrices(test_matrix, train_matrix)
-                data_target[target_rel.id] = test_combined_matrix
-                data_target.zero_()
-                data_out = net(data, indices_identity, indices_transpose,
-                           data_embedding, data_target)
-                logits_full = data_out[target_rel.id].values.squeeze()
-                logits = logits_full[test_mask]
+        # Target is same as input
+        data_target = data.clone()
+        with torch.no_grad():
 
-                pred = torch.sigmoid(logits).cpu().numpy()
+            test_heads_full = dict()
+            test_tails_full = dict()
+            for rel_id in target_rel_ids:
+                test_heads_full[rel_id], test_tails_full[rel_id], test_labels_full = get_test_neigh_from_file(dl, args.dataset, rel_id, flat=True)
+
+            test_matrix_combined, test_masks = combine_matrices_flat(flat_rel, test_heads_full,
+                                                test_tails_full, test_heads_full,
+                                                test_tails_full, target_rel_ids, train_matrix,
+                                                device)
+            data_target[flat_rel.id] = test_matrix_combined.clone()
+
+            data_target.zero_()
+            idx_id_tst, idx_trans_tst = data_target.calculate_indices()
+            output_data = net(data, indices_identity, indices_transpose,
+                       data_embedding, data_target)
+
+            for rel_channel, rel_id in enumerate(target_rel_ids):
+                mask = test_masks[rel_id]
+
+                logits = output_data[flat_rel.id].values[:, rel_channel][mask]
+                logits_combined = torch.cat([logits_combined, logits_rel])
+
+                left, right = test_matrix_combined.indices[:, mask]
+                labels_test = test_matrix_combined.values[:,rel_channel][mask]
+                left_full = test_heads_full[rel_id]
+                right_full = test_tails_full[rel_id]
+
+                pred = torch.sigmoid(logits)
+
                 left = left.cpu().numpy()
                 right = right.cpu().numpy()
-                edge_list = np.vstack((left,right))
+                edge_list = np.concatenate([left.reshape((1,-1)), right.reshape((1,-1))], axis=0)
                 edge_list_full = np.vstack((left_full, right_full))
                 file_path = f"test_out/{run_name}.txt"
-                gen_file_for_evaluate(dl, edge_list_full, edge_list, pred, target_rel.id,
-                                         file_path=file_path)
-
+                gen_file_for_evaluate(dl, edge_list_full, edge_list, pred, rel_id,
+                                         file_path=file_path, flat=True)
 #%%
 def get_hyperparams(argv):
-    ap = argparse.ArgumentParser(allow_abbrev=False, description='EquivHGN for Node Classification')
+    ap = argparse.ArgumentParser(allow_abbrev=False, description='EquivHGN for Link Prediction')
     ap.add_argument('--feats_type', type=int, default=0,
                     help='Type of the node features used. ' +
                          '0 - loaded features; ' +
@@ -362,7 +405,7 @@ def get_hyperparams(argv):
                          '3 - all id vec. Default is 2;' +
                         '4 - only term features (id vec for others);' + 
                         '5 - only term features (zero vec for others).')
-    ap.add_argument('--epoch', type=int, default=300, help='Number of epochs.')
+    ap.add_argument('--epoch', type=int, default=10, help='Number of epochs.')
     ap.add_argument('--batch_size', type=int, default=100000)
     ap.add_argument('--patience', type=int, default=30, help='Patience.')
     ap.add_argument('--repeat', type=int, default=1, help='Repeat the training \
@@ -386,13 +429,10 @@ def get_hyperparams(argv):
     ap.add_argument('--norm_affine', type=int, default=1)
     ap.add_argument('--pool_op', type=str, default='mean')
     ap.add_argument('--use_edge_data',  type=int, default=0)
-    ap.add_argument('--use_other_edges',  type=int, default=1,
-                    help='Whether to use non-target relations at all')
     ap.add_argument('--use_node_attrs',  type=int, default=1)
     ap.add_argument('--tail_weighted', type=int, default=0,
                     help='Whether to weight negative tail samples by frequency')
     ap.add_argument('--node_val',  type=str, default='one', help='Default value to use if nodes have no attributes')
-    ap.add_argument('--pred_indices', type=str, default='train', help='Additional indices to include when making predictions')
     ap.add_argument('--save_embeddings', dest='save_embeddings', action='store_true', default=True)
     ap.add_argument('--no_save_embeddings', dest='save_embeddings', action='store_false', default=True)
     ap.set_defaults(save_embeddings=True)
@@ -408,7 +448,9 @@ def get_hyperparams(argv):
     ap.add_argument('--decoder', type=str, default='equiv')
     ap.add_argument('--val_neg', type=str, default='2hop')
     ap.add_argument('--val_metric', type=str, default='roc_auc')
+    ap.add_argument('--lgnn', action='store_true', default=True)
     ap.add_argument('--alternating', action='store_true', default=True)
+
     ap.set_defaults(wandb_log_run=False)
     args, argv = ap.parse_known_args(argv)
     if args.output == None:
@@ -427,10 +469,6 @@ def get_hyperparams(argv):
         args.norm_affine = False
     if args.use_edge_data == 1:
         args.use_edge_data = True
-    else:
-        args.use_edge_data = False
-    if args.use_other_edges == 1:
-        args.use_other_edges = True
     else:
         args.use_edge_data = False
     if args.use_node_attrs == 1:

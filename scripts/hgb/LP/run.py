@@ -485,7 +485,7 @@ def get_hyperparams(argv):
     ap.add_argument('--run', type=int, default=1)
     ap.add_argument('--evaluate', type=int, default=1)
     ap.add_argument('--decoder', type=str, default='equiv')
-    ap.add_argument('--val_neg', type=str, default='random')
+    ap.add_argument('--val_neg', type=str, default='2hop')
     ap.add_argument('--val_metric', type=str, default='roc_auc')
     ap.set_defaults(wandb_log_run=False)
     args, argv = ap.parse_known_args(argv)

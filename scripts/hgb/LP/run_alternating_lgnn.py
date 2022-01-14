@@ -186,7 +186,7 @@ def run_model(args):
                         activation=eval('nn.%s()' % args.act_fn),
                         final_activation = nn.Identity(),
                         dropout=args.dropout,
-                        output_dim=1,
+                        output_dim = num_outputs,
                         pool_op=args.pool_op,
                         norm_affine=args.norm_affine)
     net.to(device)

@@ -228,7 +228,8 @@ class EquivAlternatingLinkPredictor(nn.Module):
                  final_activation=nn.Identity(),
                  output_dim=1,  dropout=0, norm=True, pool_op='mean',
                  in_fc_layer=True, out_fc_layer=True,
-                 norm_affine=False):
+                 norm_affine=False,
+                 residual=False):
         super(EquivAlternatingLinkPredictor, self).__init__()
 
         self.schema = schema
@@ -291,17 +292,28 @@ class EquivAlternatingLinkPredictor(nn.Module):
                                         for _ in range(depth)])
 
         self.final_activation = final_activation
+        self.residual = residual
 
     def forward(self, data, indices_identity, indices_transpose, data_embedding, data_target):
         if self.use_in_fc_layer:
             data = self.rel_activation(self.in_fc_layer(data))
+        data_prev = data.clone().zero_()
+        data_embedding_prev = data_embedding.clone().zero_()
         for i in range(self.depth):
             data_embedding = self.norms[i](self.rel_activation(self.pool_layers[i](data, data_embedding)))
+            # Add residual
+            if self.residual:
+                data_embedding = data_embedding + data_embedding_prev
+                data_embedding_prev = data_embedding
 
             if i == self.depth - 1:
                 data = self.bcast_layers[i](data_embedding, data_target)
             else:
                 data = self.rel_activation(self.bcast_layers[i](data_embedding, data))
+            # Add residual
+            if self.residual:
+                data = data + data_prev
+                data_prev = data
         if self.use_out_fc_layer:
             data = self.out_fc_layer(data)
         out = self.final_activation(data)

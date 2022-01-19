@@ -168,7 +168,8 @@ def run_model(args):
                         dropout=args.dropout,
                         output_dim=1,
                         pool_op=args.pool_op,
-                        norm_affine=args.norm_affine)
+                        norm_affine=args.norm_affine,
+                        residual=args.residual)
     net.to(device)
     optimizer = torch.optim.Adam(net.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
@@ -407,6 +408,7 @@ def get_hyperparams(argv):
     ap.add_argument('--val_neg', type=str, default='2hop')
     ap.add_argument('--val_metric', type=str, default='roc_auc')
     ap.add_argument('--alternating', action='store_true', default=True)
+    ap.add_argument('--residual', action='store_true', default=False)
     ap.set_defaults(wandb_log_run=False)
     args, argv = ap.parse_known_args(argv)
     if args.output == None:

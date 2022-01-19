@@ -18,8 +18,8 @@ class EquivHGNet(nn.Module):
                  layers=[32, 64, 32], target_entities=None,
                  fc_layers=[], final_activation=nn.Identity(),
                  output_dim=1,  dropout=0, norm=True, pool_op='mean',
-                 in_fc_layer=True, norm_affine=False,
-                 norm_out=False,
+                 in_fc_layer=True, mid_fc_layer=False,
+                 norm_affine=False, norm_out=False,
                  residual=False):
         super(EquivHGNet, self).__init__()
 
@@ -33,6 +33,7 @@ class EquivHGNet(nn.Module):
         self.rel_dropout  = Activation(schema, self.dropout, is_sparse=True)
 
         self.use_in_fc_layer = in_fc_layer
+        self.use_mid_fc_layer = mid_fc_layer
         # Equivariant Layers
         self.equiv_layers = nn.ModuleList([])
         if self.use_in_fc_layer:
@@ -61,6 +62,12 @@ class EquivHGNet(nn.Module):
             self.norms = nn.ModuleList([Activation(schema, nn.Identity(), is_sparse=True)
                                         for _ in layers])
 
+        if self.use_mid_fc_layer:
+            self.fc_mid_layers = nn.ModuleList()
+            self.fc_mid_layers.extend([
+                    SparseMatrixRelationLinear(schema, layers[i], layers[i])
+                    for i in range(1, len(layers))])
+
         # Entity embeddings
         embedding_layers = fc_layers + [output_dim]
         self.pooling = SparseMatrixEntityPoolingLayer(schema, layers[-1],
@@ -87,6 +94,8 @@ class EquivHGNet(nn.Module):
                 equiv_out = equiv_out + data
             data = self.rel_dropout(self.rel_activation(self.norms[i](
                     equiv_out)))
+            if self.use_mid_fc_layer:
+                data = self.rel_activation(self.fc_mid_layers[i](data))
         data = self.pooling(data, data_out)
         out = data[0].values
         if self.n_fc_layers > 0 and get_embeddings == False:
@@ -110,7 +119,8 @@ class AlternatingHGN(nn.Module):
                   activation=F.relu,
                  fc_layers=[], final_activation=nn.Identity(),
                  output_dim=1,  dropout=0, norm=True, pool_op='mean',
-                 in_fc_layer=True, norm_affine=False,
+                 in_fc_layer=True,
+                 norm_affine=False,
                  norm_out=False):
         super(AlternatingHGN, self).__init__()
 

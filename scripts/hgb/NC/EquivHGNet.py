@@ -33,7 +33,6 @@ class EquivHGNet(nn.Module):
         self.rel_dropout  = Activation(schema, self.dropout, is_sparse=True)
 
         self.use_in_fc_layer = in_fc_layer
-        self.use_mid_fc_layer = mid_fc_layer
         # Equivariant Layers
         self.equiv_layers = nn.ModuleList([])
         if self.use_in_fc_layer:
@@ -61,12 +60,14 @@ class EquivHGNet(nn.Module):
         else:
             self.norms = nn.ModuleList([Activation(schema, nn.Identity(), is_sparse=True)
                                         for _ in layers])
-
+        # Optionally add intermediary fully connected layers for each 
+        # equivariant layer
+        self.use_mid_fc_layer = mid_fc_layer
         if self.use_mid_fc_layer:
-            self.fc_mid_layers = nn.ModuleList()
-            self.fc_mid_layers.extend([
-                    SparseMatrixRelationLinear(schema, layers[i], layers[i])
-                    for i in range(1, len(layers))])
+            equiv_start_i = 1 if self.use_in_fc_layer else 0
+            self.fc_mid_layers = nn.ModuleList([
+                SparseMatrixRelationLinear(schema, layers[i], layers[i])
+                for i in range(equiv_start_i, len(layers))])
 
         # Entity embeddings
         embedding_layers = fc_layers + [output_dim]

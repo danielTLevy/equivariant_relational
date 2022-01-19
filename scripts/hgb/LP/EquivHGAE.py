@@ -310,7 +310,7 @@ class EquivAlternatingLinkPredictor(nn.Module):
             if i == self.depth - 1:
                 data = self.bcast_layers[i](data_embedding, data_target)
             else:
-                data = self.dropout(self.rel_activation(self.bcast_layers[i](data_embedding, data)))
+                data = self.rel_dropout(self.rel_activation(self.bcast_layers[i](data_embedding, data)))
             # Add residual
             if self.residual:
                 data = data + data_prev

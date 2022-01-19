@@ -242,6 +242,7 @@ class EquivAlternatingLinkPredictor(nn.Module):
         self.rel_activation = Activation(schema, self.activation, is_sparse=True)
 
         self.dropout = Dropout(p=dropout)
+        self.rel_dropout  = Activation(schema, self.dropout, is_sparse=True)
 
         self.use_in_fc_layer = in_fc_layer
         if self.use_in_fc_layer:
@@ -300,7 +301,7 @@ class EquivAlternatingLinkPredictor(nn.Module):
         data_prev = data.clone().zero_()
         data_embedding_prev = data_embedding.clone().zero_()
         for i in range(self.depth):
-            data_embedding = self.norms[i](self.rel_activation(self.pool_layers[i](data, data_embedding)))
+            data_embedding = self.rel_dropout(self.norms[i](self.rel_activation(self.pool_layers[i](data, data_embedding))))
             # Add residual
             if self.residual:
                 data_embedding = data_embedding + data_embedding_prev
@@ -309,7 +310,7 @@ class EquivAlternatingLinkPredictor(nn.Module):
             if i == self.depth - 1:
                 data = self.bcast_layers[i](data_embedding, data_target)
             else:
-                data = self.rel_activation(self.bcast_layers[i](data_embedding, data))
+                data = self.dropout(self.rel_activation(self.bcast_layers[i](data_embedding, data)))
             # Add residual
             if self.residual:
                 data = data + data_prev

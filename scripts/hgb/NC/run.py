@@ -160,7 +160,7 @@ def run_model(args):
     if args.wandb_log_run:
         wandb.init(config=args,
             settings=wandb.Settings(start_method='fork'),
-            project="EquivariantHGN",
+            project="EquivariantHGN_NC",
             entity='danieltlevy')
         wandb.watch(net, log='all', log_freq=args.wandb_log_param_freq)
     print(args)

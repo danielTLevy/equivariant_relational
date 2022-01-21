@@ -162,7 +162,7 @@ def run_model(args):
     if args.wandb_log_run:
         wandb.init(config=args,
             settings=wandb.Settings(start_method='fork'),
-            project="EquivariantHGN",
+            project="EquivariantHGN_NC",
             entity='danieltlevy')
         wandb.watch(net, log='all', log_freq=args.wandb_log_param_freq)
     print(args)
@@ -295,14 +295,10 @@ def get_hyperparams(argv):
     ap.add_argument('--checkpoint_path', type=str, default='')
     ap.add_argument('--width', type=int, default=64)
     ap.add_argument('--depth', type=int, default=3)
-    ap.add_argument('--layers', type=int, nargs='*', default=['64']*3,
-                        help='Number of channels for equivariant layers')
-    ap.add_argument('--fc_layer', type=int, default=64)
-    #ap.add_argument('--fc_layers', type=str, nargs='*', default=[64],
-    #                    help='Fully connected layers for target embeddings')
     ap.add_argument('--weight_decay', type=float, default=1e-4)
     ap.add_argument('--act_fn', type=str, default='LeakyReLU')
     ap.add_argument('--in_fc_layer', type=int, default=1)
+    ap.add_argument('--out_fc_layer', type=int, default=1)
     ap.add_argument('--optimizer', type=str, default='Adam')
     ap.add_argument('--val_every', type=int, default=5)
     ap.add_argument('--seed', type=int, default=1)
@@ -342,6 +338,10 @@ def get_hyperparams(argv):
     if args.in_fc_layer == 1:
         args.in_fc_layer = True
     else:
+        args.out_fc_layer = False
+    if args.out_fc_layer == 1:
+        args.out_fc_layer = True
+    else:
         args.in_fc_layer = False
     if args.evaluate == 1:
         args.evaluate = True
@@ -364,10 +364,6 @@ def get_hyperparams(argv):
     else:
         args.use_node_attr = False
     args.layers = [args.width]*args.depth
-    if args.fc_layer == 0:
-        args.fc_layers = []
-    else:
-        args.fc_layers = [args.fc_layer]
 
     return args
 

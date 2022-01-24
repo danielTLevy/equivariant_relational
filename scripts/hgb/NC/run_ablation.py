@@ -304,7 +304,7 @@ def get_hyperparams(argv):
     ap.add_argument('--weight_decay', type=float, default=1e-4)
     ap.add_argument('--act_fn', type=str, default='LeakyReLU')
     ap.add_argument('--in_fc_layer', type=int, default=1)
-    ap.add_argument('--mid_fc_layer', type=int, default=1)
+    ap.add_argument('--mid_fc_layer', type=int, default=0)
     ap.add_argument('--optimizer', type=str, default='Adam')
     ap.add_argument('--val_every', type=int, default=5)
     ap.add_argument('--seed', type=int, default=1)
@@ -332,7 +332,7 @@ def get_hyperparams(argv):
                     help='multi-label classification. Only valid for IMDb dataset')
     ap.add_argument('--evaluate', type=int, default=1)
     ap.add_argument('--lgnn', action='store_true', default=True)
-    ap.add_argument("--removed_params", type=int, nargs='*', default=[1,2])
+    ap.add_argument("--removed_params", type=int, nargs='*', default=None)
     ap.set_defaults(wandb_log_run=False)
 
     args, argv = ap.parse_known_args(argv)

@@ -303,7 +303,7 @@ def get_hyperparams(argv):
     ap.add_argument('--weight_decay', type=float, default=1e-4)
     ap.add_argument('--act_fn', type=str, default='LeakyReLU')
     ap.add_argument('--in_fc_layer', type=int, default=1)
-    ap.add_argument('--mid_fc_layer', type=int, default=1)
+    ap.add_argument('--mid_fc_layer', type=int, default=0)
     ap.add_argument('--optimizer', type=str, default='Adam')
     ap.add_argument('--val_every', type=int, default=5)
     ap.add_argument('--seed', type=int, default=1)

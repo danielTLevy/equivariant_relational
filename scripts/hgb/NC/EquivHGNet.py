@@ -108,7 +108,7 @@ class EquivHGNet(nn.Module):
         out = self.final_activation(out)
         return out
 
-class EquivHGNetAblation(nn.Module):
+class EquivHGNetAblation(EquivHGNet):
     '''
     Network for predicting properties of a single entity, where relations
     take the form of sparse matrices
@@ -122,69 +122,16 @@ class EquivHGNetAblation(nn.Module):
                  norm_affine=False, norm_out=False,
                  residual=False,
                  removed_params = None):
-        super(EquivHGNetAblation, self).__init__()
+        super(EquivHGNetAblation, self).__init__(schema, input_channels, activation,
+                                                 layers, target_entities,
+                                                 fc_layers, final_activation,
+                                                 output_dim, dropout,
+                                                 norm, pool_op,
+                                                 in_fc_layer, mid_fc_layer,
+                                                 norm_affine, norm_out,
+                                                 residual)
 
         self.removed_params = [] if removed_params == None else removed_params
-        self.schema = schema
-        self.input_channels = input_channels
-
-        self.activation = activation
-        self.rel_activation = Activation(schema, self.activation, is_sparse=True)
-
-        self.dropout = Dropout(p=dropout)
-        self.rel_dropout  = Activation(schema, self.dropout, is_sparse=True)
-
-        self.use_in_fc_layer = in_fc_layer
-        # Equivariant Layers
-        self.equiv_layers = nn.ModuleList([])
-        if self.use_in_fc_layer:
-            # Simple fully connected layers for input attributes
-            self.fc_in_layer = SparseMatrixRelationLinear(schema, self.input_channels,
-                                                          layers[0])
-            self.n_equiv_layers = len(layers) - 1
-        else:
-            # Alternatively, use an equivariant layer
-            self.equiv_layers.append(SparseMatrixEquivariantLayer(
-                schema, input_channels, layers[0], pool_op=pool_op))
-            self.n_equiv_layers = len(layers)
-
-        self.equiv_layers.extend([
-                SparseMatrixEquivariantLayer(schema, layers[i-1], layers[i], pool_op=pool_op)
-                for i in range(1, len(layers))])
-        if norm:
-            self.norms = nn.ModuleList()
-            for channels in layers:
-                norm_dict = nn.ModuleDict()
-                for rel_id in self.schema.relations:
-                    norm_dict[str(rel_id)] = nn.BatchNorm1d(channels, affine=norm_affine, track_running_stats=False)
-                norm_activation = Activation(schema, norm_dict, is_dict=True, is_sparse=True)
-                self.norms.append(norm_activation)
-        else:
-            self.norms = nn.ModuleList([Activation(schema, nn.Identity(), is_sparse=True)
-                                        for _ in layers])
-        # Optionally add intermediary fully connected layers for each 
-        # equivariant layer
-        self.use_mid_fc_layer = mid_fc_layer
-        if self.use_mid_fc_layer:
-            equiv_start_i = 1 if self.use_in_fc_layer else 0
-            self.fc_mid_layers = nn.ModuleList([
-                SparseMatrixRelationLinear(schema, layers[i], layers[i])
-                for i in range(equiv_start_i, len(layers))])
-
-        # Entity embeddings
-        embedding_layers = fc_layers + [output_dim]
-        self.pooling = SparseMatrixEntityPoolingLayer(schema, layers[-1],
-                                                      embedding_layers[0],
-                                                      entities=target_entities,
-                                                      pool_op=pool_op)
-        self.n_fc_layers = len(fc_layers)
-        self.fc_layers = nn.ModuleList([])
-        self.fc_layers.extend([nn.Linear(embedding_layers[i-1], embedding_layers[i])
-                            for i in range(1, self.n_fc_layers+1)])
-        self.final_activation = final_activation
-        self.norm_out = norm_out
-        self.residual = residual
-
         self.remove_params(self.removed_params)
 
     def remove_params(self, params):
@@ -194,30 +141,7 @@ class EquivHGNetAblation(nn.Module):
                 del block.all_ops[index]  
             block.n_params = len(block.all_ops)
 
-    def forward(self, data, idx_identity=None, idx_transpose=None, data_out=None, get_embeddings=False):
-        if idx_identity is None or idx_transpose is None:
-            print("Calculating idx_identity and idx_transpose. This can be precomputed.")
-            idx_identity, idx_transpose = data.calculate_indices()
-        if self.use_in_fc_layer:
-            data = self.fc_in_layer(data)
-        for i in range(self.n_equiv_layers):
-            equiv_out = self.equiv_layers[i](data, idx_identity, idx_transpose)
-            if self.residual and i != 0:
-                equiv_out = equiv_out + data
-            data = self.rel_dropout(self.rel_activation(self.norms[i](
-                    equiv_out)))
-            if self.use_mid_fc_layer:
-                data = self.rel_activation(self.fc_mid_layers[i](data))
-        data = self.pooling(data, data_out)
-        out = data[0].values
-        if self.n_fc_layers > 0 and get_embeddings == False:
-            out = self.fc_layers[0](out)
-            for i in range(1, self.n_fc_layers):
-                out = self.fc_layers[i](self.dropout(self.activation(out)))
-        if self.norm_out:
-            out = F.normalize(out, p=2., dim=1)
-        out = self.final_activation(out)
-        return out
+
 
 class AlternatingHGN(nn.Module):
     '''

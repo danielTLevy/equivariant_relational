@@ -321,6 +321,51 @@ class EquivAlternatingLinkPredictor(nn.Module):
         return out
 
 
+class EquivLinkPredictorAblation(EquivLinkPredictor):
+    '''
+    Network for predicting properties of a single entity, where relations
+    take the form of sparse matrices
+    Can choose a set of parameters to turn off in all layers
+    '''
+    def __init__(self, schema, input_channels=1, activation=F.relu,
+                 layers=[64, 64, 64], embedding_dim=50,
+                 dropout=0,  pool_op='mean', norm_affine=False,
+                 final_activation=nn.Identity(),
+                 embedding_entities = None,
+                 output_rel = None,
+                 in_fc_layer=True,
+                 decode = 'dot',
+                 out_dim=1,
+                 removed_params = None):
+
+        super(EquivLinkPredictorAblation, self).__init__(schema, input_channels, activation,
+                                                layers, embedding_dim,
+                                                dropout, pool_op,
+                                                norm_affine,
+                                                final_activation,
+                                                embedding_entities,
+                                                output_rel,
+                                                in_fc_layer,
+                                                decode,out_dim)
+
+        self.removed_params = [] if removed_params == None else removed_params
+        self.remove_params(self.removed_params)
+
+    def remove_params(self, params):
+        for equiv_layer in self.encoder.equiv_layers:
+            block = equiv_layer.block_modules[str((0,0))]
+            for index in sorted(params, reverse=True):
+                del block.all_ops[index]
+            block.n_params = len(block.all_ops)
+
+        if self.decode == 'equiv':
+            for equiv_layer in self.decoder.equiv_layers:
+                block = equiv_layer.block_modules[str((0,0))]
+                for index in sorted(params, reverse=True):
+                    del block.all_ops[index]
+                block.n_params = len(block.all_ops)
+
+
 class EquivHGAE(nn.Module):
     '''
     Autoencoder to produce entity embeddings which can be used for

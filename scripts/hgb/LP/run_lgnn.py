@@ -313,11 +313,11 @@ def run_model(args):
                 val_neg_heads, val_neg_tails = dict(), dict()
                 for target_rel_id in target_rel_ids:
                     if args.val_neg == '2hop':
-                        val_neg_heads[target_rel_id], val_neg_tails[target_rel_id] = get_valid_neg_2hop(dl, target_rel_id)
+                        val_neg_heads[target_rel_id], val_neg_tails[target_rel_id] = get_valid_neg_2hop(dl, target_rel_id, flat=True)
                     elif args.val_neg == 'randomtw':
-                        val_neg_heads[target_rel_id], val_neg_tails[target_rel_id] = get_valid_neg(dl, target_rel_id, tail_weighted=True)
+                        val_neg_heads[target_rel_id], val_neg_tails[target_rel_id] = get_valid_neg(dl, target_rel_id, tail_weighted=True, flat=True)
                     else:
-                        val_neg_heads[target_rel_id], val_neg_tails[target_rel_id] = get_valid_neg(dl, target_rel_id)
+                        val_neg_heads[target_rel_id], val_neg_tails[target_rel_id] = get_valid_neg(dl, target_rel_id, flat=True),
 
                 val_matrix_combined, val_masks = combine_matrices_flat(flat_rel, val_pos_heads,
                                                     val_pos_tails, val_neg_heads,

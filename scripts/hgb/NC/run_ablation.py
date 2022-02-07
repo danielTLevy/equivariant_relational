@@ -74,6 +74,27 @@ def select_features(data, schema, feats_type, target_ent):
         in_dims[rel_id] = data[rel_id].n_channels
     return data, in_dims
 
+def remove_extra_relations(dataset, schema, data, flat=False):
+    if dataset == 'ACM':
+        redundant = [1, 3, 5, 7]
+    elif dataset == 'DBLP':
+        redundant = [3, 4, 5]
+    elif dataset == 'IMDB':
+        redundant = [1, 3, 5]
+    elif dataset == 'Freebase':
+        redundant = []
+    if flat:
+        for rel in sorted(redundant, reverse=True):
+            data[0].values = torch.cat([data[0].values[:, :rel],
+                                        data[0].values[:, rel+1:]], dim=1)
+        data[0].n_channels -= len(redundant)
+    else:
+        for rel in redundant:
+            del(schema.relations[rel])
+            del(data[rel])
+
+    return schema, data
+
 def regr_fcn(logits, multi_label=False):
     if multi_label:
         return torch.sigmoid(logits)
@@ -117,6 +138,8 @@ def run_model(args):
                        use_edge_data=args.use_edge_data,
                        use_node_attrs=args.use_node_attr,
                        feats_type=args.feats_type)
+    if args.asymmetric:
+        schema, data = remove_extra_relations(args.dataset, schema, data, args.lgnn)
     target_entity_id = 0 # True for all current NC datasets
     target_entity = schema.entities[target_entity_id]
     data, in_dims = select_features(data, schema, args.feats_type, target_entity_id)
@@ -333,6 +356,7 @@ def get_hyperparams(argv):
     ap.add_argument('--evaluate', type=int, default=1)
     ap.add_argument('--lgnn', action='store_true', default=True)
     ap.add_argument("--removed_params", type=int, nargs='*', default=None)
+    ap.add_argument("--asymmetric", action='store_true', default=False)
     ap.set_defaults(wandb_log_run=False)
 
     args, argv = ap.parse_known_args(argv)

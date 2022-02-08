@@ -38,7 +38,7 @@ def select_features(data, schema, feats_type, target_ent):
     '''
     # Select features for nodes
     in_dims = {}
-    num_relations = len(schema.relations) - len(schema.entities)
+    ent_start = max(schema.relations.keys()) - len(schema.entities) + 1
 
     if feats_type == 0:
         # Keep all node attributes
@@ -49,7 +49,7 @@ def select_features(data, schema, feats_type, target_ent):
             if ent_i.id != target_ent:
                 # 10 dimensions for some reason
                 n_dim = 10
-                rel_id = num_relations + ent_i.id
+                rel_id = ent_start + ent_i.id
                 data[rel_id] = SparseMatrix.from_other_sparse_matrix(data[rel_id], n_dim)
 
     '''
@@ -89,7 +89,7 @@ def remove_extra_relations(dataset, schema, data, flat=False):
                                         data[0].values[:, rel+1:]], dim=1)
         data[0].n_channels -= len(redundant)
     else:
-        for rel in redundant:
+        for rel in sorted(redundant, reverse=True):
             del(schema.relations[rel])
             del(data[rel])
 
@@ -354,7 +354,7 @@ def get_hyperparams(argv):
     ap.add_argument('--multi_label', default=False, action='store_true',
                     help='multi-label classification. Only valid for IMDb dataset')
     ap.add_argument('--evaluate', type=int, default=1)
-    ap.add_argument('--lgnn', action='store_true', default=True)
+    ap.add_argument('--lgnn', action='store_true', default=False)
     ap.add_argument("--removed_params", type=int, nargs='*', default=None)
     ap.add_argument("--asymmetric", action='store_true', default=False)
     ap.set_defaults(wandb_log_run=False)

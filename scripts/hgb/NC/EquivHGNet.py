@@ -135,10 +135,34 @@ class EquivHGNetAblation(EquivHGNet):
         self.remove_params(self.removed_params)
 
     def remove_params(self, params):
+        '''
+        Given these 15 "canonical" operations, get corresponding indices for
+        the same ops in each individual relation and remove them
+        '''
+        all_ops =    [('g_diag', 'e_diag'),
+                      ('p_row', 'e_diag'),
+                      ('p_diag', 'b_diag'),
+                      ('p_col', 'e_diag'),
+                      ('p_all', 'b_diag'),
+                      ('g_diag', 'b_col'),
+                      ('i_all', 't_all'),
+                      ('p_row', 'b_col'),
+                      ('i_all', 'i_all'),
+                      ('g_diag', 'b_row'),
+                      ('p_row', 'b_row'),
+                      ('p_diag', 'b_all'),
+                      ('p_col', 'b_col'),
+                      ('p_col', 'b_row'),
+                      ('p_all', 'b_all')]
         for equiv_layer in self.equiv_layers:
-            block = equiv_layer.block_modules[str((0,0))]
-            for index in sorted(params, reverse=True):
-                del block.all_ops[index]  
+            for block_id, block in equiv_layer.block_modules.items():
+                block_params = []
+                for index in sorted(params, reverse=True):
+                    op_name = all_ops[index]
+                    if op_name in block.all_ops:
+                        block_params.append(block.all_ops.index(op_name))
+                for index in sorted(block_params, reverse=True):
+                    del block.all_ops[index]
             block.n_params = len(block.all_ops)
 
 
@@ -228,4 +252,5 @@ class AlternatingHGN(nn.Module):
             out = F.normalize(out, p=2., dim=1)
         out = self.final_activation(out)
         return out
+
 

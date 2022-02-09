@@ -163,6 +163,7 @@ class EquivHGNetAblation(EquivHGNet):
                         block_params.append(block.all_ops.index(op_name))
                 for index in sorted(block_params, reverse=True):
                     del block.all_ops[index]
+                block.n_params -= len(block_params)
             block.n_params = len(block.all_ops)
 
 

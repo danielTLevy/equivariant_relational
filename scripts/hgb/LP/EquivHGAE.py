@@ -177,8 +177,7 @@ class EquivLinkPredictor(nn.Module):
         if output_rels == None:
             self.schema_out = schema
         else:
-            self.schema_out = DataSchema(schema.entities,
-                                         {rel.id: rel for rel in output_rels})
+            self.schema_out = DataSchema(schema.entities, output_rels)
         self.out_dim = out_dim
         self.encoder = EquivEncoder(schema, input_channels, activation, layers,
                                     embedding_dim, dropout, pool_op,

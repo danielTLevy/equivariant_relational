@@ -170,7 +170,7 @@ def run_model(args):
     if use_equiv:
         output_rels = schema.relations
     else:
-        output_rels = target_rels
+        output_rels = {rel.id: rel for rel in target_rels}
     data_embedding = SparseMatrixData.make_entity_embeddings(target_ents,
                                                              args.embedding_dim)
     data_embedding.to(device)

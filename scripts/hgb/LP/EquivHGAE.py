@@ -165,6 +165,7 @@ class EquivLinkPredictor(nn.Module):
     def __init__(self, schema, input_channels=1, activation=F.relu,
                  layers=[64, 64, 64], embedding_dim=50,
                  dropout=0,  pool_op='mean', norm_affine=False,
+                 norm_embed=False,
                  final_activation=nn.Identity(),
                  embedding_entities = None,
                  output_rels = None,
@@ -182,6 +183,7 @@ class EquivLinkPredictor(nn.Module):
         self.encoder = EquivEncoder(schema, input_channels, activation, layers,
                                     embedding_dim, dropout, pool_op,
                                     norm_affine, embedding_entities, in_fc_layer)
+        self.norm_embed = norm_embed
         self.decode = decode
         if self.decode == 'dot':
             self.decoder = Dot()
@@ -207,6 +209,9 @@ class EquivLinkPredictor(nn.Module):
                 data_embedding=None, data_target=None,
                 idx_id_out=None, idx_trans_out=None):
         embeddings = self.encoder(data, idx_identity, idx_transpose, data_embedding)
+        if self.norm_embed:
+            for entity_id, embedding in embeddings.items():
+                embeddings[entity_id].values = F.normalize(embedding.values, 2, 1)
         if self.decode == 'dot' or self.decode == 'distmult':
             data_out = data_target.clone()
             for rel_id, output_rel in self.schema_out.relations.items():

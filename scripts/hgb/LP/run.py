@@ -218,6 +218,7 @@ def run_model(args):
                     dropout=args.dropout,
                     pool_op=args.pool_op,
                     norm_affine=args.norm_affine,
+                    norm_embed=args.norm_embed,
                     in_fc_layer=args.in_fc_layer,
                     decode = args.decoder)
     net.to(device)
@@ -464,6 +465,7 @@ def get_hyperparams(argv):
     ap.add_argument('--val_every', type=int, default=5)
     ap.add_argument('--seed', type=int, default=1)
     ap.add_argument('--norm_affine', type=int, default=1)
+    ap.add_argument('--norm_embed', action='store_true', default=False)
     ap.add_argument('--pool_op', type=str, default='mean')
     ap.add_argument('--use_edge_data',  type=int, default=0)
     ap.add_argument('--use_other_edges',  type=int, default=1,

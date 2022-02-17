@@ -166,14 +166,11 @@ def run_model(args):
     target_rel_ids = dl.links_test['data'].keys()
     target_rels = [schema.relations[rel_id] for rel_id in target_rel_ids]
     target_ents = schema.entities
+    # Get relations used by decoder
     if use_equiv:
-        output_rel = None
+        output_rels = schema.relations
     else:
-        # Currently only equivariant decoder works for amazon dataset
-        if len(target_rels) > 1:
-            raise NotImplementedError()
-        else:
-            output_rel = target_rels[0]
+        output_rels = target_rels
     data_embedding = SparseMatrixData.make_entity_embeddings(target_ents,
                                                              args.embedding_dim)
     data_embedding.to(device)
@@ -215,7 +212,7 @@ def run_model(args):
                     layers=args.layers,
                     embedding_dim=args.embedding_dim,
                     embedding_entities=target_ents,
-                    output_rel=output_rel,
+                    output_rels=output_rels,
                     activation=eval('nn.%s()' % args.act_fn),
                     final_activation = nn.Identity(),
                     dropout=args.dropout,
@@ -277,13 +274,14 @@ def run_model(args):
             idx_id_tgt, idx_trans_tgt = data_target.calculate_indices()
             output_data = net(data, indices_identity, indices_transpose,
                        data_embedding, data_target, idx_id_tgt, idx_trans_tgt)
-            logits_combined = torch.Tensor([]).to(device)
-            for target_rel in target_rels:
-                logits_rel = output_data[target_rel.id].values.squeeze()
-                logits_combined = torch.cat([logits_combined, logits_rel])
         else:
-            logits_combined = net(data, indices_identity, indices_transpose,
+            output_data = net(data, indices_identity, indices_transpose,
                          data_embedding, data_target)
+        logits_combined = torch.Tensor([]).to(device)
+        for target_rel in target_rels:
+            logits_rel = output_data[target_rel.id].values.squeeze()
+            logits_combined = torch.cat([logits_combined, logits_rel])
+
         logp = torch.sigmoid(logits_combined)
         train_loss = loss_func(logp, labels_train)
 
@@ -331,29 +329,33 @@ def run_model(args):
                             valid_combined_matrix, valid_mask = combine_matrices(valid_matrix, pred_idx_matrix)
                         valid_masks[target_rel.id] = valid_mask
                         data_target[target_rel.id] = valid_combined_matrix
-                left = left.cpu().numpy()
-                right = right.cpu().numpy()
-                edge_list = np.concatenate([left.reshape((1,-1)), right.reshape((1,-1))], axis=0)
+                    else:
+                        data_target[target_rel.id] = valid_matrix
 
                 if use_equiv:
                     data_target.zero_()
                     idx_id_val, idx_trans_val = data_target.calculate_indices()
                     output_data = net(data, indices_identity, indices_transpose,
                                data_embedding, data_target, idx_id_val, idx_trans_val)
-                    logits_combined = torch.Tensor([]).to(device)
-                    for target_rel in target_rels:
-                        logits_rel_full = output_data[target_rel.id].values.squeeze()
-                        logits_rel = logits_rel_full[valid_masks[target_rel.id]]
-                        logits_combined = torch.cat([logits_combined, logits_rel])
                 else:
-                    # Mult-target not figured out for non-equivariant decoders yet
-                    raise NotImplementedError()
-                    logits_combined = net(data, indices_identity, indices_transpose,
+                    output_data = net(data, indices_identity, indices_transpose,
                                  data_embedding, data_target)
+                logits_combined = torch.Tensor([]).to(device)
+                for target_rel in target_rels:
+                    logits_rel_full = output_data[target_rel.id].values.squeeze()
+                    if use_equiv:
+                        logits_rel = logits_rel_full[valid_masks[target_rel.id]]
+                    else:
+                        logits_rel = logits_rel_full
+                    logits_combined = torch.cat([logits_combined, logits_rel])
+
                 logp = torch.sigmoid(logits_combined)
                 val_loss = loss_func(logp, labels_val).item()
 
                 wandb_log.update({'val_loss': val_loss})
+                left = left.cpu().numpy()
+                right = right.cpu().numpy()
+                edge_list = np.concatenate([left.reshape((1,-1)), right.reshape((1,-1))], axis=0)
                 res = dl.evaluate(edge_list, logp.cpu().numpy(), labels_val.cpu().numpy())
                 val_roc_auc = res['roc_auc']
                 val_mrr = res['MRR']
@@ -396,18 +398,14 @@ def run_model(args):
             checkpoint = torch.load(checkpoint_path, map_location=device)
             net.load_state_dict(checkpoint['net_state_dict'])
             net.eval()
-            if use_equiv:
-                # Target is same as input
-                data_target = data.clone()
-            else:
-                # Target is just target relation
-                data_target = SparseMatrixData(target_schema)
+
+            # Target is same as input
+            data_target = data.clone()
             with torch.no_grad():
                 left_full, right_full, test_labels_full = get_test_neigh_from_file(dl, args.dataset, target_rel.id)
                 test_matrix_full =  make_target_matrix_test(target_rel, left_full, right_full,
                                                       test_labels_full, device)
                 test_matrix, left, right, test_labels = coalesce_matrix(test_matrix_full)
-
                 if use_equiv:
                     test_combined_matrix, test_mask = combine_matrices(test_matrix, train_matrix)
                     data_target[target_rel.id] = test_combined_matrix
@@ -419,8 +417,11 @@ def run_model(args):
                     logits = logits_full[test_mask]
                 else:
                     data_target[target_rel.id] = test_matrix
-                    logits = net(data, indices_identity, indices_transpose,
+                    data_out = net(data, indices_identity, indices_transpose,
                                  data_embedding, data_target)
+                    logits_full = data_out[target_rel.id].values.squeeze()
+                    logits = logits_full
+
                 pred = torch.sigmoid(logits).cpu().numpy()
                 left = left.cpu().numpy()
                 right = right.cpu().numpy()

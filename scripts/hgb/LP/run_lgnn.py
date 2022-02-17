@@ -225,7 +225,7 @@ def run_model(args):
                     layers=args.layers,
                     embedding_dim=args.embedding_dim,
                     embedding_entities=target_ents,
-                    output_rel=None,
+                    output_rels=None,
                     activation=eval('nn.%s()' % args.act_fn),
                     final_activation = nn.Identity(),
                     dropout=args.dropout,

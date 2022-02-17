@@ -102,7 +102,6 @@ class EquivDecoder(nn.Module):
                  layers=[64, 64, 64], embedding_dim=50,
                  dropout=0, pool_op='mean', norm_affine=False,
                  embedding_entities = None,
-                 output_relations = None,
                  out_fc_layer=True,
                  out_dim=1):
         super(EquivDecoder, self).__init__()
@@ -168,12 +167,17 @@ class EquivLinkPredictor(nn.Module):
                  dropout=0,  pool_op='mean', norm_affine=False,
                  final_activation=nn.Identity(),
                  embedding_entities = None,
-                 output_rel = None,
+                 output_rels = None,
                  in_fc_layer=True,
                  decode = 'dot',
                  out_dim=1):
         super(EquivLinkPredictor, self).__init__()
-        self.output_rel = output_rel
+        self.output_rels = output_rels
+        if output_rels == None:
+            self.schema_out = schema
+        else:
+            self.schema_out = DataSchema(schema.entities,
+                                         {rel.id: rel for rel in output_rels})
         self.out_dim = out_dim
         self.encoder = EquivEncoder(schema, input_channels, activation, layers,
                                     embedding_dim, dropout, pool_op,
@@ -184,38 +188,36 @@ class EquivLinkPredictor(nn.Module):
         elif self.decode == 'distmult':
             self.decoder = DistMult(len(schema.relations), embedding_dim)
         elif decode == 'equiv':
-            self.decoder = EquivDecoder(schema, activation,
+            self.decoder = EquivDecoder(self.schema_out, activation,
                  layers, embedding_dim,
                  dropout, pool_op, norm_affine,
                  embedding_entities,
-                 output_rel,
                  out_fc_layer=in_fc_layer,
                  out_dim=self.out_dim)
         elif self.decode == 'broadcast':
-            if output_rel == None:
-                self.schema_out = schema
-            else:
-                self.schema_out = DataSchema(schema.entities, [output_rel])
             self.decoder = SparseMatrixEntityBroadcastingLayer(self.schema_out,
                                                                 embedding_dim,
                                                                 input_channels,
                                                                 entities=embedding_entities,
                                                                 pool_op=pool_op)
 
-        self.final_activation = Activation(schema, final_activation, is_sparse=True)
+        self.final_activation = Activation(self.schema_out, final_activation, is_sparse=True)
 
     def forward(self, data, idx_identity=None, idx_transpose=None,
                 data_embedding=None, data_target=None,
                 idx_id_out=None, idx_trans_out=None):
         embeddings = self.encoder(data, idx_identity, idx_transpose, data_embedding)
         if self.decode == 'dot' or self.decode == 'distmult':
-            left_id = self.output_rel.entities[0].id
-            left_target_indices = data_target[self.output_rel.id].indices[0]
-            left = embeddings[left_id].values[left_target_indices]
-            right_id = self.output_rel.entities[1].id
-            right_target_indices = data_target[self.output_rel.id].indices[1]
-            right = embeddings[right_id].values[right_target_indices]
-            return self.decoder(left, right, self.output_rel.id)
+            data_out = data_target.clone()
+            for rel_id, output_rel in self.schema_out.relations.items():
+                left_id = output_rel.entities[0].id
+                left_target_indices = data_target[rel_id].indices[0]
+                left = embeddings[left_id].values[left_target_indices]
+                right_id = output_rel.entities[1].id
+                right_target_indices = data_target[rel_id].indices[1]
+                right = embeddings[right_id].values[right_target_indices]
+                data_out[rel_id].values =  self.decoder(left, right, rel_id).unsqueeze(1)
+            return data_out
         elif self.decode == 'broadcast':
             return self.decoder(embeddings, data_target)
         elif self.decode == 'equiv':
@@ -332,7 +334,7 @@ class EquivLinkPredictorAblation(EquivLinkPredictor):
                  dropout=0,  pool_op='mean', norm_affine=False,
                  final_activation=nn.Identity(),
                  embedding_entities = None,
-                 output_rel = None,
+                 output_rels = None,
                  in_fc_layer=True,
                  decode = 'dot',
                  out_dim=1,
@@ -344,7 +346,7 @@ class EquivLinkPredictorAblation(EquivLinkPredictor):
                                                 norm_affine,
                                                 final_activation,
                                                 embedding_entities,
-                                                output_rel,
+                                                output_rels,
                                                 in_fc_layer,
                                                 decode,out_dim)
 
@@ -383,7 +385,8 @@ class EquivHGAE(nn.Module):
         if output_relations == None:
             self.schema_out = schema
         else:
-            self.schema_out = DataSchema(schema.entities, output_relations)
+            self.schema_out = DataSchema(schema.entities,
+                                         {rel.id: rel for rel in output_relations})
         self.input_channels = input_channels
 
         self.activation = activation

@@ -3,108 +3,21 @@ import sys
 sys.path.append('../../')
 sys.path.append('../')
 
-import time
-import argparse
 import wandb
 from tqdm import tqdm
-import pdb
-from sklearn.metrics import f1_score
-import random
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import numpy as np
 
 from EquivHGNet import AlternatingHGN
 from src.DataSchema import SparseMatrixData
-from src.SparseMatrix import SparseMatrix
-from src.utils import count_parameters, get_hyperparams
+from src.utils import count_parameters, get_hyperparams, set_seed,  \
+    select_features, regr_fcn, loss_fcn, f1_scores, f1_scores_multi
 
 from data_nc import load_data, load_data_flat
 import warnings
 warnings.filterwarnings("ignore", message="Setting attributes on ParameterDict is not supported.")
 
-
-def set_seed(seed):
-    random.seed(seed, version=2)
-    np.random.seed(random.randint(0, 2**32))
-    torch.manual_seed(random.randint(0, 2**32))
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-
-
-def select_features(data, schema, feats_type, target_ent):
-    '''
-    TODO: IMPLEMENT THIS
-    '''
-    # Select features for nodes
-    in_dims = {}
-    num_relations = len(schema.relations) - len(schema.entities)
-
-    if feats_type == 0:
-        # Keep all node attributes
-        pass
-    elif feats_type == 1:
-        # Set all non-target node attributes to zero
-        for ent_i in schema.entities:
-            if ent_i.id != target_ent:
-                # 10 dimensions for some reason
-                n_dim = 10
-                rel_id = num_relations + ent_i.id
-                data[rel_id] = SparseMatrix.from_other_sparse_matrix(data[rel_id], n_dim)
-
-    '''
-    elif feats_type == 2:
-        # Set all non-target node attributes to one-hot vector
-        for i in range(0, len(features_list)):
-            if i != target_ent:
-                dim = features_list[i].shape[0]
-                indices = torch.arange(n_instances).unsqueeze(0).repeat(2, 1)
-                values = torch.FloatTensor(np.ones(dim))
-                features_list[i] = torch.sparse.FloatTensor(indices, values, torch.Size([dim, dim])).to(device)
-    elif feats_type == 3:
-        in_dims = [features.shape[0] for features in features_list]
-        for i in range(len(features_list)):
-            dim = features_list[i].shape[0]
-            indices = np.vstack((np.arange(dim), np.arange(dim)))
-            indices = torch.LongTensor(indices)
-            values = np.ones(dim)
-            features_list[i] = torch.sparse.FloatTensor(indices, values, torch.Size([dim, dim])).to(device)
-    '''
-    for rel_id in schema.relations:
-        in_dims[rel_id] = data[rel_id].n_channels
-    return data, in_dims
-
-def regr_fcn(logits, multi_label=False):
-    if multi_label:
-        return torch.sigmoid(logits)
-    else:
-        return F.log_softmax(logits, 1)
-
-def loss_fcn(data_pred, data_true, multi_label=False):
-    if multi_label:
-        return F.binary_cross_entropy(data_pred, data_true)
-    else:
-        return F.nll_loss(data_pred, data_true)
-
-
-def f1_scores(logits, target):
-    values = logits.argmax(1).detach().cpu()
-    micro = f1_score(target.cpu(), values, average='micro')
-    macro = f1_score(target.cpu(), values, average='macro')
-    return micro, macro
-
-def f1_scores_multi(logits, target):
-    values = (logits.detach().cpu().numpy()>0).astype(int)
-    micro = f1_score(target, values, average='micro')
-    macro = f1_score(target, values, average='macro')
-    return micro, macro
-
-def pred_fcn(values, multi_label=False):
-    if multi_label:
-        pass
-    else:        
-        values.cpu().numpy().argmax(axis=1)
 #%%
 def run_model(args):
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')

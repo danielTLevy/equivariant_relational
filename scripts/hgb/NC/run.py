@@ -8,10 +8,10 @@ from tqdm import tqdm
 import torch
 import torch.nn as nn
 import numpy as np
-#from utils import EarlyStopping
 from EquivHGNet import EquivHGNet
-from src.utils import count_parameters, get_hyperparams, set_seed, \
-    select_features, regr_fcn, loss_fcn, f1_scores, f1_scores_multi
+from utils import get_hyperparams, set_seed, select_features, regr_fcn, \
+    loss_fcn, f1_scores, f1_scores_multi
+from src.utils import count_parameters
 from data_nc import load_data, load_data_flat
 import warnings
 warnings.filterwarnings("ignore", message="Setting attributes on ParameterDict is not supported.")

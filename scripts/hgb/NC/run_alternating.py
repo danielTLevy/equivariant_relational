@@ -11,9 +11,9 @@ import numpy as np
 
 from EquivHGNet import AlternatingHGN
 from src.DataSchema import SparseMatrixData
-from src.utils import count_parameters, get_hyperparams, set_seed,  \
-    select_features, regr_fcn, loss_fcn, f1_scores, f1_scores_multi
-
+from src.utils import count_parameters
+from utils import get_hyperparams, set_seed, select_features, regr_fcn,  \
+    loss_fcn, f1_scores, f1_scores_multi
 from data_nc import load_data, load_data_flat
 import warnings
 warnings.filterwarnings("ignore", message="Setting attributes on ParameterDict is not supported.")

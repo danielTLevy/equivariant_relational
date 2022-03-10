@@ -8,11 +8,11 @@ from tqdm import tqdm
 import torch
 import torch.nn as nn
 import numpy as np
-#from utils import EarlyStopping
 from EquivHGNet import EquivHGNetAblation
-from src.utils import count_parameters, get_hyperparams, set_seed, \
+from utils import get_hyperparams, set_seed, \
     select_features, regr_fcn, loss_fcn, f1_scores, f1_scores_multi, \
         remove_extra_relations
+from src.utils import count_parameters
 
 from data_nc import load_data, load_data_flat
 import warnings

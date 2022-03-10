@@ -5,9 +5,11 @@ import torch.nn.functional as F
 from src.DataSchema import DataSchema
 from src.EquivariantLayer import EquivariantLayer
 from src.SparseMatrixEquivariantLayer import SparseMatrixEquivariantLayer, \
-                    SparseMatrixEntityPoolingLayer, SparseMatrixEntityBroadcastingLayer
+                    SparseMatrixEntityPoolingLayer, SparseMatrixEntityBroadcastingLayer, \
+                    SparseMatrixEquivariantSharingLayer
 from src.SparseEquivariantLayer import SparseEquivariantLayer
 from src.Modules import Activation,  Dropout,  SparseMatrixRelationLinear
+from src.utils import MATRIX_OPS
 
 class EquivHGNet(nn.Module):
     '''
@@ -108,6 +110,42 @@ class EquivHGNet(nn.Module):
         out = self.final_activation(out)
         return out
 
+class EquivHGNetShared(EquivHGNet):
+    '''
+    Network for predicting properties of a single entity, where relations
+    take the form of sparse matrices
+    Unlike regular EquivHGNEt, layers (other than first and last) can include
+    parameters shared across relation pairs
+    '''
+    def __init__(self, schema, input_channels, activation=F.relu, 
+                 layers=[32, 64, 32], target_entities=None,
+                 fc_layers=[], final_activation=nn.Identity(),
+                 output_dim=1,  dropout=0, norm=True, pool_op='mean',
+                 in_fc_layer=True, mid_fc_layer=False,
+                 norm_affine=False, norm_out=False,
+                 residual=False):
+        super(EquivHGNetShared, self).__init__(schema, input_channels, activation, 
+                     layers, target_entities,
+                     fc_layers, final_activation,
+                     output_dim,  dropout, norm, pool_op,
+                     in_fc_layer, mid_fc_layer,
+                     norm_affine, norm_out,
+                     residual)
+
+        # Convert SparseMatrixEquivariantLayer to SparseMatrixEquivariantSharingLayer
+        # If not using an FC layer at input, then input relations will have
+        # different dimensions and thus can't be shared
+        if self.use_in_fc_layer:
+            start_index = 0
+        else:
+            start_index = 1
+        for i in range(start_index, len(self.equiv_layers)):
+            input_dim = layers[i - start_index]
+            output_dim = layers[i - start_index + 1]
+            self.equiv_layers[i] = SparseMatrixEquivariantSharingLayer(schema, input_dim, output_dim, pool_op=pool_op)
+
+
+
 class EquivHGNetAblation(EquivHGNet):
     '''
     Network for predicting properties of a single entity, where relations
@@ -139,26 +177,12 @@ class EquivHGNetAblation(EquivHGNet):
         Given these 15 "canonical" operations, get corresponding indices for
         the same ops in each individual relation and remove them
         '''
-        all_ops =    [('g_diag', 'e_diag'),
-                      ('p_row', 'e_diag'),
-                      ('p_diag', 'b_diag'),
-                      ('p_col', 'e_diag'),
-                      ('p_all', 'b_diag'),
-                      ('g_diag', 'b_col'),
-                      ('i_all', 't_all'),
-                      ('p_row', 'b_col'),
-                      ('i_all', 'i_all'),
-                      ('g_diag', 'b_row'),
-                      ('p_row', 'b_row'),
-                      ('p_diag', 'b_all'),
-                      ('p_col', 'b_col'),
-                      ('p_col', 'b_row'),
-                      ('p_all', 'b_all')]
+
         for equiv_layer in self.equiv_layers:
             for block_id, block in equiv_layer.block_modules.items():
                 block_params = []
                 for index in sorted(params, reverse=True):
-                    op_name = all_ops[index]
+                    op_name = MATRIX_OPS[index]
                     if op_name in block.all_ops:
                         block_params.append(block.all_ops.index(op_name))
                 for index in sorted(block_params, reverse=True):

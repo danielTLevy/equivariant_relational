@@ -8,7 +8,7 @@ import torch.nn as nn
 import itertools
 import logging
 from src.utils import get_all_ops, get_all_input_output_partitions, \
-                        get_ops_from_partitions, MATRIX_PREFIX_DIMS
+                        get_ops_from_partitions, MATRIX_PREFIX_DIMS, MATRIX_OPS
 from src.DataSchema import SparseMatrixData, DataSchema, Data, Relation
 from src.SparseMatrix import SparseMatrix
 import pdb
@@ -96,6 +96,78 @@ class SparseMatrixEquivariantLayerBlock(nn.Module):
             Y = Y + X_op_out
         return Y
 
+class SparseMatrixEquivariantLayerSharedBlock(nn.Module):
+    # Layer mapping between two undefined relations. Weights used are 
+    # determined in forward pass
+    def __init__(self, input_dim, output_dim, pool_op='mean'):
+        nn.Module.__init__(self)
+        self.block_id = (-1, -1)
+        self.in_dim = input_dim
+        self.out_dim = output_dim
+        self.all_ops = MATRIX_OPS
+        self.n_params = len(self.all_ops)
+        stdv = 1. / math.sqrt(self.in_dim)
+        self.weights = nn.Parameter(torch.Tensor(self.n_params, self.in_dim, self.out_dim).uniform_(-stdv, stdv))
+        self.logger = logging.getLogger()
+        self.logger.setLevel(LOG_LEVEL)
+        self.pool_op = pool_op
+
+    def output_op(self, op_str, X_out, data, device):
+        op, index_str = op_str.split('_')
+        if op == 'b':
+            return X_out.broadcast(data, index_str, device)
+        elif op == 'e':
+            return X_out.embed_diag(data, device)
+
+    def input_op(self, op_str, X_in, device):
+        op, index_str = op_str.split('_')
+        if op == 'g':
+            return X_in.gather_diag(device)
+        elif op == 'p':
+            return X_in.pool(index_str, device=device, op=self.pool_op)
+
+    def forward(self, X_in, X_out, indices_identity, indices_trans, all_ops):
+        '''
+        X_in: Source sparse tensor
+        X_out: Correpsonding sparse tensor for target relation
+        '''
+        self.logger.info("n_params: {}".format(self.n_params))
+        if type(X_out) == SparseMatrix:
+            Y = SparseMatrix.from_other_sparse_matrix(X_out, self.out_dim)
+        else:
+            Y = X_out.clone()
+        for ops in all_ops:
+            op_inp, op_out = ops
+            i = self.all_ops.index(ops)
+            weight = self.weights[i]
+            device = weight.device
+            if op_inp == None:
+                X_mul = torch.matmul(X_in, weight)
+                X_op_out = self.output_op(op_out, X_out, X_mul, device)
+            elif op_out == None:
+                X_op_inp = self.input_op(op_inp, X_in, device)
+                X_mul = torch.matmul(X_op_inp, weight)
+                X_op_out = X_mul
+            elif op_out[0] == "i":
+                # Identity
+                X_intersection_vals = X_in.gather_mask(indices_identity[0])
+                X_mul = X_intersection_vals @ weight
+                X_op_out = X_out.broadcast_from_mask(X_mul, indices_identity[1], device)
+            elif op_out[0] == "t":
+                # Transpose
+                X_T_intersection_vals = X_in.gather_transpose(indices_trans[0])
+                X_mul = X_T_intersection_vals @ weight
+                X_op_out = X_out.broadcast_from_mask(X_mul, indices_trans[1], device)
+            else:
+                # Pool or Gather or Do Nothing
+                X_op_inp = self.input_op(op_inp, X_in, device)
+                # Multiply values by weight
+                X_mul = torch.matmul(X_op_inp, weight)
+                # Broadcast or Embed Diag or Transpose
+                X_op_out = self.output_op(op_out, X_out, X_mul, device)
+            Y = Y + X_op_out
+        return Y
+
 
 class SparseMatrixEquivariantLayer(nn.Module):
     def __init__(self, schema, input_dim=1, output_dim=1, schema_out=None, pool_op='mean'):
@@ -138,6 +210,7 @@ class SparseMatrixEquivariantLayer(nn.Module):
                 bias[str(relation.id)] = nn.Parameter(torch.zeros(1, self.output_dim[relation.id]))
         self.bias = nn.ParameterDict(bias)
 
+
     def multiply_matrices(self, data, data_out, indices_identity=None, indices_transpose=None):
         for relation_i, relation_j in self.relation_pairs:
             X_in = data[relation_i.id]
@@ -167,6 +240,35 @@ class SparseMatrixEquivariantLayer(nn.Module):
         data_out = self.multiply_matrices(data, data_out,
                                           indices_identity, indices_transpose)
         data_out = self.add_bias(data_out)
+        return data_out
+
+class SparseMatrixEquivariantSharingLayer(SparseMatrixEquivariantLayer):
+    def __init__(self, schema, input_dim=1, output_dim=1, schema_out=None, pool_op='mean'):
+        '''
+        input_dim: either a rel_id: dimension dict, or an integer for all relations
+        output_dim: either a rel_id: dimension dict, or an integer for all relations
+        '''
+        super(SparseMatrixEquivariantSharingLayer, self).__init__(schema, input_dim,
+                                                                  output_dim, schema_out, pool_op)
+        self.shared_layer = SparseMatrixEquivariantLayerSharedBlock(input_dim, output_dim, pool_op)
+        
+
+    def multiply_matrices(self, data, data_out, indices_identity=None, indices_transpose=None):
+        for relation_i, relation_j in self.relation_pairs:
+            X_in = data[relation_i.id]
+            Y_in = data[relation_j.id]
+            layer = self.block_modules[str((relation_i.id, relation_j.id))]
+            indices_id = indices_identity[relation_i.id, relation_j.id]
+            indices_trans = indices_transpose[relation_i.id, relation_j.id]
+            Y_out = layer.forward(X_in, Y_in, indices_id, indices_trans)
+
+            all_ops = layer.all_ops
+            Y_out_shared = self.shared_layer.forward(X_in, Y_in, indices_id,
+                                                     indices_trans, all_ops)
+            if relation_j.id not in data_out:
+                data_out[relation_j.id] = Y_out + Y_out_shared
+            else:
+                data_out[relation_j.id] = data_out[relation_j.id] + Y_out + Y_out_shared
         return data_out
 
 

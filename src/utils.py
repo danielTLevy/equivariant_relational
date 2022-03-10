@@ -20,6 +20,23 @@ MATRIX_PREFIX_DIMS = 1
 SPARSE_PREFIX_DIMS = 0
 DENSE_PREFIX_DIMS = 2
 
+# 15 matrix-to-matrix linear operations in a "canonical" ordering
+MATRIX_OPS =    [('g_diag', 'e_diag'),
+                  ('p_row', 'e_diag'),
+                  ('p_diag', 'b_diag'),
+                  ('p_col', 'e_diag'),
+                  ('p_all', 'b_diag'),
+                  ('g_diag', 'b_col'),
+                  ('i_all', 't_all'),
+                  ('p_row', 'b_col'),
+                  ('i_all', 'i_all'),
+                  ('g_diag', 'b_row'),
+                  ('p_row', 'b_row'),
+                  ('p_diag', 'b_all'),
+                  ('p_col', 'b_col'),
+                  ('p_col', 'b_row'),
+                  ('p_all', 'b_all')]
+
 # https://stackoverflow.com/questions/19368375/set-partitions-in-python/30134039
 def get_partitions(collection):
     if len(collection) == 1:
@@ -134,6 +151,7 @@ def update_observed(observed_old, p_keep, min_observed):
 
 def get_ops(partition):
     '''
+    Operations to apply to input and output matrices, given a partition of indices
     p: pool
     g: gather
     i: id
@@ -145,6 +163,7 @@ def get_ops(partition):
     output_op = set()
     
     for inp, out in partition:
+        # If there are no output indices, we must pool over the input
         if out == set():
             if inp == {1, 2}:
                 input_op.add("p_diag")
@@ -152,10 +171,11 @@ def get_ops(partition):
                 input_op.add("p_row")
             elif inp == {2}:
                 input_op.add("p_col")
+        # Otherwise, we need to gather either diag, rows, or columns
+        # These are either kept in the output, or transposed
         else:
             if inp == {1, 2}:
                 input_op.add("g_diag")
-
             if inp == {1} and out == {1}:
                 input_op.add("i_row")
                 output_op.add("i_row")
@@ -168,7 +188,7 @@ def get_ops(partition):
             elif inp == {2} and out == {1}:
                 input_op.add("i_col")
                 output_op.add("t_col")
-
+        # If there are no input indices, then we need to broadcast over the output
         if inp == set():
             if out == {1, 2}:
                 output_op.add("b_diag")
@@ -180,6 +200,7 @@ def get_ops(partition):
             if out == {1,2}:
                 output_op.add("e_diag")
 
+    # Simplify input operations into a single operation
     if "p_row" in input_op and "p_col" in input_op:
         input_op = "p_all"
     elif "i_row" in input_op and "i_col" in input_op:
@@ -193,6 +214,7 @@ def get_ops(partition):
             input_op = None
         else:
             raise AssertionError("Can only have single input op")
+    # Simplify output operations into a single operation
     if "b_row" in output_op and "b_col" in output_op:
         output_op = "b_all"
     elif "i_row" in output_op and "i_col" in output_op:
@@ -221,8 +243,10 @@ def get_all_ops(relation_in, relation_out, prefix_dims=1):
 def get_ops_from_partitions(partitions, input_is_set=False, output_is_set=False):
     all_ops = [get_ops(partition) for partition in partitions]
     if input_is_set:
+        # Only need to operate on the diagonal if input is a set
         all_ops = [(op_in, op_out) for op_in, op_out in all_ops if op_in.split('_')[1] == 'diag']
     if output_is_set:
+        # Only need to operate on the diagonal if output is a set
         all_ops = [(op_in, op_out) for op_in, op_out in all_ops if op_out.split('_')[1] == 'diag']
     return all_ops
 

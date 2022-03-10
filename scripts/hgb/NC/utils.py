@@ -74,6 +74,7 @@ def get_hyperparams(argv):
     ap.add_argument("--asymmetric", action='store_true', default=False)
     ap.add_argument('--alternating', action='store_true', default=False)
     ap.add_argument('--embedding_dim', type=int, default=32)
+    ap.add_argument('--sharing', action='store_true', default=False)
     ap.set_defaults(wandb_log_run=False)
 
     args, argv = ap.parse_known_args(argv)

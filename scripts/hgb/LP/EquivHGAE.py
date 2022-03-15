@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from src.DataSchema import DataSchema
 from src.EquivariantLayer import EquivariantLayer
 from src.SparseMatrixEquivariantLayer import SparseMatrixEquivariantLayer, \
-                    SparseMatrixEntityPoolingLayer, SparseMatrixEntityBroadcastingLayer
+                    SparseMatrixEntityPoolingLayer, SparseMatrixEntityBroadcastingLayer, SparseMatrixEquivariantSharingLayer
 from src.SparseEquivariantLayer import SparseEquivariantLayer
 from src.Modules import Activation,  Dropout,  SparseMatrixRelationLinear
 import pdb
@@ -325,6 +325,48 @@ class EquivAlternatingLinkPredictor(nn.Module):
             data = self.out_fc_layer(data)
         out = self.final_activation(data)
         return out
+
+class EquivLinkPredictorShared(EquivLinkPredictor):
+    def __init__(self, schema, input_channels=1, activation=F.relu,
+                 layers=[64, 64, 64], embedding_dim=50,
+                 dropout=0,  pool_op='mean', norm_affine=False,
+                 norm_embed=False,
+                 final_activation=nn.Identity(),
+                 embedding_entities = None,
+                 output_rels = None,
+                 in_fc_layer=True,
+                 decode = 'dot',
+                 out_dim=1):
+        super(EquivLinkPredictorShared, self).__init__(schema, input_channels, activation,
+                     layers, embedding_dim,
+                     dropout,  pool_op, norm_affine,
+                     norm_embed,
+                     final_activation,
+                     embedding_entities,
+                     output_rels,
+                     in_fc_layer,
+                     decode,
+                     out_dim)
+        if self.encoder.use_in_fc_layer:
+            # All equiv layers have same dimension
+            start_index = 0
+        else:
+            # First equiv layer is of different dimension
+            start_index = 1
+        for i in range(len(self.encoder.equiv_layers) - start_index):
+            input_dim = layers[i]
+            output_dim = layers[i + 1]
+            self.encoder.equiv_layers[i + start_index] = SparseMatrixEquivariantSharingLayer(schema, input_dim, output_dim, pool_op=pool_op)
+
+        if self.decoder.use_out_fc_layer:
+            # Last equiv layer is different dimension
+            n_decoder = len(self.decoder.equiv_layers)
+        else:
+            n_decoder = len(self.decoder.equiv_layers) - 1
+        for i in range(n_decoder):
+            input_dim = layers[i]
+            output_dim = layers[i + 1]
+            self.decoder.equiv_layers[i] = SparseMatrixEquivariantSharingLayer(schema, input_dim, output_dim, pool_op=pool_op)
 
 
 class EquivLinkPredictorAblation(EquivLinkPredictor):

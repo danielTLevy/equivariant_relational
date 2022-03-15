@@ -260,6 +260,7 @@ def get_hyperparams(argv):
     ap.add_argument('--alternating', action='store_true', default=False)
     ap.add_argument('--residual', action='store_true', default=False)
     ap.add_argument("--removed_params", type=int, nargs='*', default=None)
+    ap.add_argument('--sharing', action='store_true', default=False)
     ap.set_defaults(wandb_log_run=False)
     args, argv = ap.parse_known_args(argv)
     if args.output == None:

@@ -8,11 +8,10 @@ import wandb
 from tqdm import tqdm
 from data_lp import load_data, get_train_valid_pos, get_train_neg, \
     get_valid_neg, get_valid_neg_2hop, get_test_neigh_from_file, gen_file_for_evaluate
-from EquivHGAE import EquivLinkPredictor
+from EquivHGAE import EquivLinkPredictor, EquivLinkPredictorShared
 from src.DataSchema import DataSchema, SparseMatrixData
-from utils import get_hyperparams, set_seed, select_features, make_target_matrix, combine_matrices, coalesce_matrix, make_target_matrix_test
 from src.utils import count_parameters
-
+from utils import get_hyperparams, set_seed, select_features, make_target_matrix, combine_matrices, coalesce_matrix, make_target_matrix_test
 import warnings
 warnings.filterwarnings("ignore", message="Setting attributes on ParameterDict is not supported.")
 
@@ -78,7 +77,11 @@ def run_model(args):
             pred_idx_matrices[target_rel.id] = None
 
     # Create network and optimizer
-    net = EquivLinkPredictor(schema, in_dims,
+    if args.sharing:
+        net_type = EquivLinkPredictorShared
+    else:
+        net_type = EquivLinkPredictor
+    net = net_type(schema, in_dims,
                     layers=args.layers,
                     embedding_dim=args.embedding_dim,
                     embedding_entities=target_ents,

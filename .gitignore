@@ -131,3 +131,12 @@ dmypy.json
 
 .DS_Store
 *.pt
+
+# Wandb directories
+scripts/hgb/LP/wandb/
+scripts/hgb/NC/wandb/
+scripts/hgnn_synthetic/wandb/
+wandb/
+
+# Data files
+*.zip

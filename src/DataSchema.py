@@ -13,7 +13,9 @@ from src.SparseMatrix import SparseMatrix
 
 class DataSchema:
     def __init__(self, entities, relations):
+        # List
         self.entities = entities
+        # Dict
         self.relations = relations
         
 class Entity:

@@ -11,7 +11,7 @@ import wandb
 from tqdm import tqdm
 import torch
 import torch.nn as nn
-import torch.functional as F
+import torch.nn.functional as F
 import numpy as np
 from hgb.NC.EquivHGNet import EquivHGNet
 from utils import get_hyperparams, set_seed, select_features, f1_scores
@@ -25,7 +25,7 @@ def run_model(args):
     SyntheticHG()
     dl = SyntheticHG(args.n_ents, args.n_rels, args.data_embed,
                      args.n_instances, args.sparsity, args.p_hom)
-    dl.make_node_classification_task(3, 0.2, 0.2)
+    dl.make_node_classification_task(args.n_classes,  args.pct_test, args.pct_val)
     data = dl.data
     target_entity_id = 0
     target_entity = dl.schema.entities[target_entity_id]

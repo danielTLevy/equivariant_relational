@@ -14,7 +14,7 @@ import torch.nn as nn
 import torch.functional as F
 import numpy as np
 from hgb.NC.EquivHGNet import EquivHGNet
-from hgb.NC.utils import get_hyperparams, set_seed, select_features, f1_scores
+from utils import get_hyperparams, set_seed, select_features, f1_scores
 from src.utils import count_parameters
 import warnings
 warnings.filterwarnings("ignore", message="Setting attributes on ParameterDict is not supported.")
@@ -23,7 +23,8 @@ warnings.filterwarnings("ignore", message="Setting attributes on ParameterDict i
 def run_model(args):
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     SyntheticHG()
-    dl = SyntheticHG(1, 1, 10, 1000, 0.01, 1)
+    dl = SyntheticHG(args.n_ents, args.n_rels, args.data_embed,
+                     args.n_instances, args.sparsity, args.p_hom)
     dl.make_node_classification_task(3, 0.2, 0.2)
     data = dl.data
     target_entity_id = 0
@@ -69,7 +70,7 @@ def run_model(args):
     print(args)
     print("Number of parameters: {}".format(count_parameters(net)))
 
-    run_name = args.dataset + '_' + str(args.run)
+    run_name = str(args.run)
     if args.wandb_log_run and wandb.run.name is not None:
         run_name = run_name + '_' + str(wandb.run.name)
 

@@ -81,10 +81,6 @@ def get_hyperparams(argv):
 
     args, argv = ap.parse_known_args(argv)
 
-    if args.output == None:
-        args.output = args.dataset + '_emb.dat'
-    if args.dataset == 'IMDB':
-        args.multi_label = True
     if args.in_fc_layer == 1:
         args.in_fc_layer = True
     else:

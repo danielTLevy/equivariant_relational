@@ -76,10 +76,11 @@ def get_hyperparams(argv):
     ap.add_argument('--data_embed', type=int, default=10)
     ap.add_argument('--n_instances', type=int, default=1000)
     ap.add_argument('--sparsity', type=float, default=0.01)
-    ap.add_argument('--p_hom', type=int, default=1)
+    ap.add_argument('--p_het', type=float, default=0)
     ap.add_argument('--n_classes', type=int, default=3)
     ap.add_argument('--pct_val', type=float, default=0.2)
     ap.add_argument('--pct_test', type=int, default=0.2)
+    ap.add_argument('--gen_links', type=str, default='uniform')
     ap.set_defaults(wandb_log_run=False)
 
     args, argv = ap.parse_known_args(argv)

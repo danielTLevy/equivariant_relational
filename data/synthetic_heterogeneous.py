@@ -5,12 +5,17 @@ import numpy as np
 import torch
 
 class SyntheticHG:
-    def __init__(self, n_ents=1, n_rels=1, embed_dim=10, n_instances=1000, sparsity=0.01, p_hom=1):
+    def __init__(self, n_ents=1, n_rels=1, embed_dim=10,
+                 n_instances=1000, sparsity=0.01, p_het=0,
+                 gen_links='uniform'):
         self.embed_dim = embed_dim
         self.n_instances = n_instances
         self.sparsity = sparsity
-        self.p_hom = p_hom
-
+        self.p_het = p_het
+        if gen_links == 'proportional':
+            self.generate_links = self.generate_links_proportional
+        else:
+            self.generate_links = self.generate_links_uniform
         # Create schema
         entities = []
         for ent_i in range(n_ents):
@@ -23,7 +28,7 @@ class SyntheticHG:
         self.schema = DataSchema(entities, relations)
         self.data = SparseMatrixData(self.schema)
         # Dict tracking whether each relation is homophilic or heterophilic
-        self.rel_hom = {}
+        self.rel_het = {}
         # Create entity embeddings
         self.ent_embed = {}
         for ent_i in range(n_ents):
@@ -32,31 +37,57 @@ class SyntheticHG:
         # Use entity embeddings to create data matrix
         for rel_id in range(n_rels):
             embed_i = self.ent_embed[relations[rel_id].entities[0].id]
-            embed_i_norm = np.linalg.norm(embed_i, 2, 1)
             embed_j = self.ent_embed[relations[rel_id].entities[1].id]
-            embed_j_norm = np.linalg.norm(embed_i, 2, 1)
-            costh = np.dot(embed_i, embed_j.T)/np.outer(embed_i_norm, embed_j_norm)
             # Choose whether to make relation homophilic or heterophilic
-            hom = np.random.rand(1)[0] < p_hom
-            self.rel_hom[rel_id] = hom
-            all_links_mask = costh > 0 
-            if not hom:
-                all_links_mask = ~all_links_mask
-            
-            # Uniformly randomly sparsify data matrices
-            all_links_indices = np.array(all_links_mask.nonzero())
-            n_links = all_links_indices.shape[1]
-            
-            #p_links = all_links_indices.shape[0] / np.prod(all_links_mask.shape)
-            n_sample = int(sparsity*np.prod(all_links_mask.shape)) 
-            if n_sample < n_links:
-                sample_indices_idx = np.random.choice(range(n_links), n_sample)
-                sample_indices = all_links_indices[:, sample_indices_idx]
+            het = np.random.rand(1)[0] < p_het
+            self.rel_het[rel_id] = het
+            sample_indices = self.generate_links(embed_i, embed_j, sparsity, het)
             sample_indices_tensor = torch.LongTensor(sample_indices)
-            sample_values_tensor = torch.ones((n_sample, 1))
+            sample_values_tensor = torch.ones((sample_indices.shape[1], 1))
             data_matrix = SparseMatrix(sample_indices_tensor, sample_values_tensor, \
                                        shape=(n_instances, n_instances, 1)).coalesce()
             self.data[rel_id] = data_matrix
+
+    def generate_links_uniform(self, embed_i, embed_j, sparsity, het=True):
+        '''
+        Generate links with uniform probabilities, but only where the
+        dot product between entities is positive (or negative, for heterophilic)
+        '''
+        embed_i_norm = np.linalg.norm(embed_i, 2, 1)
+        embed_j_norm = np.linalg.norm(embed_j, 2, 1)
+        costh = np.dot(embed_i, embed_j.T)/np.outer(embed_i_norm, embed_j_norm)
+        all_links_mask = costh > 0
+        if het:
+            all_links_mask = ~all_links_mask
+        
+        # Uniformly randomly sparsify data matrices
+        all_links_indices = np.array(all_links_mask.nonzero())
+        n_links = all_links_indices.shape[1]
+        
+        #p_links = all_links_indices.shape[0] / all_links_mask.size
+        n_sample = int(sparsity*all_links_mask.size)
+        if n_sample < n_links:
+            sample_indices_idx = np.random.choice(range(n_links), n_sample)
+            sample_indices = all_links_indices[:, sample_indices_idx]
+        return sample_indices
+
+    def generate_links_proportional(self, embed_i, embed_j, sparsity, het=True):
+        '''
+        Generate links with probabilites proportional to logit of dot
+        product bewteen entity embeddings.
+        '''
+        dot = np.dot(embed_i, embed_j.T)
+        if het:
+            dot = -dot
+        dot_prob_unnorm = 1/(1 + np.exp(-dot))
+        # No self-links
+        np.fill_diagonal(dot_prob_unnorm, 0)
+        n_sample = int(sparsity*dot.size)
+        # Generate link with probability proportional to logitss
+        dot_prob = n_sample*dot_prob_unnorm/dot_prob_unnorm.sum()
+        links_mask = dot_prob > np.random.random_sample(dot_prob.shape)
+        links_indices = np.array(links_mask.nonzero())
+        return links_indices
 
     def make_node_classification_task(self, n_classes=3, p_test=0.2, p_val=0.2):
         self.n_classes = n_classes

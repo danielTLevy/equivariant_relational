@@ -24,7 +24,8 @@ def run_model(args):
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     SyntheticHG()
     dl = SyntheticHG(args.n_ents, args.n_rels, args.data_embed,
-                     args.n_instances, args.sparsity, args.p_hom)
+                     args.n_instances, args.sparsity, args.p_het,
+                     gen_links=args.gen_links)
     dl.make_node_classification_task(args.n_classes,  args.pct_test, args.pct_val)
     data = dl.data
     target_entity_id = 0
@@ -147,6 +148,7 @@ Val Macro-F1: {:.3f}".format(val_loss, val_micro, val_macro))
     # testing on test set
     if args.evaluate:
         pass
+    wandb.finish()
 
 #%%
 if __name__ == '__main__':

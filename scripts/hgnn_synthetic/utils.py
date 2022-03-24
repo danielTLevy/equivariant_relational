@@ -81,6 +81,7 @@ def get_hyperparams(argv):
     ap.add_argument('--pct_val', type=float, default=0.2)
     ap.add_argument('--pct_test', type=int, default=0.2)
     ap.add_argument('--gen_links', type=str, default='uniform')
+    ap.add_argument('--node_label', type=str, default='weight')
     ap.set_defaults(wandb_log_run=False)
 
     args, argv = ap.parse_known_args(argv)

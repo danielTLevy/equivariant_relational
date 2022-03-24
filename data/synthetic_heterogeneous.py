@@ -59,11 +59,11 @@ class SyntheticHG:
         all_links_mask = costh > 0
         if het:
             all_links_mask = ~all_links_mask
-        
+
         # Uniformly randomly sparsify data matrices
         all_links_indices = np.array(all_links_mask.nonzero())
         n_links = all_links_indices.shape[1]
-        
+
         #p_links = all_links_indices.shape[0] / all_links_mask.size
         n_sample = int(sparsity*all_links_mask.size)
         if n_sample < n_links:
@@ -89,12 +89,33 @@ class SyntheticHG:
         links_indices = np.array(links_mask.nonzero())
         return links_indices
 
-    def make_node_classification_task(self, n_classes=3, p_test=0.2, p_val=0.2):
+    def label_random_weight(self, embeds, n_classes, embed_dim):
+        class_weights = np.random.rand(n_classes, embed_dim)
+        labels = np.argmax(class_weights @ embeds.T, axis=0)
+        return labels
+
+    def label_nearest_neighbour(self, embeds, n_classes, embed_dim):
+        # Generate cores for each class
+        random_cores = np.random.normal(0., 1., (n_classes, embed_dim))
+        embed_repeat = np.repeat(embeds[:, :, np.newaxis], n_classes, axis=2)
+        # Calculate L2-distance to each core
+        embed_diff = embed_repeat - random_cores.T
+        embed_dist = np.linalg.norm(embed_diff, axis=1)
+        # Get closest core
+        labels = np.argmax(embed_dist, 1)
+        return labels
+
+
+    def make_node_classification_task(self, n_classes=3, p_test=0.2,
+                                      p_val=0.2, labelling='weight'):
         self.n_classes = n_classes
         target_node_type = 0
         embeds = self.ent_embed[target_node_type]
-        class_weights = np.random.rand(n_classes, self.embed_dim)
-        labels = np.argmax(class_weights @ embeds.T, axis=0)
+        if labelling == 'weight':
+            labelling_fn = self.label_random_weight
+        elif labelling == 'neighbour':
+            labelling_fn = self.label_nearest_neighbour
+        labels = labelling_fn(embeds, n_classes, self.embed_dim)
 
         np.random.seed(0)
         shuffled_indices = np.arange(self.n_instances)
@@ -115,4 +136,4 @@ class SyntheticHG:
             values=torch.zeros([self.n_instances, n_classes]),
             shape=(self.n_instances, self.n_instances, n_classes),
             is_set=True)
-       
+

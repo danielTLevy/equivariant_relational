@@ -26,7 +26,8 @@ def run_model(args):
     dl = SyntheticHG(args.n_ents, args.n_rels, args.data_embed,
                      args.n_instances, args.sparsity, args.p_het,
                      gen_links=args.gen_links)
-    dl.make_node_classification_task(args.n_classes,  args.pct_test, args.pct_val)
+    dl.make_node_classification_task(args.n_classes, args.pct_test,
+                                     args.pct_val, args.node_label)
     data = dl.data
     target_entity_id = 0
     target_entity = dl.schema.entities[target_entity_id]

@@ -147,19 +147,20 @@ class SyntheticHG:
         if tail_weighted:
             self.tail_prob = self.make_tail_prob()
         target_data = self.data[self.target_rel_id]
+        self.target_indices = target_data.indices.cpu().numpy()
         n_idx = target_data.nnz()
         n_test = int(p_test*n_idx)
         n_val = int(p_val*n_idx)
         all_pos_idx = np.arange(n_idx)
         np.random.shuffle(all_pos_idx)
         train_pos_idx = all_pos_idx[n_test+n_val:]
-        self.train_pos = target_data.indices[:, train_pos_idx].numpy()
+        self.train_pos = self.target_indices[:, train_pos_idx]
 
         val_pos_idx = all_pos_idx[n_test:n_test+n_val]
-        self.valid_pos = target_data.indices[:, val_pos_idx].numpy()
+        self.valid_pos = self.target_indices[:, val_pos_idx]
 
         test_pos_idx = all_pos_idx[:n_test]
-        self.test_pos = target_data.indices[:, test_pos_idx].numpy()
+        self.test_pos =  self.target_indices[:, test_pos_idx]
 
     def get_train_valid_pos(self):
         return self.train_pos, self.valid_pos
@@ -171,10 +172,9 @@ class SyntheticHG:
         are weighted by their frequency in the positive samples
         '''
         r_id = self.target_rel_id
-
         entities = self.schema.relations[r_id].entities
         t_arange = np.arange(0, entities[0].n_instances)
-        neg_h = self.data[r_id].indices[0].numpy()
+        neg_h =  self.target_indices[0]
         n_pos = len(neg_h)
         if tail_weighted:
             neg_t = list(np.random.choice(t_arange, size=n_pos, p=self.tail_prob))
@@ -463,7 +463,7 @@ class SyntheticHG:
         entities = self.schema.relations[r_id].entities
         t_range = (0, entities[1].n_instances)
         node_to_count = {}
-        tails, counts = np.unique(self.data[r_id].indices[1].numpy(), return_counts=True)
+        tails, counts = np.unique( self.target_indices[1], return_counts=True)
         for node_i, count in zip(tails, counts):
             node_to_count[node_i] = count
         all_counts = []

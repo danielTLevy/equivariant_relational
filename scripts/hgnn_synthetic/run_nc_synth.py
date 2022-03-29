@@ -14,7 +14,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from hgb.NC.EquivHGNet import EquivHGNet
-from utils import get_hyperparams, set_seed, select_features, f1_scores
+from utils import get_hyperparams_nc, set_seed, select_features, f1_scores
 from src.utils import count_parameters
 import warnings
 warnings.filterwarnings("ignore", message="Setting attributes on ParameterDict is not supported.")
@@ -22,7 +22,6 @@ warnings.filterwarnings("ignore", message="Setting attributes on ParameterDict i
 #%%
 def run_model(args):
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-    SyntheticHG()
     dl = SyntheticHG(args.n_ents, args.n_rels, args.data_embed,
                      args.n_instances, args.sparsity, args.p_het,
                      gen_links=args.gen_links)
@@ -154,7 +153,7 @@ Val Macro-F1: {:.3f}".format(val_loss, val_micro, val_macro))
 #%%
 if __name__ == '__main__':
     argv = sys.argv[1:]
-    args = get_hyperparams(argv)
+    args = get_hyperparams_nc(argv)
     set_seed(args.seed)
     #%%
     run_model(args)

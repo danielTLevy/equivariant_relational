@@ -84,6 +84,7 @@ class Data:
     def __len__(self):
         return len(self.rel_tensors)
 
+
     def to(self, *args, **kwargs):
         for k, v in self.rel_tensors.items():
             self.rel_tensors[k] = v.to(*args, **kwargs)
@@ -94,6 +95,12 @@ class Data:
 
     def __repr__(self):
         return self.rel_tensors.__repr__()
+
+    def keys(self):
+        return self.rel_tensors.keys()
+
+    def values(self):
+        return self.rel_tensors.values()
 
     def items(self):
         return self.rel_tensors.items()

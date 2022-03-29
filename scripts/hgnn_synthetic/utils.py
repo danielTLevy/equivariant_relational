@@ -139,7 +139,6 @@ def get_hyperparams_lp(argv):
                     and testing for N times. Default is 1.')
     ap.add_argument('--lr', type=float, default=1e-3)
     ap.add_argument('--dropout', type=float, default=0.5)
-    ap.add_argument('--dataset', type=str, default='LastFM')
     ap.add_argument('--checkpoint_path', type=str, default='')
     ap.add_argument('--width', type=int, default=64)
     ap.add_argument('--depth', type=int, default=3)
@@ -196,8 +195,6 @@ def get_hyperparams_lp(argv):
     ap.add_argument('--node_label', type=str, default='weight')
     ap.set_defaults(wandb_log_run=False)
     args, argv = ap.parse_known_args(argv)
-    if args.output == None:
-        args.output = args.dataset + '_emb.dat'
     if args.in_fc_layer == 1:
         args.in_fc_layer = True
     else:

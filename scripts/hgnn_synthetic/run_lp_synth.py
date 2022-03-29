@@ -99,7 +99,7 @@ def run_model(args):
         wandb.watch(net, log='all', log_freq=args.wandb_log_param_freq)
     print(args)
     print("Number of parameters: {}".format(count_parameters(net)))
-    run_name = args.dataset + '_' + str(args.run)
+    run_name = str(args.run)
     if args.wandb_log_run and wandb.run.name is not None:
         run_name = run_name + '_' + str(wandb.run.name)
     if args.checkpoint_path != '':

@@ -26,6 +26,8 @@ def run_model(args):
                      args.n_instances, args.sparsity, args.p_het,
                      gen_links=args.gen_links,
                      schema_str=args.schema_str)
+    print(dl.schema)
+    print("Heterogeneous: {}".format(dl.rel_het))
     dl.make_node_classification_task(args.n_classes, args.pct_test,
                                      args.pct_val, args.node_label)
     data = dl.data

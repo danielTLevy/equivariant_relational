@@ -17,7 +17,11 @@ class DataSchema:
         self.entities = entities
         # Dict
         self.relations = relations
-        
+
+    def __repr__(self):
+        return "DataSchema(Entities: {} \n Relations: {})".format(self.entities,
+                                                      self.relations)
+
 class Entity:
     def __init__(self, entity_id, n_instances):
         self.id = entity_id
@@ -48,7 +52,9 @@ class Relation:
         return np.prod(self.get_shape())
 
     def __repr__(self):
-        return "Relation(id={}, entities={})".format(self.id, self.entities)
+        return "Relation(id={}, entities={}, is_set={})".format(self.id,
+                                                     [ent.id for ent in self.entities],
+                                                     self.is_set)
 
     def __eq__(self, other):
         if type(other) != type(self):

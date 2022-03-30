@@ -24,7 +24,8 @@ def run_model(args):
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     dl = SyntheticHG(args.n_ents, args.n_rels, args.data_embed,
                      args.n_instances, args.sparsity, args.p_het,
-                     gen_links=args.gen_links)
+                     gen_links=args.gen_links,
+                     schema_str=args.schema_str)
     dl.make_node_classification_task(args.n_classes, args.pct_test,
                                      args.pct_val, args.node_label)
     data = dl.data
@@ -36,7 +37,7 @@ def run_model(args):
     train_idx = np.sort(dl.train_idx)
     val_idx = np.sort(dl.val_idx)
     test_idx = np.sort(dl.test_idx)
-    
+
     data = data.to(device)
     indices_identity, indices_transpose = data.calculate_indices()
     data_target = dl.data_target.to(device)

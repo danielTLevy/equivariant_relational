@@ -77,11 +77,11 @@ def get_hyperparams_nc(argv):
     ap.add_argument('--n_instances', type=int, default=1000)
     ap.add_argument('--sparsity', type=float, default=0.01)
     ap.add_argument('--p_het', type=float, default=0)
-    ap.add_argument('--n_classes', type=int, default=3)
     ap.add_argument('--pct_val', type=float, default=0.2)
     ap.add_argument('--pct_test', type=int, default=0.2)
     ap.add_argument('--gen_links', type=str, default='uniform')
     ap.add_argument('--node_label', type=str, default='weight')
+    ap.add_argument('--schema_str', type=str, default='')
     ap.set_defaults(wandb_log_run=False)
 
     args, argv = ap.parse_known_args(argv)
@@ -192,7 +192,7 @@ def get_hyperparams_lp(argv):
     ap.add_argument('--pct_val', type=float, default=0.2)
     ap.add_argument('--pct_test', type=int, default=0.2)
     ap.add_argument('--gen_links', type=str, default='uniform')
-    ap.add_argument('--node_label', type=str, default='weight')
+    ap.add_argument('--schema_str', type=str, default='')
     ap.set_defaults(wandb_log_run=False)
     args, argv = ap.parse_known_args(argv)
     if args.in_fc_layer == 1:

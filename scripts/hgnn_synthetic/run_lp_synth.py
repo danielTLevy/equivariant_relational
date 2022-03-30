@@ -24,7 +24,8 @@ def run_model(args):
     # Collect data and schema
     dl = SyntheticHG(args.n_ents, args.n_rels, args.data_embed,
                      args.n_instances, args.sparsity, args.p_het,
-                     gen_links=args.gen_links)
+                     gen_links=args.gen_links,
+                     schema_str=args.schema_str)
     dl.make_link_prediction_task(args.pct_test, args.pct_val, args.val_neg, args.tail_weighted)
 
     data, in_dims = select_features(dl.data, dl.schema, args.feats_type)

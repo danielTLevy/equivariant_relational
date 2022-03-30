@@ -11,7 +11,7 @@ import torch
 class SyntheticHG:
     def __init__(self, n_ents=1, n_rels=1, embed_dim=10,
                  n_instances=1000, sparsity=0.01, p_het=0,
-                 gen_links='uniform'):
+                 gen_links='uniform', schema_str=''):
         self.embed_dim = embed_dim
         self.n_instances = n_instances
         self.sparsity = sparsity
@@ -30,6 +30,14 @@ class SyntheticHG:
             ent_j = np.random.randint(0, n_ents)
             relations[rel_id] = Relation(rel_id, [entities[ent_i], entities[ent_j]], 1, is_set=False)
         self.schema = DataSchema(entities, relations)
+        # Override schema with manually entered schema if provided
+        if schema_str != '':
+            relations = {}
+            schema_tuples = eval(schema_str)
+            for rel_id, (ent_i, ent_j) in enumerate(schema_tuples):
+                relations[rel_id] = Relation(rel_id, [entities[ent_i], entities[ent_j]], 1, is_set=False)
+            self.schema = DataSchema(entities, relations)
+
         self.data = SparseMatrixData(self.schema)
         # Dict tracking whether each relation is homophilic or heterophilic
         self.rel_het = {}

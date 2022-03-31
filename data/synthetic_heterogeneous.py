@@ -5,6 +5,7 @@ import numpy as np
 from collections import defaultdict
 
 import scipy.sparse as sp
+from scipy.stats import ortho_group, special_ortho_group
 import random
 import torch
 
@@ -60,6 +61,49 @@ class SyntheticHG:
                                        shape=(n_instances, n_instances, 1)).coalesce()
             self.data[rel_id] = data_matrix
 
+        # Keep copy of this data
+        self.full_data = self.data
+        self.full_schema = self.schema
+        self.flat = False
+
+    def to_flat(self):
+        tot_instances = sum([ent.n_instances for ent in self.schema.entities])
+        tot_entity = Entity(0, tot_instances)
+        tot_rel = Relation(0, [tot_entity, tot_entity])
+
+        data_shifted = {}
+        for rel_id, rel in self.schema.relations.items():
+            ent_i, ent_j = rel.entities[0], rel.entities[1]
+            data_clone = self.data[rel_id].clone()
+            data_clone.n = tot_instances
+            data_clone.m = tot_instances
+            data_clone.indices[0] += self.shift(ent_i)
+            data_clone.indices[1] += self.shift(ent_j)
+            data_shifted[rel_id] = data_clone
+
+        # Sparse Matrix containing all data
+        data_diag = SparseMatrix(indices=torch.arange(tot_instances).expand(2, tot_instances),
+                                 values=torch.ones((tot_instances, 1)),
+                                 shape=(tot_instances, tot_instances, 1))
+        data_full = data_diag.clone()
+        for rel_id, data_matrix in data_shifted.items():
+            data_full = data_full + data_matrix
+
+        data_out = SparseMatrix.from_other_sparse_matrix(data_full, 0)
+        # Load up all edge data
+        for rel_id, data_rel in data_shifted.items():
+            data_rel_full = SparseMatrix.from_other_sparse_matrix(data_full, 1) + data_rel
+            data_out.values = torch.cat([data_out.values, data_rel_full.values], 1)
+            data_out.n_channels += 1
+
+        # Update with new schema
+        self.schema = DataSchema([tot_entity], {0: tot_rel})
+        self.n_instances = tot_instances
+        self.data = SparseMatrixData(self.schema)
+        self.data[0] = data_out
+        self.flat = True
+        return self.data
+
     def generate_links_uniform(self, embed_i, embed_j, sparsity, het=True):
         '''
         Generate links with uniform probabilities, but only where the
@@ -79,7 +123,7 @@ class SyntheticHG:
         #p_links = all_links_indices.shape[0] / all_links_mask.size
         n_sample = int(sparsity*all_links_mask.size)
         if n_sample < n_links:
-            sample_indices_idx = np.random.choice(range(n_links), n_sample)
+            sample_indices_idx = np.random.choice(range(n_links), n_sample, replace=False)
             sample_indices = all_links_indices[:, sample_indices_idx]
         return sample_indices
 
@@ -120,6 +164,8 @@ class SyntheticHG:
 
     def make_node_classification_task(self, n_classes=3, p_test=0.2,
                                       p_val=0.2, labelling='weight'):
+        if self.flat:
+            raise NotImplementedError()
         self.n_classes = n_classes
         target_node_type = 0
         embeds = self.ent_embed[target_node_type]
@@ -154,9 +200,12 @@ class SyntheticHG:
         self.target_rel_id = 0
         if tail_weighted:
             self.tail_prob = self.make_tail_prob()
-        target_data = self.data[self.target_rel_id]
+        if self.flat:
+            target_data = self.full_data[self.target_rel_id]
+        else:
+            target_data = self.data[self.target_rel_id]
         self.target_indices = target_data.indices.cpu().numpy()
-        n_idx = target_data.nnz()
+        n_idx = self.target_indices.shape[1]
         n_test = int(p_test*n_idx)
         n_val = int(p_val*n_idx)
         all_pos_idx = np.arange(n_idx)
@@ -179,17 +228,19 @@ class SyntheticHG:
         samples, but with random tail nodes. If tail_weighted, then tail nodes
         are weighted by their frequency in the positive samples
         '''
-        r_id = self.target_rel_id
-        entities = self.schema.relations[r_id].entities
-        t_arange = np.arange(0, entities[0].n_instances)
-        neg_h =  self.target_indices[0]
+        if not self.flat:
+            start_t = 0
+        else:
+            ent = self.full_schema.relations[self.target_rel_id].entities[1]
+            start_t = self.shift(ent)
+        t_arange = np.arange(start_t + self.n_instances)
+        neg_h =  self.train_pos[0]
         n_pos = len(neg_h)
         if tail_weighted:
-            neg_t = list(np.random.choice(t_arange, size=n_pos, p=self.tail_prob))
+            neg_t = list(np.random.choice(t_arange, size=n_pos, p=self.tail_prob, replace=False))
         else:
-            neg_t = list(np.random.choice(t_arange, size=n_pos))
+            neg_t = list(np.random.choice(t_arange, size=n_pos, replace=False))
         return np.array([neg_h, neg_t])
-
 
     def get_valid_neg(self, val_neg='random'):
         if val_neg == '2hop':
@@ -202,14 +253,19 @@ class SyntheticHG:
             return self.get_valid_neg_uniform(tail_weighted=False)
 
     def get_valid_neg_uniform(self, tail_weighted=False):
-        t_arange = np.arange(0, self.n_instances)
+        if not self.flat:
+            start_t = 0
+        else:
+            ent = self.full_schema.relations[self.target_rel_id].entities[0]
+            start_t = self.shift(ent)
+        t_arange = np.arange(start_t + self.n_instances)
         '''get neg_neigh'''
         neg_h = self.valid_pos[0]
         n_pos = len(neg_h)
         if tail_weighted:
-            neg_t = list(np.random.choice(t_arange, size=n_pos, p=self.tail_prob))
+            neg_t = list(np.random.choice(t_arange, size=n_pos, p=self.tail_prob, replace=False))
         else:
-            neg_t = (np.random.choice(t_arange, size=n_pos))
+            neg_t = list(np.random.choice(t_arange, size=n_pos, replace=False))
         return np.array([neg_h, neg_t])
 
 
@@ -481,6 +537,6 @@ class SyntheticHG:
         return tail_probs
 
     def shift(self, entity):
-        return self.n_instances*entity.id
+        return entity.n_instances*entity.id
 
 

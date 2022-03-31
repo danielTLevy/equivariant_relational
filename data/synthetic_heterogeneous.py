@@ -237,9 +237,9 @@ class SyntheticHG:
         neg_h =  self.train_pos[0]
         n_pos = len(neg_h)
         if tail_weighted:
-            neg_t = list(np.random.choice(t_arange, size=n_pos, p=self.tail_prob, replace=False))
+            neg_t = list(np.random.choice(t_arange, size=n_pos, p=self.tail_prob))
         else:
-            neg_t = list(np.random.choice(t_arange, size=n_pos, replace=False))
+            neg_t = list(np.random.choice(t_arange, size=n_pos))
         return np.array([neg_h, neg_t])
 
     def get_valid_neg(self, val_neg='random'):
@@ -263,9 +263,9 @@ class SyntheticHG:
         neg_h = self.valid_pos[0]
         n_pos = len(neg_h)
         if tail_weighted:
-            neg_t = list(np.random.choice(t_arange, size=n_pos, p=self.tail_prob, replace=False))
+            neg_t = list(np.random.choice(t_arange, size=n_pos, p=self.tail_prob))
         else:
-            neg_t = list(np.random.choice(t_arange, size=n_pos, replace=False))
+            neg_t = list(np.random.choice(t_arange, size=n_pos))
         return np.array([neg_h, neg_t])
 
 

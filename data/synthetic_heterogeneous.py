@@ -62,6 +62,7 @@ class SyntheticHG:
             self.data[rel_id] = data_matrix
 
         # Keep copy of this data
+        self.ent_instances = self.n_instances
         self.full_data = self.data
         self.full_schema = self.schema
         self.flat = False
@@ -200,11 +201,13 @@ class SyntheticHG:
         self.target_rel_id = 0
         if tail_weighted:
             self.tail_prob = self.make_tail_prob()
-        if self.flat:
-            target_data = self.full_data[self.target_rel_id]
-        else:
-            target_data = self.data[self.target_rel_id]
+
+        target_data = self.full_data[self.target_rel_id]
         self.target_indices = target_data.indices.cpu().numpy()
+        ent_i, ent_j = self.full_schema.relations[self.target_rel_id].entities
+        if self.flat:
+            self.target_indices[0,:] += self.shift(ent_i)
+            self.target_indices[1,:] += self.shift(ent_j)
         n_idx = self.target_indices.shape[1]
         n_test = int(p_test*n_idx)
         n_val = int(p_val*n_idx)
@@ -228,12 +231,12 @@ class SyntheticHG:
         samples, but with random tail nodes. If tail_weighted, then tail nodes
         are weighted by their frequency in the positive samples
         '''
-        if not self.flat:
-            start_t = 0
+        ent_j = self.full_schema.relations[self.target_rel_id].entities[1]
+        if self.flat:
+            start_t = self.shift(ent_j)
         else:
-            ent = self.full_schema.relations[self.target_rel_id].entities[1]
-            start_t = self.shift(ent)
-        t_arange = np.arange(start_t + self.n_instances)
+            start_t = 0
+        t_arange = np.arange(start_t, start_t + ent_j.n_instances)
         neg_h =  self.train_pos[0]
         n_pos = len(neg_h)
         if tail_weighted:
@@ -245,6 +248,7 @@ class SyntheticHG:
     def get_valid_neg(self, val_neg='random'):
         if val_neg == '2hop':
             # NOTE: doesn't work
+            raise NotImplementedError()
             self.neg_neigh = self.make_2hop()
             return self.get_valid_neg_2hop()
         elif val_neg == 'randomtw':
@@ -253,12 +257,12 @@ class SyntheticHG:
             return self.get_valid_neg_uniform(tail_weighted=False)
 
     def get_valid_neg_uniform(self, tail_weighted=False):
-        if not self.flat:
-            start_t = 0
+        ent_j = self.full_schema.relations[self.target_rel_id].entities[1]
+        if self.flat:
+            start_t = self.shift(ent_j)
         else:
-            ent = self.full_schema.relations[self.target_rel_id].entities[0]
-            start_t = self.shift(ent)
-        t_arange = np.arange(start_t + self.n_instances)
+            start_t = 0
+        t_arange = np.arange(start_t, start_t + ent_j.n_instances)
         '''get neg_neigh'''
         neg_h = self.valid_pos[0]
         n_pos = len(neg_h)

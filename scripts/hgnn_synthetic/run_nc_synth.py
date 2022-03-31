@@ -2,7 +2,6 @@
 
 from data.synthetic_heterogeneous import SyntheticHG
 
-#%%
 import sys
 sys.path.append('../../')
 sys.path.append('../')

@@ -96,7 +96,7 @@ def run_model(args):
     if args.wandb_log_run:
         wandb.init(config=args,
             settings=wandb.Settings(start_method='fork'),
-            project="EquivariantHGN_LP",
+            project="EquivariantHGN_Synth_LP",
             entity='danieltlevy')
         wandb.watch(net, log='all', log_freq=args.wandb_log_param_freq)
     print(args)
@@ -288,6 +288,7 @@ if __name__ == '__main__':
     argv = sys.argv[1:]
     args = get_hyperparams_lp(argv)
     args.lgnn = True
+    args.val_neg = 'random'
     set_seed(args.seed)
     #%%
     run_model(args)

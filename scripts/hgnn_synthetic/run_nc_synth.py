@@ -24,7 +24,10 @@ def run_model(args):
     dl = SyntheticHG(args.n_ents, args.n_rels, args.data_embed,
                      args.n_instances, args.sparsity, args.p_het,
                      gen_links=args.gen_links,
-                     schema_str=args.schema_str)
+                     schema_str=args.schema_str,
+                     node_attr=args.node_attr)
+    if args.lgnn:
+        dl.to_flat()
     print(dl.schema)
     print("Heterogeneous: {}".format(dl.rel_het))
     dl.make_node_classification_task(args.n_classes, args.pct_test,

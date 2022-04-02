@@ -28,7 +28,8 @@ def run_model(args):
     dl = SyntheticHG(args.n_ents, args.n_rels, args.data_embed,
                      args.n_instances, args.sparsity, args.p_het,
                      gen_links=args.gen_links,
-                     schema_str=args.schema_str)
+                     schema_str=args.schema_str,
+                     node_attr=args.node_attr)
     dl.to_flat()
     print(dl.full_schema)
     print("Heterogeneous: {}".format(dl.rel_het))

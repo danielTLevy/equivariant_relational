@@ -12,7 +12,8 @@ import torch
 class SyntheticHG:
     def __init__(self, n_ents=1, n_rels=1, embed_dim=10,
                  n_instances=1000, sparsity=0.01, p_het=0,
-                 gen_links='uniform', schema_str=''):
+                 gen_links='uniform', schema_str='',
+                 node_attr=0):
         self.embed_dim = embed_dim
         self.n_instances = n_instances
         self.sparsity = sparsity
@@ -61,6 +62,10 @@ class SyntheticHG:
                                        shape=(n_instances, n_instances, 1)).coalesce()
             self.data[rel_id] = data_matrix
 
+        if node_attr > 0: 
+            for ent_i, ent in enumerate(self.schema.entities):
+                attr_i = n_rels + ent_i
+                self.data[attr_i] = self.make_node_attr(ent, node_attr)
         # Keep copy of this data
         self.ent_instances = self.n_instances
         self.full_data = self.data
@@ -146,6 +151,17 @@ class SyntheticHG:
         links_indices = np.array(links_mask.nonzero())
         return links_indices
 
+    def make_node_attr(self, ent, n_attrs):
+        n_instances = ent.n_instances
+        embeds = self.ent_embed[ent.id]
+        attr_weights = np.random.rand(self.embed_dim, n_attrs)
+        attrs = embeds @ attr_weights
+        indices = torch.arange(n_instances, dtype=torch.int64).repeat(2,1)
+        return SparseMatrix(indices = indices,
+                            values = attrs,
+                            shape = (n_instances, n_instances, n_attrs),
+                            is_set=True)
+
     def label_random_weight(self, embeds, n_classes, embed_dim):
         class_weights = np.random.rand(n_classes, embed_dim)
         labels = np.argmax(class_weights @ embeds.T, axis=0)
@@ -177,11 +193,11 @@ class SyntheticHG:
         labels = labelling_fn(embeds, n_classes, self.embed_dim)
 
         np.random.seed(0)
-        shuffled_indices = np.arange(self.n_instances)
+        shuffled_indices = np.arange(self.ent_instances)
         np.random.shuffle(shuffled_indices)
 
-        n_test = int(p_test*self.n_instances)
-        n_val = int(p_val*self.n_instances)
+        n_test = int(p_test*self.ent_instances)
+        n_val = int(p_val*self.ent_instances)
         self.test_idx = shuffled_indices[:n_test]
         self.val_idx = shuffled_indices[n_test:n_test+n_val]
         self.train_idx = shuffled_indices[n_test+n_val:]

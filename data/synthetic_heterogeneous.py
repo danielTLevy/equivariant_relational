@@ -66,6 +66,8 @@ class SyntheticHG:
             for ent_i, ent in enumerate(self.schema.entities):
                 attr_i = n_rels + ent_i
                 self.data[attr_i] = self.make_node_attr(ent, node_attr)
+                self.schema.relations[attr_i] = Relation(attr_i, [ent, ent],
+                                                         node_attr, is_set=True)
         # Keep copy of this data
         self.ent_instances = self.n_instances
         self.full_data = self.data

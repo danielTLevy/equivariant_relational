@@ -158,7 +158,7 @@ class SyntheticHG:
         attrs = embeds @ attr_weights
         indices = torch.arange(n_instances, dtype=torch.int64).repeat(2,1)
         return SparseMatrix(indices = indices,
-                            values = attrs,
+                            values = torch.Tensor(attrs),
                             shape = (n_instances, n_instances, n_attrs),
                             is_set=True)
 

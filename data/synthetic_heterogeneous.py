@@ -60,7 +60,12 @@ class SyntheticHG:
             sample_values_tensor = torch.ones((sample_indices.shape[1], 1))
             data_matrix = SparseMatrix(sample_indices_tensor, sample_values_tensor, \
                                        shape=(n_instances, n_instances, 1)).coalesce()
-            self.data[rel_id] = data_matrix
+
+            # Add in diagonal indices
+            data_diag = SparseMatrix(indices=torch.arange(n_instances).expand(2, n_instances),
+                                 values=torch.zeros((n_instances, 1)),
+                                 shape=(n_instances, n_instances, 1))
+            self.data[rel_id] = data_matrix + data_diag
 
         if node_attr > 0: 
             for ent_i, ent in enumerate(self.schema.entities):

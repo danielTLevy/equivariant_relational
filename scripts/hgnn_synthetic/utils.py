@@ -68,7 +68,6 @@ def get_hyperparams_nc(argv):
     ap.add_argument('--lgnn', action='store_true', default=False)
     ap.add_argument("--removed_params", type=int, nargs='*', default=None)
     ap.add_argument('--alternating', action='store_true', default=False)
-    ap.add_argument('--embedding_dim', type=int, default=32)
     ap.add_argument('--sharing', action='store_true', default=False)
 
     ap.add_argument('--n_ents', type=int, default=1)

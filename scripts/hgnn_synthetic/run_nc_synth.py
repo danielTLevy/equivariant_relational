@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 
-from data.synthetic_heterogeneous import SyntheticHG
 
 import sys
 sys.path.append('../../')
 sys.path.append('../')
+from data.synthetic_heterogeneous import SyntheticHG
 
 import wandb
 from tqdm import tqdm

@@ -82,7 +82,7 @@ class SyntheticHG:
         data_shifted = {}
         for rel_id, rel in self.schema.relations.items():
             ent_i, ent_j = rel.entities[0], rel.entities[1]
-            data_clone = self.data[rel_id].clone()
+            data_clone = SparseMatrix.from_other_sparse_matrix(self.data[rel_id], 1)
             data_clone.n = tot_instances
             data_clone.m = tot_instances
             data_clone.indices[0] += self.shift(ent_i)
@@ -183,8 +183,6 @@ class SyntheticHG:
 
     def make_node_classification_task(self, n_classes=3, p_test=0.2,
                                       p_val=0.2, labelling='weight'):
-        if self.flat:
-            raise NotImplementedError()
         self.n_classes = n_classes
         target_node_type = 0
         embeds = self.ent_embed[target_node_type]

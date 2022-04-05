@@ -28,7 +28,7 @@ def run_model(args):
                      schema_str=args.schema_str,
                      node_attr=args.node_attr)
     print(dl.schema)
-    print("Heterogeneous: {}".format(dl.rel_het))
+    print("Heterogeneous: {}".format(dl.signatures))
     dl.make_link_prediction_task(args.pct_test, args.pct_val, args.val_neg, args.tail_weighted)
 
     data, in_dims = select_features(dl.data, dl.schema, args.feats_type)

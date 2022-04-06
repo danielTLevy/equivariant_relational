@@ -43,7 +43,6 @@ class SyntheticHG:
 
         self.data = SparseMatrixData(self.schema)
         # Dict tracking whether each relation is homophilic or heterophilic
-        self.rel_het = {}
         # Create entity embeddings
         self.ent_embed = {}
         for ent_i in range(n_ents):

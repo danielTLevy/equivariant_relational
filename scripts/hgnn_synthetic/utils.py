@@ -46,11 +46,11 @@ def get_hyperparams_nc(argv):
     ap.add_argument('--seed', type=int, default=1)
     ap.add_argument('--norm',  type=int, default=1)
     ap.add_argument('--norm_affine', type=int, default=1)
-    ap.add_argument('--norm_out', action='store_true', default=False)
+    ap.add_argument('--norm_out', type=int, default=0)
     ap.add_argument('--pool_op', type=str, default='mean')
     ap.add_argument('--use_edge_data',  type=int, default=1)
     ap.add_argument('--use_node_attr',  type=int, default=1)
-    ap.add_argument('--residual', action='store_true', default=False)
+    ap.add_argument('--residual', type=int, default=0)
     ap.add_argument('--save_embeddings', dest='save_embeddings',
                     action='store_true', default=True)
     ap.add_argument('--no_save_embeddings', dest='save_embeddings',
@@ -86,7 +86,10 @@ def get_hyperparams_nc(argv):
     ap.set_defaults(wandb_log_run=False)
 
     args, argv = ap.parse_known_args(argv)
-
+    if args.residual == 1:
+        args.residual = True
+    else:
+        args.residual = False
     if args.in_fc_layer == 1:
         args.in_fc_layer = True
     else:
@@ -179,7 +182,7 @@ def get_hyperparams_lp(argv):
     ap.add_argument('--val_metric', type=str, default='roc_auc')
     ap.add_argument('--lgnn', action='store_true', default=False)
     ap.add_argument('--alternating', action='store_true', default=False)
-    ap.add_argument('--residual', action='store_true', default=False)
+    ap.add_argument('--residual', type=int, default=0)
     ap.add_argument("--removed_params", type=int, nargs='*', default=None)
     ap.add_argument('--sharing', action='store_true', default=False)
 
@@ -196,6 +199,10 @@ def get_hyperparams_lp(argv):
     ap.add_argument('--node_attr', type=int, default=0)
     ap.set_defaults(wandb_log_run=False)
     args, argv = ap.parse_known_args(argv)
+    if args.residual == 1:
+        args.residual = True
+    else:
+        args.residual = False
     if args.in_fc_layer == 1:
         args.in_fc_layer = True
     else:
@@ -212,6 +219,10 @@ def get_hyperparams_lp(argv):
         args.norm_affine = True
     else:
         args.norm_affine = False
+    if args.norm_out == 1:
+        args.norm_out = True
+    else:
+        args.norm_out = False
     if args.use_edge_data == 1:
         args.use_edge_data = True
     else:

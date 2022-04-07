@@ -29,8 +29,11 @@ class SyntheticHG:
             entities.append(Entity(ent_i, n_instances))
         relations = {}
         for rel_id in range(n_rels):
-            ent_i = np.random.randint(0, n_ents)
-            ent_j = np.random.randint(0, n_ents)
+            if rel_id == 0:
+                ent_i = ent_j = 0
+            else:
+                ent_i = np.random.randint(0, n_ents)
+                ent_j = np.random.randint(0, n_ents)
             relations[rel_id] = Relation(rel_id, [entities[ent_i], entities[ent_j]], 1, is_set=False)
         self.schema = DataSchema(entities, relations)
         # Override schema with manually entered schema if provided

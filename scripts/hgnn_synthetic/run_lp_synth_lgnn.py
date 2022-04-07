@@ -98,7 +98,8 @@ def run_model(args):
         wandb.init(config=args,
             settings=wandb.Settings(start_method='fork'),
             project="EquivariantHGN_Synth_LP",
-            entity='danieltlevy')
+            entity='danieltlevy',
+            tags=args.tags)
         wandb.watch(net, log='all', log_freq=args.wandb_log_param_freq)
     print(args)
     print("Number of parameters: {}".format(count_parameters(net)))

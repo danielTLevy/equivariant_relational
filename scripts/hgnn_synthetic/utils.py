@@ -83,11 +83,12 @@ def get_hyperparams_nc(argv):
     ap.add_argument('--node_label', type=str, default='weight')
     ap.add_argument('--schema_str', type=str, default='')
     ap.add_argument('--node_attr', type=int, default=0)
-    ap.add_argument('--tags', nargs='*', type=str, action='append')
+    ap.add_argument('--tags', nargs='*', type=str)
 
     ap.set_defaults(wandb_log_run=False)
 
     args, argv = ap.parse_known_args(argv)
+
     if args.residual == 1:
         args.residual = True
     else:
@@ -199,7 +200,7 @@ def get_hyperparams_lp(argv):
     ap.add_argument('--gen_links', type=str, default='uniform')
     ap.add_argument('--schema_str', type=str, default='')
     ap.add_argument('--node_attr', type=int, default=0)
-    ap.add_argument('--tags', nargs='*', type=str, action='append')
+    ap.add_argument('--tags', nargs='*', type=str)
     ap.set_defaults(wandb_log_run=False)
     args, argv = ap.parse_known_args(argv)
     if args.residual == 1:

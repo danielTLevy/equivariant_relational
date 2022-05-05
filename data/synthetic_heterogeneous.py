@@ -119,6 +119,52 @@ class SyntheticHG:
         self.flat = True
         return self.data
 
+    def to_edges_and_vals(self):
+        tot_instances = sum([ent.n_instances for ent in self.schema.entities])
+        tot_entity = Entity(0, tot_instances)
+        tot_rel = Relation(0, [tot_entity, tot_entity])
+
+        data_shifted = {}
+        for rel_id, rel in self.schema.relations.items():
+            if rel.is_set:
+                continue
+            ent_i, ent_j = rel.entities[0], rel.entities[1]
+            data_clone = SparseMatrix.from_other_sparse_matrix(self.data[rel_id], 1)
+            data_clone.n = tot_instances
+            data_clone.m = tot_instances
+            data_clone.indices[0] += self.shift(ent_i)
+            data_clone.indices[1] += self.shift(ent_j)
+            data_shifted[rel_id] = data_clone
+
+        # Sparse Matrix containing all data
+        data_diag = SparseMatrix(indices=torch.arange(tot_instances).expand(2, tot_instances),
+                                 values=torch.ones((tot_instances, 1)),
+                                 shape=(tot_instances, tot_instances, 1))
+        data_full = data_diag.clone()
+        for rel_id, data_matrix in data_shifted.items():
+            data_full = data_full + data_matrix
+
+        data_out = SparseMatrix.from_other_sparse_matrix(data_full, 0)
+        # Load up all edge data
+        for rel_id, data_rel in data_shifted.items():
+            data_rel_full = SparseMatrix.from_other_sparse_matrix(data_full, 1) + data_rel
+            data_out.values = torch.cat([data_out.values, data_rel_full.values], 1)
+            data_out.n_channels += 1
+
+        # Create features list
+        features_list = []
+        for rel_id, data_rel in self.data.items():
+            if data_rel.is_set:
+                features_list.append(data_rel.values)
+
+        # Update with new schema
+        self.schema = DataSchema([tot_entity], {0: tot_rel})
+        self.n_instances = tot_instances
+        self.data = SparseMatrixData(self.schema)
+        self.data[0] = data_out
+        self.flat = True
+        return self.data, features_list
+
     def bilinear_het(self, embed_i, embed_j, signature):
         return embed_i @ np.diag(signature) @ embed_j.T
 

@@ -69,7 +69,13 @@ def get_hyperparams_nc(argv):
     ap.add_argument("--removed_params", type=int, nargs='*', default=None)
     ap.add_argument('--alternating', action='store_true', default=False)
     ap.add_argument('--sharing', action='store_true', default=False)
+    
+    # Args for GCN and GAT
+    ap.add_argument('--model', type=str, choices=["gcn", "gat"])
+    ap.add_argument('--num_heads', type=int, default=8)
+    ap.add_argument('--slope', type=float, default=0.1)
 
+    # Args for synthetic dataset
     ap.add_argument('--n_ents', type=int, default=1)
     ap.add_argument('--n_rels', type=int, default=1)
     ap.add_argument('--data_embed', type=int, default=10)

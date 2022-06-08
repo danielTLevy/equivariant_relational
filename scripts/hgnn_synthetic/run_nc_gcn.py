@@ -14,16 +14,60 @@ import torch.nn.functional as F
 import numpy as np
 import scipy.sparse
 import dgl
-from dgl.nn.pytorch import GraphConv
+from dgl.nn.pytorch import GraphConv, GATConv
 
 
-from hgb.NC.EquivHGNet import EquivHGNet
 from utils import get_hyperparams_nc, set_seed, select_features, f1_scores
 from src.utils import count_parameters
 import warnings
 warnings.filterwarnings("ignore", message="Setting attributes on ParameterDict is not supported.")
 
+class GAT(nn.Module):
+    def __init__(self,
+                 g,
+                 in_dims,
+                 num_hidden,
+                 num_classes,
+                 num_layers,
+                 heads,
+                 activation,
+                 feat_drop,
+                 attn_drop,
+                 negative_slope,
+                 residual):
+        super(GAT, self).__init__()
+        self.g = g
+        self.num_layers = num_layers
+        self.gat_layers = nn.ModuleList()
+        self.activation = activation
+        self.fc_list = nn.ModuleList([nn.Linear(in_dim, num_hidden, bias=True) for in_dim in in_dims])
+        for fc in self.fc_list:
+            nn.init.xavier_normal_(fc.weight, gain=1.414)
+        # input projection (no residual)
+        self.gat_layers.append(GATConv(
+            num_hidden, num_hidden, heads[0],
+            feat_drop, attn_drop, negative_slope, False, self.activation))
+        # hidden layers
+        for l in range(1, num_layers):
+            # due to multi-head, the in_dim = num_hidden * num_heads
+            self.gat_layers.append(GATConv(
+                num_hidden * heads[l-1], num_hidden, heads[l],
+                feat_drop, attn_drop, negative_slope, residual, self.activation))
+        # output projection
+        self.gat_layers.append(GATConv(
+            num_hidden * heads[-2], num_classes, heads[-1],
+            feat_drop, attn_drop, negative_slope, residual, None))
 
+    def forward(self, features_list):
+        h = []
+        for fc, feature in zip(self.fc_list, features_list):
+            h.append(fc(feature))
+        h = torch.cat(h, 0)
+        for l in range(self.num_layers):
+            h = self.gat_layers[l](self.g, h).flatten(1)
+        # output projection
+        logits = self.gat_layers[-1](self.g, h).mean(1)
+        return logits
 
 class GCN(nn.Module):
     def __init__(self,
@@ -94,10 +138,17 @@ def run_model(args):
     feats_type = args.feats_type
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
-    net = GCN(g, in_dims=in_dims, num_hidden=args.width,
-              num_classes=args.n_classes, num_layers=args.depth, 
-              activation=eval('nn.%s()' % args.act_fn),dropout=args.dropout)
-
+    if args.gcn:
+        net = GCN(g, in_dims=in_dims, num_hidden=args.width,
+                  num_classes=args.n_classes, num_layers=args.depth, 
+                  activation=eval('nn.%s()' % args.act_fn),dropout=args.dropout)
+    elif args.gat:
+        heads = [args.num_heads] * args.depth + [1]
+        net = GAT(g, in_dims=in_dims, num_hidden=args.width,
+                  num_classes=args.n_classes, num_layers=args.depth, heads=heads,
+                  activation=eval('nn.%s()' % args.act_fn),
+                  feat_drop=args.dropout, attn_drop=args.dropout,
+                  negative_slope=args.slope, residual=False)
     net.to(device)
     optimizer = torch.optim.Adam(net.parameters(), lr=args.lr,
                                  weight_decay=args.weight_decay)
@@ -197,6 +248,12 @@ if __name__ == '__main__':
     argv = sys.argv[1:]
     args = get_hyperparams_nc(argv)
     set_seed(args.seed)
-    args.gcn = True
+    args.lgnn = True
+    if args.model == 'gat':
+        args.gat = True
+        args.gcn = False
+    else:
+        args.gat = False
+        args.gcn = True
     #%%
     run_model(args)

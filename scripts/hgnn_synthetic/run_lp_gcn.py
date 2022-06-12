@@ -148,7 +148,7 @@ def run_model(args):
                 feat = torch.ones(args.n_instances, 1)
             else:
                 feat = features_list[ent_id]
-            feat_list.append(feat)
+            feat_list.append(feat.to(device))
             in_dims.append(feat.shape[1])
         elif args.feats_type == 3:
             # For each node, include sparse one-hot vector as a feature
@@ -158,7 +158,7 @@ def run_model(args):
             feat = torch.sparse.FloatTensor(indices, values,
                                          torch.Size([args.n_instances,
                                                      args.n_instances])).to(device).coalesce()
-            feat_list.append(feat)
+            feat_list.append(feat.to(device))
             in_dims.append(feat.values.shape[1])
 
     print(dl.full_schema)

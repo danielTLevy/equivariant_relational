@@ -166,7 +166,7 @@ def run_model(args):
     dl.make_link_prediction_task(args.pct_test, args.pct_val, args.val_neg, args.tail_weighted)
     dl.to_flat()
 
-    edge_list = torch.LongTensor(dl.data[0].indices)
+    edge_list = torch.LongTensor(dl.data[0].indices).to(device)
     features_list  = [feature.to(device) for feature in features_list]
     data = data.to(device)
     

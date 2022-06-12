@@ -19,6 +19,7 @@ class SyntheticHG:
         self.sparsity = sparsity
         self.p_het = p_het
         self.signatures = {}
+        self.task = ''
         if gen_links == 'proportional':
             self.generate_links = self.generate_links_proportional
         else:
@@ -117,6 +118,11 @@ class SyntheticHG:
         self.data = SparseMatrixData(self.schema)
         self.data[0] = data_out
         self.flat = True
+
+        if self.task == 'lp':
+            ent_i, ent_j = self.full_schema.relations[self.target_rel_id].entities
+            self.target_indices[0,:] += self.shift(ent_i)
+            self.target_indices[1,:] += self.shift(ent_j)
         return self.data
 
     def to_edges_and_vals(self):
@@ -239,6 +245,7 @@ class SyntheticHG:
 
     def make_node_classification_task(self, n_classes=3, p_test=0.2,
                                       p_val=0.2, labelling='weight'):
+        self.task = 'nc'
         self.n_classes = n_classes
         target_node_type = 0
         embeds = self.ent_embed[target_node_type]
@@ -270,6 +277,7 @@ class SyntheticHG:
 
     def make_link_prediction_task(self, p_test=0.2, p_val=0.2,
                                   val_neg_type='random', tail_weighted=False):
+        self.task = 'lp'
         self.target_rel_id = 0
         if tail_weighted:
             self.tail_prob = self.make_tail_prob()
@@ -277,9 +285,7 @@ class SyntheticHG:
         target_data = self.full_data[self.target_rel_id]
         self.target_indices = target_data.indices.cpu().numpy()
         ent_i, ent_j = self.full_schema.relations[self.target_rel_id].entities
-        if self.flat:
-            self.target_indices[0,:] += self.shift(ent_i)
-            self.target_indices[1,:] += self.shift(ent_j)
+
         n_idx = self.target_indices.shape[1]
         n_test = int(p_test*n_idx)
         n_val = int(p_val*n_idx)
@@ -293,6 +299,50 @@ class SyntheticHG:
 
         test_pos_idx = all_pos_idx[:n_test]
         self.test_pos =  self.target_indices[:, test_pos_idx]
+        
+        # Use only train dataset
+        train_pos_tensor = torch.LongTensor(self.train_pos)
+        train_pos_vals = torch.ones((self.train_pos.shape[1], 1))
+        data_matrix = SparseMatrix(train_pos_tensor, train_pos_vals, \
+                                   shape=(self.n_instances, self.n_instances, 1)).coalesce()
+
+        # Add in diagonal indices
+        data_diag = SparseMatrix(indices=torch.arange(self.n_instances).expand(2, self.n_instances),
+                             values=torch.zeros((self.n_instances, 1)),
+                             shape=(self.n_instances, self.n_instances, 1))
+        self.data[self.target_rel_id] = data_matrix + data_diag
+            
+
+    def get_train_valid_pos(self, train_ratio=0.9):
+        if self.splited:
+            return self.train_pos, self.valid_pos
+        else:
+            edge_types = self.links['data'].keys()
+            train_pos, valid_pos = dict(), dict()
+            for r_id in edge_types:
+                train_pos[r_id] = [[], []]
+                valid_pos[r_id] = [[], []]
+                row, col = self.links['data'][r_id].nonzero()
+                last_h_id = -1
+                for (h_id, t_id) in zip(row, col):
+                    if h_id != last_h_id:
+                        train_pos[r_id][0].append(h_id)
+                        train_pos[r_id][1].append(t_id)
+                        last_h_id = h_id
+
+                    else:
+                        if random.random() < train_ratio:
+                            train_pos[r_id][0].append(h_id)
+                            train_pos[r_id][1].append(t_id)
+                        else:
+                            valid_pos[r_id][0].append(h_id)
+                            valid_pos[r_id][1].append(t_id)
+                            self.links['data'][r_id][h_id, t_id] = 0
+                            self.links['count'][r_id] -= 1
+                            self.links['total'] -= 1
+                self.links['data'][r_id].eliminate_zeros()
+            self.splited = True
+            return train_pos, valid_pos
 
     def get_train_valid_pos(self):
         return self.train_pos, self.valid_pos

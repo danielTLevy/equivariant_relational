@@ -69,8 +69,8 @@ def get_hyperparams_nc(argv):
     ap.add_argument("--removed_params", type=int, nargs='*', default=None)
     ap.add_argument('--alternating', action='store_true', default=False)
     ap.add_argument('--sharing', action='store_true', default=False)
-    
-    # Args for GCN and GAT
+
+    # Args for baseline models
     ap.add_argument('--model', type=str, choices=["gcn", "gat"])
     ap.add_argument('--num_heads', type=int, default=8)
     ap.add_argument('--slope', type=float, default=0.1)
@@ -119,6 +119,10 @@ def get_hyperparams_nc(argv):
         args.norm = True
     else:
         args.norm = False
+    if args.norm_out == 1:
+        args.norm_out = True
+    else:
+        args.norm_out = False
     if args.use_edge_data == 1:
         args.use_edge_data = True
     else:
@@ -195,6 +199,13 @@ def get_hyperparams_lp(argv):
     ap.add_argument("--removed_params", type=int, nargs='*', default=None)
     ap.add_argument('--sharing', action='store_true', default=False)
 
+    # Args for baseline models
+    ap.add_argument('--model', type=str, choices=["gcn", "gat"])
+    ap.add_argument('--num_heads', type=int, default=8)
+    ap.add_argument('--slope', type=float, default=0.1)
+    
+
+    # Args for synthetic dataset
     ap.add_argument('--n_ents', type=int, default=1)
     ap.add_argument('--n_rels', type=int, default=1)
     ap.add_argument('--data_embed', type=int, default=10)
@@ -229,10 +240,6 @@ def get_hyperparams_lp(argv):
         args.norm_affine = True
     else:
         args.norm_affine = False
-    if args.norm_out == 1:
-        args.norm_out = True
-    else:
-        args.norm_out = False
     if args.use_edge_data == 1:
         args.use_edge_data = True
     else:

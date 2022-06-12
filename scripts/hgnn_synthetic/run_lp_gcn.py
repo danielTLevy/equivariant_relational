@@ -57,9 +57,10 @@ class Dot(nn.Module):
 class GCN(nn.Module):
     def __init__(self, in_feats, hid_feats, activation, n_layers=2, dropout=0.5, decoder='dot', rel_num=1):
         super(GCN, self).__init__()
+        self.activation = activation
         self.fc_list = nn.ModuleList([nn.Linear(feats_dim, hid_feats, bias=True) for feats_dim in in_feats])
-        for fc in self.fc_list:
-            nn.init.xavier_normal_(fc.weight, gain=1.414)
+        #for fc in self.fc_list:
+        #    nn.init.xavier_normal_(fc.weight, gain=1.414)
         self.layers = nn.ModuleList()
         # input layer
         self.layers.append(GCNConv(hid_feats, hid_feats))
@@ -67,8 +68,8 @@ class GCN(nn.Module):
         for i in range(n_layers - 1):
             self.layers.append(GCNConv(hid_feats, hid_feats))
         self.dropout = nn.Dropout(p=dropout)
-        for layer in self.layers:
-            nn.init.xavier_normal_(layer.lin.weight, gain=1.4)
+        #for layer in self.layers:
+        #    nn.init.xavier_normal_(layer.lin.weight, gain=1.4)
         if decoder == 'dismult':
             self.decode = DisMult(rel_num=rel_num, dim=hid_feats)
         elif decoder == 'dot':
@@ -85,16 +86,17 @@ class GCN(nn.Module):
                 x = self.dropout(x)
             x = layer(x, edge_list)
             if i < len(self.layers) - 1:
-                x = F.elu(x)
+                x = self.activation(x)
         return x
 
 
 class GAT(nn.Module):
     def __init__(self, in_feats, hid_feats, activation, n_layers=2, dropout=0.5, heads=[1], decoder="dot", rel_num=1):
         super(GAT, self).__init__()
+        self.activation = activation
         self.fc_list = nn.ModuleList([nn.Linear(feats_dim, hid_feats, bias=True) for feats_dim in in_feats])
-        for fc in self.fc_list:
-            nn.init.xavier_normal_(fc.weight, gain=1.414)
+        #for fc in self.fc_list:
+        #    nn.init.xavier_normal_(fc.weight, gain=1.414)
         self.layers = nn.ModuleList()
         # input layer
         self.layers.append(GATConv(hid_feats, hid_feats, heads[0]))
@@ -104,8 +106,8 @@ class GAT(nn.Module):
         # output layer
         self.layers.append(GATConv(hid_feats * heads[-2], hid_feats, heads[-1]))
         self.dropout = nn.Dropout(p=dropout)
-        for layer in self.layers:
-            nn.init.xavier_normal_(layer.lin_l.weight, gain=1.4)
+        #for layer in self.layers:
+        #    nn.init.xavier_normal_(layer.lin_l.weight, gain=1.4)
         if decoder == 'dismult':
             self.decode = DisMult(rel_num=rel_num, dim=hid_feats)
         elif decoder == 'dot':
@@ -188,7 +190,7 @@ def run_model(args):
                     decoder=args.decoder)
 
     elif args.gat:
-        heads = args.n_heads * args.n_layers + [1]
+        heads = [args.num_heads] * args.depth + [1]
         net = GAT(in_feats=in_dims, hid_feats=args.width, 
                     activation=eval('nn.%s()' % args.act_fn), 
                     n_layers=args.depth, heads=heads,

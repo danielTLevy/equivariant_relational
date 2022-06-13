@@ -21,6 +21,7 @@ warnings.filterwarnings("ignore", message="Setting attributes on ParameterDict i
 
 #%%
 def run_model(args):
+    print(args)
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     use_equiv = args.decoder == 'equiv'
 

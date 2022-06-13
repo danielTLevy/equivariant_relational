@@ -29,17 +29,16 @@ class DisMult(nn.Module):
     def __init__(self, rel_num, dim):
         super(DisMult, self).__init__()
         self.dim = dim
-        self.weights = nn.Parameter(torch.FloatTensor(size=(rel_num, dim, dim)))
+        self.weights = nn.Parameter(torch.FloatTensor(size=(dim, dim)))
         self.reset_parameters()
 
     def reset_parameters(self):
         nn.init.xavier_normal_(self.weights, gain=1.414)
 
-    def forward(self, r_list, input1, input2):
-        w = self.weights[r_list]
+    def forward(self, input1, input2):
         input1 = torch.unsqueeze(input1, 1)
         input2 = torch.unsqueeze(input2, 2)
-        tmp = torch.bmm(input1, w)
+        tmp = torch.bmm(input1, self.weights)
         re = torch.bmm(tmp, input2).squeeze()
         return re
 
@@ -48,7 +47,7 @@ class Dot(nn.Module):
     def __init__(self):
         super(Dot, self).__init__()
 
-    def forward(self, r_list, input1, input2):
+    def forward(self, input1, input2):
         input1 = torch.unsqueeze(input1, 1)
         input2 = torch.unsqueeze(input2, 2)
         return torch.bmm(input1, input2).squeeze()
@@ -130,6 +129,7 @@ class GAT(nn.Module):
 
 #%%
 def run_model(args):
+    print(args)
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
     # Collect data and schema
@@ -244,8 +244,7 @@ def run_model(args):
         labels_train = train_matrix.values[:,target_rel_id]
         # Make prediction
         hid_feat = net.encode([feat_list, edge_list])
-        r_list = [0] * train_heads.shape[0]
-        logits = net.decode(r_list, hid_feat[train_heads], hid_feat[train_tails])
+        logits = net.decode(hid_feat[train_heads], hid_feat[train_tails])
         logp = torch.sigmoid(logits)
         train_loss = loss_func(logp, labels_train)
 
@@ -277,8 +276,7 @@ def run_model(args):
 
                 # Make prediction
                 hid_feat = net.encode([feat_list, edge_list])
-                r_list = [0] * val_heads.shape[0]
-                logits = net.decode(r_list, hid_feat[val_heads], hid_feat[val_tails])
+                logits = net.decode(hid_feat[val_heads], hid_feat[val_tails])
                 logp = torch.sigmoid(logits)
                 val_loss = loss_func(logp, labels_val).item()
 

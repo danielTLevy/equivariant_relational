@@ -224,11 +224,11 @@ class SyntheticHG:
         '''
         signature = np.random.choice([1, -1], self.embed_dim, p=[1-p_het, p_het])
         dot = self.bilinear_het(embed_i, embed_j, signature)
-        dot_prob = 1/(1 + np.exp(-dot))
+        dot_norm = 1/(1 + np.exp(-dot))
         # Eliminate self-links
-        np.fill_diagonal(dot_prob, 0)
+        np.fill_diagonal(dot_norm, 0)
         # Get a threshold such that only 1-sparsity is higher
-        threshold = np.quantile(dot_prob, 1-sparsity)
+        threshold = np.quantile(dot_norm, 1-sparsity)
         links_mask = dot_norm > threshold
         links_indices = np.array(links_mask.nonzero())
         return links_indices, signature

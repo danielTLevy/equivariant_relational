@@ -295,7 +295,5 @@ if __name__ == '__main__':
     argv = sys.argv[1:]
     args = get_hyperparams_lp(argv)
     set_seed(args.seed)
-    # Right now 2hop validation isn't yet working
-    args.val_neg = 'random'
     #%%
     run_model(args)

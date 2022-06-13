@@ -290,7 +290,6 @@ if __name__ == '__main__':
     argv = sys.argv[1:]
     args = get_hyperparams_lp(argv)
     args.lgnn = True
-    args.val_neg = 'random'
     set_seed(args.seed)
     #%%
     run_model(args)

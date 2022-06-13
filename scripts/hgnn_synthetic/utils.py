@@ -191,7 +191,7 @@ def get_hyperparams_lp(argv):
     ap.add_argument('--run', type=int, default=1)
     ap.add_argument('--evaluate', type=int, default=1)
     ap.add_argument('--decoder', type=str, default='equiv')
-    ap.add_argument('--val_neg', type=str, default='2hop')
+    ap.add_argument('--val_neg', type=str, default='random')
     ap.add_argument('--val_metric', type=str, default='roc_auc')
     ap.add_argument('--lgnn', action='store_true', default=False)
     ap.add_argument('--alternating', action='store_true', default=False)

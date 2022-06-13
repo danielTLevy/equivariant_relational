@@ -5,7 +5,6 @@ import numpy as np
 from collections import defaultdict
 
 import scipy.sparse as sp
-from scipy.stats import ortho_group, special_ortho_group
 import random
 import torch
 
@@ -296,6 +295,7 @@ class SyntheticHG:
     def make_link_prediction_task(self, p_test=0.2, p_val=0.2,
                                   val_neg_type='random', tail_weighted=False):
         self.task = 'lp'
+
         self.target_rel_id = 0
         if tail_weighted:
             self.tail_prob = self.make_tail_prob()
@@ -329,6 +329,8 @@ class SyntheticHG:
                              values=torch.zeros((self.n_instances, 1)),
                              shape=(self.n_instances, self.n_instances, 1))
         self.data[self.target_rel_id] = data_matrix + data_diag
+        if val_neg_type == '2hop':
+            self.neg_neigh = self.make_2hop()
 
 
     def get_train_valid_pos(self):
@@ -356,9 +358,6 @@ class SyntheticHG:
 
     def get_valid_neg(self, val_neg='random'):
         if val_neg == '2hop':
-            # NOTE: doesn't work
-            raise NotImplementedError()
-            self.neg_neigh = self.make_2hop()
             return self.get_valid_neg_2hop()
         elif val_neg == 'randomtw':
             return self.get_valid_neg_uniform(tail_weighted=True)
@@ -389,17 +388,19 @@ class SyntheticHG:
         NOTE: this currently doesn't work.'
         '''
         # Get full adjacency matrix
-        pos_links = 0
+        total_nodes = self.n_instances*len(self.schema.entities)
+        pos_links = sp.coo_matrix((total_nodes, total_nodes))
         # Add training links
         for rel_i, rel in self.schema.relations.items():
             offset_i = self.shift(rel.entities[0])
             offset_j = self.shift(rel.entities[1])
-            data_matrix = self.data[rel_i].clone()
-            data_matrix.indices[0, :] += offset_i
-            data_matrix.indices[1, :] += offset_j
-            # Doesn't work with offset:
-            sparse_matrix = data_matrix.to_scipy_sparse()
-            pos_links += sparse_matrix + sparse_matrix.T
+            rows = self.data[rel_i].indices[0, :] + offset_i
+            cols = self.data[rel_i].indices[1, :] + offset_j
+            values = np.ones(len(rows))
+            rel_matrix = sp.coo_matrix((values, (rows,cols)),
+                                                 (total_nodes,total_nodes))
+            
+            pos_links += rel_matrix + rel_matrix.T
 
         # Add in validation linksd
         rel = self.schema.relations[self.target_rel_id]
@@ -409,7 +410,7 @@ class SyntheticHG:
         valid_pos_offset = self.valid_pos.copy()
         valid_pos_offset[0,:] += offset_i
         valid_pos_offset[1,:] += offset_j
-        valid_of_rel = sp.coo_matrix(values, valid_pos_offset, shape=pos_links.shape)
+        valid_of_rel = sp.coo_matrix((values, valid_pos_offset), shape=pos_links.shape)
         pos_links += valid_of_rel
         # Square of adjacency matrix
         r_double_neighs = np.dot(pos_links, pos_links)
@@ -431,7 +432,6 @@ class SyntheticHG:
         sec_index = np.where(data > 0)
         row, col = row[sec_index], col[sec_index]
 
-        total_nodes = self.n_instances*self.len(self.schema.entities)
         relation_range = [self.shift(ent) for ent in self.schema.entities] + [total_nodes]
 
         h_type, t_type = rel.entities[0].id, rel.entities[1].id

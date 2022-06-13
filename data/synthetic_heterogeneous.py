@@ -22,6 +22,8 @@ class SyntheticHG:
         self.task = ''
         if gen_links == 'proportional':
             self.generate_links = self.generate_links_proportional
+        elif gen_links == 'threshold':
+            self.generate_links = self.generate_links_threshold
         else:
             self.generate_links = self.generate_links_uniform
         # Create schema
@@ -215,6 +217,22 @@ class SyntheticHG:
         links_indices = np.array(links_mask.nonzero())
         return links_indices, signature
 
+    def generate_links_threshold(self, embed_i, embed_j, sparsity, p_het):
+        '''
+        Calculate dot product between entity embeddings. Given sparsity, set
+        threshold above which all pairs are edges
+        '''
+        signature = np.random.choice([1, -1], self.embed_dim, p=[1-p_het, p_het])
+        dot = self.bilinear_het(embed_i, embed_j, signature)
+        dot_prob = 1/(1 + np.exp(-dot))
+        # Eliminate self-links
+        np.fill_diagonal(dot_prob, 0)
+        # Get a threshold such that only 1-sparsity is higher
+        threshold = np.quantile(dot_prob, 1-sparsity)
+        links_mask = dot_norm > threshold
+        links_indices = np.array(links_mask.nonzero())
+        return links_indices, signature
+
     def make_node_attr(self, ent, n_attrs):
         n_instances = ent.n_instances
         embeds = self.ent_embed[ent.id]
@@ -311,38 +329,7 @@ class SyntheticHG:
                              values=torch.zeros((self.n_instances, 1)),
                              shape=(self.n_instances, self.n_instances, 1))
         self.data[self.target_rel_id] = data_matrix + data_diag
-            
 
-    def get_train_valid_pos(self, train_ratio=0.9):
-        if self.splited:
-            return self.train_pos, self.valid_pos
-        else:
-            edge_types = self.links['data'].keys()
-            train_pos, valid_pos = dict(), dict()
-            for r_id in edge_types:
-                train_pos[r_id] = [[], []]
-                valid_pos[r_id] = [[], []]
-                row, col = self.links['data'][r_id].nonzero()
-                last_h_id = -1
-                for (h_id, t_id) in zip(row, col):
-                    if h_id != last_h_id:
-                        train_pos[r_id][0].append(h_id)
-                        train_pos[r_id][1].append(t_id)
-                        last_h_id = h_id
-
-                    else:
-                        if random.random() < train_ratio:
-                            train_pos[r_id][0].append(h_id)
-                            train_pos[r_id][1].append(t_id)
-                        else:
-                            valid_pos[r_id][0].append(h_id)
-                            valid_pos[r_id][1].append(t_id)
-                            self.links['data'][r_id][h_id, t_id] = 0
-                            self.links['count'][r_id] -= 1
-                            self.links['total'] -= 1
-                self.links['data'][r_id].eliminate_zeros()
-            self.splited = True
-            return train_pos, valid_pos
 
     def get_train_valid_pos(self):
         return self.train_pos, self.valid_pos

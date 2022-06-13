@@ -462,7 +462,7 @@ class SyntheticHG:
                 self.neg_neigh[h_id]) != 0 else []
             valid_neigh[0].extend([h_id] * len(neg_list))
             valid_neigh[1].extend(neg_list)
-        return valid_neigh
+        return np.array(valid_neigh)
 
     def get_test_neigh_2hop(self):
         return self.get_test_neigh()

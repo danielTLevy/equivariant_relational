@@ -383,6 +383,5 @@ if __name__ == '__main__':
     else:
         args.gat = False
         args.gcn = True
-    args.decoder = 'dot'
     #%%
     run_model(args)

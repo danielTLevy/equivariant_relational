@@ -138,7 +138,8 @@ def run_model(args):
                      args.n_instances, args.sparsity, args.p_het,
                      gen_links=args.gen_links,
                      schema_str=args.schema_str,
-                     node_attr=args.node_attr)
+                     node_attr=args.node_attr,
+                     scaling=args.scaling)
     data, features_list = dl.to_edges_and_vals()
     feat_list = []
     in_dims = []
@@ -163,7 +164,7 @@ def run_model(args):
             in_dims.append(feat.values.shape[1])
 
     print(dl.full_schema)
-    print("Heterogeneous: {}".format(dl.signatures))
+    print("Heterogeneous: {}".format(dl.rel_functions))
     dl.make_link_prediction_task(args.pct_test, args.pct_val, args.val_neg, args.tail_weighted)
     dl.to_flat()
 

@@ -29,7 +29,7 @@ def run_model(args):
     if args.lgnn:
         dl.to_flat()
     print(dl.schema)
-    print("Heterogeneous: {}".format(dl.signatures))
+    print("Heterogeneous: {}".format(dl.rel_functions))
     dl.make_node_classification_task(args.n_classes, args.pct_test,
                                      args.pct_val, args.node_label)
     data = dl.data

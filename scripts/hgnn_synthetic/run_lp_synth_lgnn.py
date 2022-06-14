@@ -30,10 +30,11 @@ def run_model(args):
                      args.n_instances, args.sparsity, args.p_het,
                      gen_links=args.gen_links,
                      schema_str=args.schema_str,
-                     node_attr=args.node_attr)
+                     node_attr=args.node_attr,
+                     scaling=args.scaling)
     dl.to_flat()
     print(dl.full_schema)
-    print("Heterogeneous: {}".format(dl.signatures))
+    print("Heterogeneous: {}".format(dl.rel_functions))
     dl.make_link_prediction_task(args.pct_test, args.pct_val, args.val_neg, args.tail_weighted)
 
     data, in_dims = select_features(dl.data, dl.schema, args.feats_type)
@@ -291,6 +292,7 @@ if __name__ == '__main__':
     argv = sys.argv[1:]
     args = get_hyperparams_lp(argv)
     args.lgnn = True
+    args.model = 'lgnn'
     set_seed(args.seed)
     #%%
     run_model(args)

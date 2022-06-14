@@ -12,19 +12,14 @@ class SyntheticHG:
     def __init__(self, n_ents=1, n_rels=1, embed_dim=10,
                  n_instances=1000, sparsity=0.01, p_het=0,
                  gen_links='uniform', schema_str='',
-                 node_attr=0):
+                 node_attr=0,
+                 scaling=True):
         self.embed_dim = embed_dim
         self.n_instances = n_instances
         self.sparsity = sparsity
         self.p_het = p_het
-        self.signatures = {}
+        self.rel_functions = {}
         self.task = ''
-        if gen_links == 'proportional':
-            self.generate_links = self.generate_links_proportional
-        elif gen_links == 'threshold':
-            self.generate_links = self.generate_links_threshold
-        else:
-            self.generate_links = self.generate_links_uniform
         # Create schema
         entities = []
         for ent_i in range(n_ents):
@@ -55,11 +50,11 @@ class SyntheticHG:
 
         # Use entity embeddings to create data matrix
         for rel_id in range(n_rels):
+            self.rel_functions[rel_id] = self.calc_rel_function(p_het, scaling)
             embed_i = self.ent_embed[relations[rel_id].entities[0].id]
             embed_j = self.ent_embed[relations[rel_id].entities[1].id]
             # Choose whether to make relation homophilic or heterophilic
-            sample_indices, signature = self.generate_links(embed_i, embed_j, sparsity, p_het)
-            self.signatures[rel_id] = signature
+            sample_indices = self.generate_links(embed_i, embed_j, sparsity, rel_id, gen_links)
             sample_indices_tensor = torch.LongTensor(sample_indices)
             sample_values_tensor = torch.ones((sample_indices.shape[1], 1))
             data_matrix = SparseMatrix(sample_indices_tensor, sample_values_tensor, \
@@ -172,21 +167,28 @@ class SyntheticHG:
         self.flat = True
         return self.data, features_list
 
-    def bilinear_het(self, embed_i, embed_j, signature):
-        return embed_i @ np.diag(signature) @ embed_j.T
+    def calc_rel_function(self, p_het, scaling=False):
+        signature = np.random.choice([1, -1], self.embed_dim, p=[1-p_het, p_het])
+        if scaling:
+            scaling = np.random.uniform(0, 1, size=self.embed_dim)
+        else:
+            scaling = np.ones(self.embed_dim)
+        return scaling * signature
 
-    def generate_links_uniform(self, embed_i, embed_j, sparsity, p_het):
+    def calc_edge_score(self, embed_i, embed_j, rel_id):
+        '''
+        Look at dot product
+        '''
+        rel_function = self.rel_functions[rel_id]
+        edge_score = embed_i @ np.diag(rel_function) @ embed_j.T
+        return edge_score
+
+    def generate_links_uniform(self, edge_score, sparsity):
         '''
         Generate links with uniform probabilities, but only where the
         dot product between entities is positive (or negative, for heterophilic)
         '''
-        embed_i_norm = np.linalg.norm(embed_i, 2, 1)
-        embed_j_norm = np.linalg.norm(embed_j, 2, 1)
-        signature = np.random.choice([1, -1], self.embed_dim, p=[1-p_het, p_het])
-        dots = self.bilinear_het(embed_i, embed_j, signature)
-        costh = dots/np.outer(embed_i_norm, embed_j_norm)
-        all_links_mask = costh > 0
-
+        all_links_mask = edge_score > 0
 
         # Uniformly randomly sparsify data matrices
         all_links_indices = np.array(all_links_mask.nonzero())
@@ -197,40 +199,46 @@ class SyntheticHG:
         if n_sample < n_links:
             sample_indices_idx = np.random.choice(range(n_links), n_sample, replace=False)
             sample_indices = all_links_indices[:, sample_indices_idx]
-        return sample_indices, signature
+        return sample_indices
 
-    def generate_links_proportional(self, embed_i, embed_j, sparsity, p_het):
+    def generate_links_proportional(self, edge_score, sparsity):
         '''
         Generate links with probabilites proportional to logit of dot
         product bewteen entity embeddings.
         '''
-        signature = np.random.choice([1, -1], self.embed_dim, p=[1-p_het, p_het])
-        dot = self.bilinear_het(embed_i, embed_j, signature)
-        dot_prob_unnorm = 1/(1 + np.exp(-dot))
+        edge_score_unnorm = 1/(1 + np.exp(-edge_score))
         # No self-links
-        np.fill_diagonal(dot_prob_unnorm, 0)
-        n_sample = int(sparsity*dot.size)
+        np.fill_diagonal(edge_score_unnorm, 0)
+        n_sample = int(sparsity*edge_score.size)
         # Generate link with probability proportional to logitss
-        dot_prob = n_sample*dot_prob_unnorm/dot_prob_unnorm.sum()
-        links_mask = dot_prob > np.random.random_sample(dot_prob.shape)
+        probs = n_sample*edge_score_unnorm/edge_score_unnorm.sum()
+        links_mask = probs > np.random.random_sample(probs.shape)
         links_indices = np.array(links_mask.nonzero())
-        return links_indices, signature
+        return links_indices
 
-    def generate_links_threshold(self, embed_i, embed_j, sparsity, p_het):
+    def generate_links_threshold(self, edge_score, sparsity):
         '''
         Calculate dot product between entity embeddings. Given sparsity, set
         threshold above which all pairs are edges
         '''
-        signature = np.random.choice([1, -1], self.embed_dim, p=[1-p_het, p_het])
-        dot = self.bilinear_het(embed_i, embed_j, signature)
-        dot_norm = 1/(1 + np.exp(-dot))
+
+        edge_score_norm = 1/(1 + np.exp(-edge_score))
         # Eliminate self-links
-        np.fill_diagonal(dot_norm, 0)
+        np.fill_diagonal(edge_score_norm, 0)
         # Get a threshold such that only 1-sparsity is higher
-        threshold = np.quantile(dot_norm, 1-sparsity)
-        links_mask = dot_norm > threshold
+        threshold = np.quantile(edge_score_norm, 1-sparsity)
+        links_mask = edge_score_norm > threshold
         links_indices = np.array(links_mask.nonzero())
-        return links_indices, signature
+        return links_indices
+
+    def generate_links(self, embed_i, embed_j, sparsity, rel_id, gen_links='uniform'):
+        edge_score = self.calc_edge_score(embed_i, embed_j, rel_id)
+        if gen_links == 'proportional':
+            return self.generate_links_proportional(edge_score, sparsity)
+        elif gen_links == 'threshold':
+            return self.generate_links_threshold(edge_score, sparsity)
+        else:
+            return self.generate_links_uniform(edge_score, sparsity)
 
     def make_node_attr(self, ent, n_attrs):
         n_instances = ent.n_instances

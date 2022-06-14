@@ -89,6 +89,7 @@ def get_hyperparams_nc(argv):
     ap.add_argument('--node_label', type=str, default='weight')
     ap.add_argument('--schema_str', type=str, default='')
     ap.add_argument('--node_attr', type=int, default=0)
+    ap.add_argument('--scaling', type=int, default=0)
     ap.add_argument('--tags', nargs='*', type=str)
 
     ap.set_defaults(wandb_log_run=False)
@@ -136,7 +137,10 @@ def get_hyperparams_nc(argv):
         args.fc_layers = []
     else:
         args.fc_layers = [args.fc_layer]
-
+    if args.scaling == 1:
+        args.scaling = True
+    else:
+        args.scaling = False
     return args
 
 def get_hyperparams_lp(argv):
@@ -217,6 +221,7 @@ def get_hyperparams_lp(argv):
     ap.add_argument('--gen_links', type=str, default='uniform')
     ap.add_argument('--schema_str', type=str, default='')
     ap.add_argument('--node_attr', type=int, default=0)
+    ap.add_argument('--scaling', type=int, default=0)
     ap.add_argument('--tags', nargs='*', type=str)
     ap.set_defaults(wandb_log_run=False)
     args, argv = ap.parse_known_args(argv)
@@ -256,6 +261,10 @@ def get_hyperparams_lp(argv):
         args.tail_weighted = True
     else:
         args.tail_weighted = False
+    if args.scaling == 1:
+        args.scaling = True
+    else:
+        args.scaling = False
     args.layers = [args.width]*args.depth
     return args
 

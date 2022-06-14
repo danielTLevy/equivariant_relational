@@ -58,10 +58,10 @@ class SyntheticHG:
 
         # Use entity embeddings to create data matrix
         for rel_id in range(n_rels):
+            # Create relation-unique scaling function for embeddings
             self.rel_functions[rel_id] = self.calc_rel_function(p_het, scaling)
             embed_i = self.ent_embed[relations[rel_id].entities[0].id]
             embed_j = self.ent_embed[relations[rel_id].entities[1].id]
-            # Choose whether to make relation homophilic or heterophilic
             sample_indices = self.generate_links(embed_i, embed_j, sparsity, rel_id, gen_links)
             sample_indices_tensor = torch.LongTensor(sample_indices)
             sample_values_tensor = torch.ones((sample_indices.shape[1], 1))
@@ -346,8 +346,10 @@ class SyntheticHG:
                              shape=(self.n_instances, self.n_instances, 1))
         self.data[self.target_rel_id] = data_matrix + data_diag
         if val_neg_type == '2hop':
+            # Precompute two hop neighbours as edge candidates
             self.neg_neigh = self.make_2hop()
-
+            # Do this again with test links included
+            self.test_neg_neigh = self.make_2hop(test=True)
 
     def get_train_valid_pos(self):
         return self.train_pos, self.valid_pos
@@ -397,7 +399,7 @@ class SyntheticHG:
         return np.array([neg_h, neg_t])
 
 
-    def make_2hop(self):
+    def make_2hop(self, test=False):
         '''
         Make neg_neigh, a dict of head:tail dicts for each relation, giving
         all non-positive 2 hop neighbours for each node
@@ -418,7 +420,7 @@ class SyntheticHG:
             
             pos_links += rel_matrix + rel_matrix.T
 
-        # Add in validation linksd
+        # Add in validation links
         rel = self.schema.relations[self.target_rel_id]
         offset_i = self.shift(rel.entities[0])
         offset_j = self.shift(rel.entities[1])
@@ -428,6 +430,19 @@ class SyntheticHG:
         valid_pos_offset[1,:] += offset_j
         valid_of_rel = sp.coo_matrix((values, valid_pos_offset), shape=pos_links.shape)
         pos_links += valid_of_rel
+
+        # Add in test links
+        if test:
+            rel = self.schema.relations[self.target_rel_id]
+            offset_i = self.shift(rel.entities[0])
+            offset_j = self.shift(rel.entities[1])
+            values = [1] * self.test_pos.shape[1]
+            test_pos_offset = self.test_pos.copy()
+            test_pos_offset[0,:] += offset_i
+            test_pos_offset[1,:] += offset_j
+            test_of_rel = sp.coo_matrix((values, test_pos_offset), shape=pos_links.shape)
+            pos_links += test_of_rel
+
         # Square of adjacency matrix
         r_double_neighs = np.dot(pos_links, pos_links)
         data = r_double_neighs.data
@@ -480,176 +495,45 @@ class SyntheticHG:
             valid_neigh[1].extend(neg_list)
         return np.array(valid_neigh)
 
-    def get_test_neigh_2hop(self):
-        return self.get_test_neigh()
+    def get_test_neigh(self):
+        test_pos = self.test_pos
+        labels_pos = np.ones(test_pos.shape[1])
+        test_neg = self.get_test_neg(test_neg='2hop')
+        labels_neg = np.zeros(test_neg.shape[1])
+        test_full = np.concatenate((test_pos, test_neg), 1)
+        labels_full = np.concatenate((labels_pos, labels_neg))
+        indices = np.arange(labels_full.shape[0])
+        np.random.shuffle(indices)
+        test_heads = test_full[0, indices]
+        test_tails = test_full[1, indices]
+        test_labels = labels_full[indices]
+        return test_heads, test_tails, test_labels
 
-    def get_test_neigh(self, test_rel_id):
-        random.seed(1)
-        neg_neigh, pos_neigh, test_neigh, test_label = dict(), dict(), dict(), dict()
-        edge_types = self.test_types
-        '''get sec_neigh'''
-        # Get full adjacency matrix
-        pos_links = 0
-        for r_id in self.schema.relations:
-            pos_links += self.links['data'][r_id] + self.links['data'][r_id].T
-        for r_id in self.links_test['data'].keys():
-            pos_links += self.links_test['data'][r_id] + self.links_test['data'][r_id].T
-        for r_id in self.valid_pos.keys():
-            values = [1] * len(self.valid_pos[r_id][0])
-            valid_of_rel = sp.coo_matrix((values, self.valid_pos[r_id]), shape=pos_links.shape)
-            pos_links += valid_of_rel
-        # Square of adjacency matrix
-        r_double_neighs = np.dot(pos_links, pos_links)
-        data = r_double_neighs.data
-        data[:] = 1
-        # 2-hop-nieghs = (A^2 - A - I)
-        r_double_neighs = \
-            sp.coo_matrix((data, r_double_neighs.nonzero()), shape=np.shape(pos_links), dtype=int) \
-            - sp.coo_matrix(pos_links, dtype=int) \
-            - sp.lil_matrix(np.eye(np.shape(pos_links)[0], dtype=int))
-        data = r_double_neighs.data
-        pos_count_index = np.where(data > 0)
-        row, col = r_double_neighs.nonzero()
-        r_double_neighs = sp.coo_matrix((data[pos_count_index], (row[pos_count_index], col[pos_count_index])),
-                                        shape=np.shape(pos_links))
+    def get_test_neg(self, test_neg='2hop'):
+        if test_neg == '2hop':
+            return self.get_test_neg_2hop()
+        elif test_neg == 'randomtw':
+            raise NotImplementedError()
+        else:
+            raise NotImplementedError()
 
-        row, col = r_double_neighs.nonzero()
-        data = r_double_neighs.data
-        sec_index = np.where(data > 0)
-        row, col = row[sec_index], col[sec_index]
-
-        relation_range = [self.nodes['shift'][k] for k in range(len(self.nodes['shift']))] + [self.nodes['total']]
-        for r_id in self.links_test['data'].keys():
-            neg_neigh[r_id] = defaultdict(list)
-            h_type, t_type = self.links_test['meta'][r_id]
-            # Get all examples of this relation by checking row and col ranges
-            r_id_index = np.where((row >= relation_range[h_type]) & (row < relation_range[h_type + 1])
-                                  & (col >= relation_range[t_type]) & (col < relation_range[t_type + 1]))[0]
-            # r_num = np.zeros((3, 3))
-            # for h_id, t_id in zip(row, col):
-            #     r_num[self.get_node_type(h_id)][self.get_node_type(t_id)] += 1
-            r_row, r_col = row[r_id_index], col[r_id_index]
-            for h_id, t_id in zip(r_row, r_col):
-                neg_neigh[r_id][h_id].append(t_id)
-
-        for r_id in edge_types:
-            '''get pos_neigh'''
-            pos_neigh[r_id] = defaultdict(list)
-            (row, col), data = self.links_test['data'][r_id].nonzero(), self.links_test['data'][r_id].data
-            for h_id, t_id in zip(row, col):
-                pos_neigh[r_id][h_id].append(t_id)
-
-            '''sample neg as same number as pos for each head node'''
-            test_neigh[r_id] = [[], []]
-            pos_list = [[], []]
-            test_label[r_id] = []
-            for h_id in sorted(list(pos_neigh[r_id].keys())):
-                pos_list[0] = [h_id] * len(pos_neigh[r_id][h_id])
-                pos_list[1] = pos_neigh[r_id][h_id]
-                test_neigh[r_id][0].extend(pos_list[0])
-                test_neigh[r_id][1].extend(pos_list[1])
-                test_label[r_id].extend([1] * len(pos_list[0]))
-
-                neg_list = random.choices(neg_neigh[r_id][h_id], k=len(pos_list[0])) if len(
-                    neg_neigh[r_id][h_id]) != 0 else []
-                test_neigh[r_id][0].extend([h_id] * len(neg_list))
-                test_neigh[r_id][1].extend(neg_list)
-                test_label[r_id].extend([0] * len(neg_list))
-        return test_neigh, test_label
-
-    def get_test_neigh_w_random(self):
-        random.seed(1)
-        all_had_neigh = defaultdict(list)
-        neg_neigh, pos_neigh, test_neigh, test_label = dict(), dict(), dict(), dict()
-        edge_types = self.test_types
-        '''get pos_links of train and test data'''
-        pos_links = 0
-        for r_id in self.links['data'].keys():
-            pos_links += self.links['data'][r_id] + self.links['data'][r_id].T
-        for r_id in self.links_test['data'].keys():
-            pos_links += self.links_test['data'][r_id] + self.links_test['data'][r_id].T
-        for r_id in self.valid_pos.keys():
-            values = [1] * len(self.valid_pos[r_id][0])
-            valid_of_rel = sp.coo_matrix((values, self.valid_pos[r_id]), shape=pos_links.shape)
-            pos_links += valid_of_rel
-
-        row, col = pos_links.nonzero()
+    def get_test_neg_2hop(self):
+        '''get pos_neigh'''
+        pos_neigh = defaultdict(list)
+        row, col = self.test_pos
         for h_id, t_id in zip(row, col):
-            all_had_neigh[h_id].append(t_id)
-        for h_id in all_had_neigh.keys():
-            all_had_neigh[h_id] = set(all_had_neigh[h_id])
-        for r_id in edge_types:
-            h_type, t_type = self.links_test['meta'][r_id]
-            t_range = (self.nodes['shift'][t_type], self.nodes['shift'][t_type] + self.nodes['count'][t_type])
-            '''get pos_neigh and neg_neigh'''
-            pos_neigh[r_id], neg_neigh[r_id] = defaultdict(list), defaultdict(list)
-            (row, col), data = self.links_test['data'][r_id].nonzero(), self.links_test['data'][r_id].data
-            for h_id, t_id in zip(row, col):
-                pos_neigh[r_id][h_id].append(t_id)
-                neg_t = random.randrange(t_range[0], t_range[1])
-                while neg_t in all_had_neigh[h_id]:
-                    neg_t = random.randrange(t_range[0], t_range[1])
-                neg_neigh[r_id][h_id].append(neg_t)
-            '''get the test_neigh'''
-            test_neigh[r_id] = [[], []]
-            pos_list = [[], []]
-            neg_list = [[], []]
-            test_label[r_id] = []
-            for h_id in sorted(list(pos_neigh[r_id].keys())):
-                pos_list[0] = [h_id] * len(pos_neigh[r_id][h_id])
-                pos_list[1] = pos_neigh[r_id][h_id]
-                test_neigh[r_id][0].extend(pos_list[0])
-                test_neigh[r_id][1].extend(pos_list[1])
-                test_label[r_id].extend([1] * len(pos_neigh[r_id][h_id]))
-                neg_list[0] = [h_id] * len(neg_neigh[r_id][h_id])
-                neg_list[1] = neg_neigh[r_id][h_id]
-                test_neigh[r_id][0].extend(neg_list[0])
-                test_neigh[r_id][1].extend(neg_list[1])
-                test_label[r_id].extend([0] * len(neg_neigh[r_id][h_id]))
-        return test_neigh, test_label
+            pos_neigh[h_id].append(t_id)
 
-    def get_test_neigh_full_random(self):
-        edge_types = self.test_types
-        random.seed(1)
-        '''get pos_links of train and test data'''
-        all_had_neigh = defaultdict(list)
-        pos_links = 0
-        for r_id in self.links['data'].keys():
-            pos_links += self.links['data'][r_id] + self.links['data'][r_id].T
-        for r_id in self.links_test['data'].keys():
-            pos_links += self.links_test['data'][r_id] + self.links_test['data'][r_id].T
-        for r_id in self.valid_pos.keys():
-            values = [1] * len(self.valid_pos[r_id][0])
-            valid_of_rel = sp.coo_matrix((values, self.valid_pos[r_id]), shape=pos_links.shape)
-            pos_links += valid_of_rel
+        '''sample neg as same number as pos for each head node'''
+        test_neigh = [[], []]
+        for h_id in sorted(list(pos_neigh.keys())):
+            n_pos = len(pos_neigh[h_id])
 
-        row, col = pos_links.nonzero()
-        for h_id, t_id in zip(row, col):
-            all_had_neigh[h_id].append(t_id)
-        for h_id in all_had_neigh.keys():
-            all_had_neigh[h_id] = set(all_had_neigh[h_id])
-        test_neigh, test_label = dict(), dict()
-        for r_id in edge_types:
-            test_neigh[r_id] = [[], []]
-            test_label[r_id] = []
-            h_type, t_type = self.links_test['meta'][r_id]
-            h_range = (self.nodes['shift'][h_type], self.nodes['shift'][h_type] + self.nodes['count'][h_type])
-            t_range = (self.nodes['shift'][t_type], self.nodes['shift'][t_type] + self.nodes['count'][t_type])
-            (row, col), data = self.links_test['data'][r_id].nonzero(), self.links_test['data'][r_id].data
-            for h_id, t_id in zip(row, col):
-                test_neigh[r_id][0].append(h_id)
-                test_neigh[r_id][1].append(t_id)
-                test_label[r_id].append(1)
-                neg_h = random.randrange(h_range[0], h_range[1])
-                neg_t = random.randrange(t_range[0], t_range[1])
-                while neg_t in all_had_neigh[neg_h]:
-                    neg_h = random.randrange(h_range[0], h_range[1])
-                    neg_t = random.randrange(t_range[0], t_range[1])
-                test_neigh[r_id][0].append(neg_h)
-                test_neigh[r_id][1].append(neg_t)
-                test_label[r_id].append(0)
-
-        return test_neigh, test_label
+            neg_list = random.choices(self.test_neg_neigh[h_id], k=n_pos) if len(
+                self.test_neg_neigh[h_id]) != 0 else []
+            test_neigh[0].extend([h_id] * len(neg_list))
+            test_neigh[1].extend(neg_list)
+        return np.array(test_neigh)
 
     def make_tail_prob(self):
         r_id = self.target_rel_id

@@ -12,7 +12,7 @@ from hgb.LP.EquivHGAE import EquivLinkPredictor, EquivLinkPredictorShared
 from src.DataSchema import DataSchema, SparseMatrixData
 from src.utils import count_parameters
 from utils import get_hyperparams_lp, set_seed, select_features, make_target_matrix, \
-    combine_matrices, coalesce_matrix, evaluate_lp
+    make_target_matrix_test, combine_matrices, coalesce_matrix, evaluate_lp
 import warnings
 warnings.filterwarnings("ignore", message="Setting attributes on ParameterDict is not supported.")
 
@@ -252,7 +252,6 @@ def run_model(args):
 
     # Evaluate on test set
     if args.evaluate:
-        '''
         print("Evaluating")
         checkpoint = torch.load(checkpoint_path, map_location=device)
         net.load_state_dict(checkpoint['net_state_dict'])
@@ -261,7 +260,7 @@ def run_model(args):
         # Target is same as input
         data_target = data.clone()
         with torch.no_grad():
-            left_full, right_full, test_labels_full = get_test_neigh_from_file(dl, args.dataset, target_rel.id)
+            left_full, right_full, test_labels_full = dl.get_test_neigh()
             test_matrix_full =  make_target_matrix_test(target_rel, left_full, right_full,
                                                   test_labels_full, device)
             test_matrix, left, right, test_labels = coalesce_matrix(test_matrix_full)
@@ -284,13 +283,21 @@ def run_model(args):
             pred = torch.sigmoid(logits).cpu().numpy()
             left = left.cpu().numpy()
             right = right.cpu().numpy()
+
             edge_list = np.vstack((left,right))
-            edge_list_full = np.vstack((left_full, right_full))
-            file_path = f"test_out/{run_name}.txt"
-            gen_file_for_evaluate(dl, edge_list_full, edge_list, pred, target_rel.id,
-                                     file_path=file_path)
-        '''
-        pass
+            #edge_list_full = np.vstack((left_full, right_full))
+
+            res = evaluate_lp(edge_list, pred, test_labels.cpu().numpy())
+            test_roc_auc = res['roc_auc']
+            test_mrr = res['MRR']
+            wandb_log.update(res)
+            print("\nTest ROC AUC: {:.3f} Test MRR: {:.3f}".format(
+                test_roc_auc, test_mrr))
+
+            if args.wandb_log_run:
+                wandb.summary['test_roc_auc'] = test_roc_auc
+                wandb.summary['test_mrr'] = test_mrr
+
     wandb.finish()
 #%% 
 if __name__ == '__main__':

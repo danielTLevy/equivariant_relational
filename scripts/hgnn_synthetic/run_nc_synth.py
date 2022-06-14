@@ -25,7 +25,8 @@ def run_model(args):
                      args.n_instances, args.sparsity, args.p_het,
                      gen_links=args.gen_links,
                      schema_str=args.schema_str,
-                     node_attr=args.node_attr)
+                     node_attr=args.node_attr,
+                     scaling=args.scaling)
     if args.lgnn:
         dl.to_flat()
     print(dl.schema)

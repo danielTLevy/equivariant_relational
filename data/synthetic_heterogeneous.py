@@ -3,7 +3,7 @@ from src.DataSchema import DataSchema, Entity, Relation, SparseMatrixData
 from src.SparseMatrix import SparseMatrix
 import numpy as np
 from collections import defaultdict
-
+import itertools
 import scipy.sparse as sp
 import random
 import torch
@@ -34,7 +34,15 @@ class SyntheticHG:
             relations[rel_id] = Relation(rel_id, [entities[ent_i], entities[ent_j]], 1, is_set=False)
         self.schema = DataSchema(entities, relations)
         # Override schema with manually entered schema if provided
-        if schema_str != '':
+        if schema_str == 'all':
+            # Get all pairs. If n_rels > n_ents^2, then wrap around and duplicate pairs
+            all_pairs = list(itertools.product(range(n_ents), range(n_ents)))
+            for rel_id in range(n_rels):
+                ent_i, ent_j = all_pairs[rel_id % len(all_pairs)]
+                relations[rel_id] = Relation(rel_id, [entities[ent_i], entities[ent_j]], 1, is_set=False)
+            self.schema = DataSchema(entities, relations)
+        elif schema_str != '':
+            # Evaluate string of schema
             relations = {}
             schema_tuples = eval(schema_str)
             for rel_id, (ent_i, ent_j) in enumerate(schema_tuples):

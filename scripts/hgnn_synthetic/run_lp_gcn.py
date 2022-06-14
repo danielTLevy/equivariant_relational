@@ -228,8 +228,6 @@ def run_model(args):
     for epoch in progress:
         net.train()
         # Make target matrix and labels to train on
-        # Target is same as input
-        data_target = data.clone()
         labels_train = torch.Tensor([]).to(device)
 
         train_neg_head, train_neg_tail = dl.get_train_neg(tail_weighted=args.tail_weighted)
@@ -241,7 +239,6 @@ def run_model(args):
                                                train_neg_head,
                                                train_neg_tail,
                                                device)
-        data_target[flat_rel.id] = train_matrix
         train_heads, train_tails = train_matrix.indices[0], train_matrix.indices[1]
         labels_train = train_matrix.values[:,target_rel_id]
         # Make prediction
@@ -273,8 +270,6 @@ def run_model(args):
                                                  valid_neg_head, valid_neg_tail,
                                                  device)
                 valid_matrix, val_heads, val_tails, labels_val = coalesce_matrix(valid_matrix_full)
-
-                data_target[target_rel.id] = valid_matrix
 
                 # Make prediction
                 hid_feat = net.encode([feat_list, edge_list])
@@ -328,49 +323,31 @@ def run_model(args):
 
     # Evaluate on test set
     if args.evaluate:
-        '''
-        print("Evaluating Target Rel " + str(rel_id))
         checkpoint = torch.load(checkpoint_path)
         net.load_state_dict(checkpoint['net_state_dict'])
         net.eval()
 
-        # Target is same as input
-        data_target = data.clone()
         with torch.no_grad():
-            test_heads_full, test_tails_full, test_labels_full = get_test_neigh_from_file(dl, args.dataset, rel_id, flat=True)
+            test_heads, test_tails, test_labels = dl.get_test_neigh()
 
-            test_matrix_combined, test_masks = combine_matrices_flat(flat_rel, test_heads_full,
-                                                test_tails_full, test_heads_full,
-                                                test_tails_full, target_rel_ids, train_matrix,
-                                                device)
-            data_target[flat_rel.id] = test_matrix_combined.clone()
+            # Make prediction
+            hid_feat = net.encode([feat_list, edge_list])
+            logits = net.decode(hid_feat[test_heads], hid_feat[test_tails])
+            pred = torch.sigmoid(logits).cpu().numpy()
 
-            data_target.zero_()
-            idx_id_tst, idx_trans_tst = data_target.calculate_indices()
-            output_data = net(data, indices_identity, indices_transpose,
-                       data_embedding, data_target, idx_id_tst, idx_trans_tst)
+            # Calculate ROC AUC and MRR
+            eval_edge_list = np.concatenate([test_heads.reshape((1,-1)), test_tails.reshape((1,-1))], axis=0)
+            res = evaluate_lp(eval_edge_list, pred, test_labels)
 
-            for rel_channel, rel_id in enumerate(target_rel_ids):
-                mask = test_masks[rel_id]
+            test_roc_auc = res['roc_auc']
+            test_mrr = res['MRR']
+            print("\nTest ROC AUC: {:.3f} Test MRR: {:.3f}".format(
+                test_roc_auc, test_mrr))
 
-                logits = output_data[flat_rel.id].values[:, rel_channel][mask]
-                logits_combined = torch.cat([logits_combined, logits_rel])
+            if args.wandb_log_run:
+                wandb.summary['test_roc_auc'] = test_roc_auc
+                wandb.summary['test_mrr'] = test_mrr
 
-                left, right = test_matrix_combined.indices[:, mask]
-                labels_test = test_matrix_combined.values[:,rel_channel][mask]
-                left_full = test_heads_full[rel_id]
-                right_full = test_tails_full[rel_id]
-
-                pred = torch.sigmoid(logits)
-
-                left = left.cpu().numpy()
-                right = right.cpu().numpy()
-                edge_list = np.concatenate([left.reshape((1,-1)), right.reshape((1,-1))], axis=0)
-                edge_list_full = np.vstack((left_full, right_full))
-                file_path = f"test_out/{run_name}.txt"
-                gen_file_for_evaluate(dl, edge_list_full, edge_list, pred, rel_id,
-                                         file_path=file_path, flat=True)
-        '''
         pass
     wandb.finish()
 #%%

@@ -348,8 +348,8 @@ class SyntheticHG:
         if val_neg_type == '2hop':
             # Precompute two hop neighbours as edge candidates
             self.neg_neigh = self.make_2hop()
-            # Do this again with test links included
-            self.test_neg_neigh = self.make_2hop(test=True)
+        # Do this again with test links included
+        self.test_neg_neigh = self.make_2hop(test=True)
 
     def get_train_valid_pos(self):
         return self.train_pos, self.valid_pos

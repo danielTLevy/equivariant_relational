@@ -29,17 +29,16 @@ class DisMult(nn.Module):
     def __init__(self, rel_num, dim):
         super(DisMult, self).__init__()
         self.dim = dim
-        self.weights = nn.Parameter(torch.FloatTensor(size=(dim, dim)))
+        self.weights = nn.Parameter(torch.FloatTensor(size=(1, dim, dim)))
         self.reset_parameters()
 
     def reset_parameters(self):
         nn.init.xavier_normal_(self.weights, gain=1.414)
 
     def forward(self, input1, input2):
-        input1 = torch.unsqueeze(input1, 1)
-        input2 = torch.unsqueeze(input2, 2)
-        tmp = torch.bmm(input1, self.weights)
-        re = torch.bmm(tmp, input2).squeeze()
+        tmp1 = (input1 @ self.weights).squeeze()
+        tmp2 = torch.unsqueeze(tmp1, 1)
+        re = torch.bmm(tmp2, input2.unsqueeze(2)).squeeze()
         return re
 
 
@@ -73,6 +72,8 @@ class GCN(nn.Module):
             self.decode = DisMult(rel_num=rel_num, dim=hid_feats)
         elif decoder == 'dot':
             self.decode = Dot()
+        else:
+            raise NotImplementedError()
 
     def encode(self, data):
         x, edge_list = data

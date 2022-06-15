@@ -304,6 +304,9 @@ if __name__ == '__main__':
     argv = sys.argv[1:]
     args = get_hyperparams_lp(argv)
     set_seed(args.seed)
-    args.model = 'equiv'
+    if args.sharing:
+        args.model = 'sharing'
+    else:
+        args.model = 'equiv'
     #%%
     run_model(args)

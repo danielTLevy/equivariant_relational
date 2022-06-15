@@ -282,7 +282,7 @@ def run_model(args):
 
 
             logits = output_data[flat_rel.id].values[:, target_rel_id][test_mask]
-            pred = torch.sigmoid(logits)
+            pred = torch.sigmoid(logits).cpu().numpy()
 
             left = left.cpu().numpy()
             right = right.cpu().numpy()

@@ -71,7 +71,7 @@ def get_hyperparams_nc(argv):
     ap.add_argument('--sharing', action='store_true', default=False)
 
     # Args for baseline models
-    ap.add_argument('--model', type=str, choices=["gcn", "gat"])
+    ap.add_argument('--model', type=str, choices=["gcn", "gat", "lgnn", "egnn", "sharing"])
     ap.add_argument('--num_heads', type=int, default=8)
     ap.add_argument('--slope', type=float, default=0.1)
 
@@ -204,7 +204,7 @@ def get_hyperparams_lp(argv):
     ap.add_argument('--sharing', action='store_true', default=False)
 
     # Args for baseline models
-    ap.add_argument('--model', type=str, choices=["gcn", "gat"])
+    ap.add_argument('--model', type=str, choices=["gcn", "gat", "lgnn", "egnn", "sharing"])
     ap.add_argument('--num_heads', type=int, default=8)
     ap.add_argument('--slope', type=float, default=0.1)
     

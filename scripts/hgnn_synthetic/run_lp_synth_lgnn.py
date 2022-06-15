@@ -10,11 +10,13 @@ from tqdm import tqdm
 
 from data.synthetic_heterogeneous import SyntheticHG
 
-from hgb.LP.EquivHGAE import EquivLinkPredictor, EquivLinkPredictorShared
+from hgb.LP.EquivHGAE import EquivLinkPredictor
+from src.SparseMatrix import SparseMatrix
 from src.DataSchema import SparseMatrixData
 from src.utils import count_parameters
 from utils import get_hyperparams_lp, set_seed, select_features, \
-    make_target_matrix, coalesce_matrix, combine_matrices, evaluate_lp
+    make_target_matrix, coalesce_matrix, combine_matrices, evaluate_lp, \
+        make_target_matrix_test
 import warnings
 
 warnings.filterwarnings("ignore", message="Setting attributes on ParameterDict is not supported.")
@@ -39,7 +41,6 @@ def run_model(args):
 
     data, in_dims = select_features(dl.data, dl.schema, args.feats_type)
     data = data.to(device)
-    
     # Precompute data indices
     indices_identity, indices_transpose = data.calculate_indices()
     # Get target relations and create data structure for embeddings
@@ -49,6 +50,10 @@ def run_model(args):
     flat_rel = dl.schema.relations[0]
     target_ents = dl.schema.entities
 
+    # Create a matrix containing just the positive indices
+    data_blank = SparseMatrix.from_other_sparse_matrix(data[flat_rel.id], 1)
+
+    # Create object for node embeddings
     data_embedding = SparseMatrixData.make_entity_embeddings(target_ents,
                                                              args.embedding_dim)
     data_embedding.to(device)
@@ -59,23 +64,26 @@ def run_model(args):
     val_pos_head, val_pos_tail = val_pos[0], val_pos[1]
 
     # Get additional indices to be used when making predictions
-    pred_idx_matrices = {}
     if args.pred_indices == 'train':
+        # Get positive links for all relation types
+        all_pos_head = data[0].indices[0].cpu().numpy()
+        all_pos_tail = data[0].indices[1].cpu().numpy()
+        # Get negative links for target relation type
         train_neg_head, train_neg_tail = dl.get_train_neg(args.tail_weighted)
-        pred_idx_matrices[target_rel.id] = make_target_matrix(target_rel,
-                                          train_pos_head, train_pos_tail,
+        pred_idx_matrix = make_target_matrix(target_rel,
+                                          all_pos_head, all_pos_tail,
                                           train_neg_head, train_neg_tail,
                                           device)
     elif args.pred_indices == 'train_neg':
         # Get negative samples twice
         train_neg_head1, train_neg_tail1 = dl.get_train_neg(args.tail_weighted)
         train_neg_head2, train_neg_tail2 = dl.get_train_neg(args.tail_weighted)
-        pred_idx_matrices[target_rel.id] = make_target_matrix(target_rel,
+        pred_idx_matrix= make_target_matrix(target_rel,
                                           train_neg_head1, train_neg_tail1,
                                           train_neg_head2, train_neg_tail2,
                                           device)
     elif args.pred_indices == 'none':
-        pred_idx_matrices[target_rel.id] = None
+        pred_idx_matrix = None
 
     # Create network and optimizer
     net = EquivLinkPredictor(dl.schema, in_dims,
@@ -123,7 +131,6 @@ def run_model(args):
         # Make target matrix and labels to train on
         # Target is same as input
         data_target = data.clone()
-        labels_train = torch.Tensor([]).to(device)
 
         train_neg_head, train_neg_tail = dl.get_train_neg(tail_weighted=args.tail_weighted)
 
@@ -134,7 +141,11 @@ def run_model(args):
                                                train_neg_head,
                                                train_neg_tail,
                                                device)
-        data_target[flat_rel.id] = train_matrix
+        labels_train = train_matrix.values[:,target_rel_id]
+
+        # Add in all data indicted to target_matrix
+        target_matrix, train_mask = combine_matrices(train_matrix, data_blank)
+        data_target[flat_rel.id] = target_matrix
 
 
         # Make prediction
@@ -142,8 +153,7 @@ def run_model(args):
         output_data = net(data, indices_identity, indices_transpose,
                    data_embedding, data_target, idx_id_tgt, idx_trans_tgt)
 
-        logits = output_data[flat_rel.id].values[:, target_rel_id]
-        labels_train = train_matrix.values[:,target_rel_id]
+        logits = output_data[flat_rel.id].values[train_mask, target_rel_id]
         logp = torch.sigmoid(logits)
         train_loss = loss_func(logp, labels_train)
 
@@ -171,7 +181,6 @@ def run_model(args):
                 valid_matrix, _, _, _ = coalesce_matrix(valid_matrix_full)
                 if use_equiv:
                     # Add in additional prediction indices
-                    pred_idx_matrix = pred_idx_matrices[target_rel.id]
                     if pred_idx_matrix is None:
                         valid_combined_matrix = valid_matrix
                         valid_mask = torch.arange(valid_matrix.nnz()).to(device)
@@ -242,8 +251,6 @@ def run_model(args):
 
     # Evaluate on test set
     if args.evaluate:
-        '''
-        print("Evaluating Target Rel " + str(rel_id))
         checkpoint = torch.load(checkpoint_path)
         net.load_state_dict(checkpoint['net_state_dict'])
         net.eval()
@@ -251,40 +258,46 @@ def run_model(args):
         # Target is same as input
         data_target = data.clone()
         with torch.no_grad():
-            test_heads_full, test_tails_full, test_labels_full = get_test_neigh_from_file(dl, args.dataset, rel_id, flat=True)
-
-            test_matrix_combined, test_masks = combine_matrices_flat(flat_rel, test_heads_full,
-                                                test_tails_full, test_heads_full,
-                                                test_tails_full, target_rel_ids, train_matrix,
-                                                device)
-            data_target[flat_rel.id] = test_matrix_combined.clone()
+            # Get test indices and deduplicate any repeated indices
+            test_heads, test_tails, test_labels =  dl.get_test_neigh()
+            test_matrix_full = make_target_matrix_test(target_rel,
+                                             test_heads, test_tails,
+                                             test_labels, device)
+            test_matrix, left, right, test_labels = coalesce_matrix(test_matrix_full)
+            if use_equiv:
+                # Add in additional prediction indices
+                if pred_idx_matrix is None:
+                    test_combined_matrix = test_matrix
+                    test_mask = torch.arange(test_matrix.nnz()).to(device)
+                else:
+                    test_combined_matrix, test_mask = combine_matrices(test_matrix, pred_idx_matrix)
+                data_target[target_rel.id] = test_combined_matrix
+            else:
+                data_target[target_rel.id] = test_matrix
 
             data_target.zero_()
             idx_id_tst, idx_trans_tst = data_target.calculate_indices()
             output_data = net(data, indices_identity, indices_transpose,
                        data_embedding, data_target, idx_id_tst, idx_trans_tst)
 
-            for rel_channel, rel_id in enumerate(target_rel_ids):
-                mask = test_masks[rel_id]
 
-                logits = output_data[flat_rel.id].values[:, rel_channel][mask]
-                logits_combined = torch.cat([logits_combined, logits_rel])
+            logits = output_data[flat_rel.id].values[:, target_rel_id][test_mask]
+            pred = torch.sigmoid(logits)
 
-                left, right = test_matrix_combined.indices[:, mask]
-                labels_test = test_matrix_combined.values[:,rel_channel][mask]
-                left_full = test_heads_full[rel_id]
-                right_full = test_tails_full[rel_id]
+            left = left.cpu().numpy()
+            right = right.cpu().numpy()
+            edge_list = np.vstack((left,right))
+            res = evaluate_lp(edge_list, pred, test_labels.cpu().numpy())
+            test_roc_auc = res['roc_auc']
+            test_mrr = res['MRR']
+            wandb_log.update(res)
+            print("\nTest ROC AUC: {:.3f} Test MRR: {:.3f}".format(
+                test_roc_auc, test_mrr))
 
-                pred = torch.sigmoid(logits)
+            if args.wandb_log_run:
+                wandb.summary['test_roc_auc'] = test_roc_auc
+                wandb.summary['test_mrr'] = test_mrr
 
-                left = left.cpu().numpy()
-                right = right.cpu().numpy()
-                edge_list = np.concatenate([left.reshape((1,-1)), right.reshape((1,-1))], axis=0)
-                edge_list_full = np.vstack((left_full, right_full))
-                file_path = f"test_out/{run_name}.txt"
-                gen_file_for_evaluate(dl, edge_list_full, edge_list, pred, rel_id,
-                                         file_path=file_path, flat=True)
-        '''
         pass
     wandb.finish()
 #%%

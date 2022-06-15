@@ -91,10 +91,12 @@ class SyntheticHG:
         tot_entity = Entity(0, tot_instances)
         tot_rel = Relation(0, [tot_entity, tot_entity])
 
+        # Get all (shifted) indices into one data_matrix
         data_shifted = {}
         for rel_id, rel in self.schema.relations.items():
             ent_i, ent_j = rel.entities[0], rel.entities[1]
             data_clone = SparseMatrix.from_other_sparse_matrix(self.data[rel_id], 1)
+            data_clone.values += 1
             data_clone.n = tot_instances
             data_clone.m = tot_instances
             data_clone.indices[0] += self.shift(ent_i)
@@ -112,9 +114,27 @@ class SyntheticHG:
         data_out = SparseMatrix.from_other_sparse_matrix(data_full, 0)
         # Load up all edge data
         for rel_id, data_rel in data_shifted.items():
+            if data_rel.is_set:
+                continue
             data_rel_full = SparseMatrix.from_other_sparse_matrix(data_full, 1) + data_rel
             data_out.values = torch.cat([data_out.values, data_rel_full.values], 1)
             data_out.n_channels += 1
+
+        # Load up all node data
+        for ent_id, ent in enumerate(self.schema.entities):
+            # NOTE: THIS MIGHT NOT WORK IF NODE_ATTR = 0
+            n_rels = len(self.schema.relations) - len(self.schema.entities)
+            ent_data = self.data[ent_id + n_rels].clone()
+            ent_data.n = tot_instances
+            ent_data.m = tot_instances
+            ent_data.indices[0] += self.shift(ent)
+            ent_data.indices[1] += self.shift(ent)
+            ent_channels = ent_data.values.shape[1]
+            # Embed entity data into a matrix with all indices
+            ent_data_full = SparseMatrix.from_other_sparse_matrix(data_out, ent_channels) + ent_data
+            # Add it in
+            data_out.values = torch.cat([data_out.values, ent_data_full.values], 1)
+            data_out.n_channels += ent_channels
 
         # Update with new schema
         self.schema = DataSchema([tot_entity], {0: tot_rel})

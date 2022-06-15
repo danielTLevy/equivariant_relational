@@ -9,14 +9,12 @@ import wandb
 from tqdm import tqdm
 from torch_geometric.nn import GCNConv, GATConv
 import torch.nn.functional as F
-import scipy.sparse
+import scipy.sparse as sp
 import dgl
 import pdb
 
 
 from data.synthetic_heterogeneous import SyntheticHG
-from hgb.LP.EquivHGAE import EquivLinkPredictor, EquivLinkPredictorShared
-from src.DataSchema import SparseMatrixData
 from src.utils import count_parameters
 from utils import get_hyperparams_lp, set_seed, select_features, \
     make_target_matrix, coalesce_matrix, combine_matrices, evaluate_lp
@@ -140,7 +138,9 @@ def run_model(args):
                      schema_str=args.schema_str,
                      node_attr=args.node_attr,
                      scaling=args.scaling)
+    dl.make_link_prediction_task(args.pct_test, args.pct_val, args.val_neg, args.tail_weighted)
     data, features_list = dl.to_edges_and_vals()
+    edge_list = torch.LongTensor(data[0].indices).to(device)
     feat_list = []
     in_dims = []
     for ent_id in range(args.n_ents):
@@ -165,19 +165,12 @@ def run_model(args):
 
     print(dl.full_schema)
     print("Heterogeneous: {}".format(dl.rel_functions))
-    dl.make_link_prediction_task(args.pct_test, args.pct_val, args.val_neg, args.tail_weighted)
-    dl.to_flat()
 
-    edge_list = torch.LongTensor(dl.data[0].indices).to(device)
-    features_list  = [feature.to(device) for feature in features_list]
-    data = data.to(device)
     
     # Get target relations and create data structure for embeddings
     target_rel_id = dl.target_rel_id
     target_rel = dl.schema.relations[target_rel_id]
-    target_ents = dl.schema.entities
     flat_rel = dl.schema.relations[0]
-    target_ents = dl.schema.entities
 
     # Get training and validation positive samples now
     train_pos, val_pos = dl.get_train_valid_pos()

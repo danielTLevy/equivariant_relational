@@ -130,6 +130,10 @@ class SyntheticHG:
         return self.data
 
     def to_edges_and_vals(self):
+        '''
+        For use with GCN and GAT: separate out edges for all relations
+        from node feature vectors
+        '''
         tot_instances = sum([ent.n_instances for ent in self.schema.entities])
         tot_entity = Entity(0, tot_instances)
         tot_rel = Relation(0, [tot_entity, tot_entity])
@@ -350,6 +354,7 @@ class SyntheticHG:
             self.neg_neigh = self.make_2hop()
         # Do this again with test links included
         self.test_neg_neigh = self.make_2hop(test=True)
+        return self.data
 
     def get_train_valid_pos(self):
         return self.train_pos, self.valid_pos

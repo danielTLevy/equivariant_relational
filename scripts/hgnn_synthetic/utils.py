@@ -71,7 +71,7 @@ def get_hyperparams_nc(argv):
     ap.add_argument('--sharing', action='store_true', default=False)
 
     # Args for baseline models
-    ap.add_argument('--model', type=str, choices=["gcn", "gat", "lgnn", "egnn", "sharing"])
+    ap.add_argument('--model', type=str, choices=["gcn", "gat", "lgnn", "equiv", "sharing"])
     ap.add_argument('--num_heads', type=int, default=8)
     ap.add_argument('--slope', type=float, default=0.1)
 
@@ -185,7 +185,7 @@ def get_hyperparams_lp(argv):
     ap.add_argument('--save_embeddings', dest='save_embeddings', action='store_true', default=True)
     ap.add_argument('--no_save_embeddings', dest='save_embeddings', action='store_false', default=True)
     ap.set_defaults(save_embeddings=True)
-    ap.add_argument('--wandb_log_param_freq', type=int, default=100)
+    ap.add_argument('--wandb_log_param_freq', type=int, default=1000)
     ap.add_argument('--wandb_log_loss_freq', type=int, default=1)
     ap.add_argument('--wandb_log_run', dest='wandb_log_run', action='store_true',
                         help='Log this run in wandb')
@@ -204,7 +204,7 @@ def get_hyperparams_lp(argv):
     ap.add_argument('--sharing', action='store_true', default=False)
 
     # Args for baseline models
-    ap.add_argument('--model', type=str, choices=["gcn", "gat", "lgnn", "egnn", "sharing"])
+    ap.add_argument('--model', type=str, choices=["gcn", "gat", "lgnn", "equiv", "sharing"])
     ap.add_argument('--num_heads', type=int, default=8)
     ap.add_argument('--slope', type=float, default=0.1)
     

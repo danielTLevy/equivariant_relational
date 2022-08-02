@@ -119,6 +119,7 @@ def run_model(args):
     dl.make_node_classification_task(args.n_classes, args.pct_test,
                                      args.pct_val, args.node_label)
     data = dl.data
+    data[0].values += 1
     target_entity_id = 0
     target_entity = dl.schema.entities[target_entity_id]
 

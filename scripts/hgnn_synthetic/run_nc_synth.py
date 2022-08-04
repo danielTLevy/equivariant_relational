@@ -162,5 +162,8 @@ if __name__ == '__main__':
     argv = sys.argv[1:]
     args = get_hyperparams_nc(argv)
     set_seed(args.seed)
+    args.model = 'equiv'
+    if args.lgnn:
+        args.model = 'lgnn'
     #%%
     run_model(args)

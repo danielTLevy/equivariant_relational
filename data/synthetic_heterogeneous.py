@@ -74,11 +74,11 @@ class SyntheticHG:
                                  shape=(n_instances, n_instances, 1))
             self.data[rel_id] = data_matrix + data_diag
 
-        if node_attr > 0: 
-            for ent_i, ent in enumerate(self.schema.entities):
-                attr_i = n_rels + ent_i
-                self.data[attr_i] = self.make_node_attr(ent, node_attr)
-                self.schema.relations[attr_i] = Relation(attr_i, [ent, ent],
+
+        for ent_i, ent in enumerate(self.schema.entities):
+            attr_i = n_rels + ent_i
+            self.data[attr_i] = self.make_node_attr(ent, node_attr)
+            self.schema.relations[attr_i] = Relation(attr_i, [ent, ent],
                                                          node_attr, is_set=True)
         # Keep copy of this data
         self.ent_instances = self.n_instances
@@ -274,12 +274,16 @@ class SyntheticHG:
 
     def make_node_attr(self, ent, n_attrs):
         n_instances = ent.n_instances
-        embeds = self.ent_embed[ent.id]
-        attr_weights = np.random.rand(self.embed_dim, n_attrs)
-        attrs = embeds @ attr_weights
+        if n_attrs > 0:
+            embeds = self.ent_embed[ent.id]
+            attr_weights = np.random.rand(self.embed_dim, n_attrs)
+            attr_values = embeds @ attr_weights
+        else:
+            attr_values = np.ones((n_instances, 1))
+            n_attrs = 1
         indices = torch.arange(n_instances, dtype=torch.int64).repeat(2,1)
         return SparseMatrix(indices = indices,
-                            values = torch.Tensor(attrs),
+                            values = torch.Tensor(attr_values),
                             shape = (n_instances, n_instances, n_attrs),
                             is_set=True)
 
